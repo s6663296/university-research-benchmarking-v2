@@ -5,6 +5,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import Settings
 from app.db.session import init_db, make_engine, make_session_factory
+from app.elsevier.client import make_client
+from app.runs.manager import RunManager, mark_interrupted
 from app.web.deps import WEB_DIR
 from app.web.routes import home, mapping, settings as settings_routes, teachers
 
@@ -16,8 +18,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         engine = make_engine(settings.data_dir / "app.db")
         init_db(engine)
+        session_factory = make_session_factory(engine)
         app.state.engine = engine
-        app.state.session_factory = make_session_factory(engine)
+        app.state.session_factory = session_factory
+        with session_factory() as s:
+            mark_interrupted(s)
+
+        def client_factory():
+            with session_factory() as s:
+                return make_client(app.state.settings, s)
+
+        app.state.run_manager = RunManager(session_factory, client_factory)
         yield
         engine.dispose()
 
