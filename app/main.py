@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import Settings
 from app.db.session import init_db, make_engine, make_session_factory
 from app.web.deps import WEB_DIR
-from app.web.routes import home, settings as settings_routes
+from app.web.routes import home, mapping, settings as settings_routes
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -26,4 +26,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
     app.include_router(home.router)
     app.include_router(settings_routes.router)
+    app.include_router(mapping.router)
     return app

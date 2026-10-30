@@ -4,7 +4,13 @@
 <div class="grid">
   <section class="card">
     <h2>Mapping 版本</h2>
-    <p class="muted">尚未匯入</p>
+    {% if mapping %}
+    <p>{{ mapping.filename }}</p>
+    <p class="muted">匯入時間 {{ mapping.imported_at.strftime("%Y/%m/%d %H:%M") }}</p>
+    {% if mapping_errors %}<p class="error">有 {{ mapping_errors }} 項錯誤，請到 <a href="/mapping">Mapping 管理</a> 查看</p>{% endif %}
+    {% else %}
+    <p class="muted">尚未匯入，請到 <a href="/mapping">Mapping 管理</a> 上傳</p>
+    {% endif %}
   </section>
   <section class="card">
     <h2>教師數資料</h2>

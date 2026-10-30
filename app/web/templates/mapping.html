@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Mapping 管理</h1>
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+{% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
+
+<section class="card">
+  <h2>上傳 mapping 表</h2>
+  <form method="post" action="/mapping" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".xlsx" required>
+    <button type="submit">上傳並檢查</button>
+  </form>
+</section>
+
+{% if not version %}
+<p class="muted">尚未匯入 mapping 表。</p>
+{% else %}
+<section class="card">
+  <h2>目前版本</h2>
+  <p>{{ version.filename }}（匯入時間 {{ version.imported_at.strftime("%Y/%m/%d %H:%M") }}，SHA-256 {{ version.sha256[:12] }}…）</p>
+  {% set errors = issues | selectattr("level", "equalto", "error") | list %}
+  {% set warnings = issues | selectattr("level", "equalto", "warning") | list %}
+  <p>錯誤 <span class="error">{{ errors | length }}</span> 項，提醒 <span class="warning">{{ warnings | length }}</span> 項</p>
+  {% if issues %}
+  <table>
+    <tr><th>等級</th><th>分頁</th><th>列</th><th>說明</th></tr>
+    {% for i in errors + warnings %}
+    <tr><td class="{{ i.level }}">{{ "錯誤" if i.level == "error" else "提醒" }}</td><td>{{ i.sheet }}</td><td class="num">{{ i.row or "" }}</td><td>{{ i.message }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>與上一版的差異</h2>
+  <p>新增 {{ diff.added | length }}、移除 {{ diff.removed | length }}、英文名稱變更 {{ diff.changed | length }}</p>
+  {% if diff.changed or diff.removed or (diff.added and diff.added | length <= 50) %}
+  <table>
+    <tr><th>變更</th><th>學校</th><th>中大系所</th><th>內容</th></tr>
+    {% for school, dept in diff.added if diff.added | length <= 50 %}<tr><td>新增</td><td>{{ school }}</td><td>{{ dept }}</td><td></td></tr>{% endfor %}
+    {% for school, dept in diff.removed %}<tr><td>移除</td><td>{{ school }}</td><td>{{ dept }}</td><td></td></tr>{% endfor %}
+    {% for key, old, new in diff.changed %}<tr><td>變更</td><td>{{ key[0] }}</td><td>{{ key[1] }}</td><td>{{ old }} → {{ new }}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>單位清單</h2>
+  <form method="get" action="/mapping">
+    <select name="school" onchange="this.form.submit()">
+      <option value="">全部學校</option>
+      {% for s in schools %}<option value="{{ s }}" {% if s == school %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+  </form>
+  <table>
+    <tr><th>學校</th><th>中大學院</th><th>中大系所</th><th>該校學院</th><th>系所中文名稱</th><th>系所英文名稱（查詢條件）</th><th>備註</th></tr>
+    {% for u in units %}
+    <tr><td>{{ u.school }}</td><td>{{ u.ncu_college or "" }}</td><td>{{ u.ncu_dept }}</td><td>{{ u.college or "" }}</td><td>{{ u.dept_zh or "" }}</td><td>{{ u.dept_en }}</td><td>{{ u.remark or "" }}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+{% endif %}
+{% endblock %}
