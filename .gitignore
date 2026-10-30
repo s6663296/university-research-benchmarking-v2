@@ -1,1 +1,8 @@
 api_test/output/
+data/
+.env
+.venv/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.superpowers/
