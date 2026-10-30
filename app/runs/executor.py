@@ -96,8 +96,10 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
         cfg = RunConfig.from_json(run.scope_json)
         run.status, run.error = "running", None
         q = select(RunUnit).where(RunUnit.run_id == run_id)
-        if unit_ids is not None:
-            q = q.where(RunUnit.unit_id.in_(unit_ids))
+        if unit_ids is not None:  # 共用同一查詢的單位一起重抓，數字才會一致
+            queries = s.scalars(select(RunUnit.query).where(RunUnit.run_id == run_id,
+                                                            RunUnit.unit_id.in_(unit_ids))).all()
+            q = q.where(RunUnit.query.in_(queries))
         elif only_unfinished:
             q = q.where(RunUnit.status != "done")
         by_query: dict[str, list[int]] = defaultdict(list)
@@ -129,6 +131,9 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
                                              use_cache=use_cache) if ids else {}
         except ElsevierError as e:
             update(ru_ids, status="failed", error=e.message)
+            return
+        except Exception as e:  # 單一單位的非預期錯誤不影響其他單位
+            update(ru_ids, status="failed", error=f"非預期錯誤：{type(e).__name__}: {e}")
             return
         data_source.update(source)
         with session_factory() as s:

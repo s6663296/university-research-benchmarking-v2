@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>分析 #{{ run.id }}（{{ run.period_from }}–{{ run.period_to }}）</h1>
+{% if busy %}<div class="notice">已有抓取作業正在執行，請等它完成後再試。</div>{% endif %}
+{% set n = run.period_to - run.period_from + 1 %}
 {% if run.status != "done" or rows | selectattr("ru.status", "ne", "done") | list %}
 {% include "_progress.html" %}
 {% endif %}
@@ -39,7 +41,7 @@
     <h3>{{ title }}</h3>
     <table>
       {% if indicator.aggregate == "count" %}
-      <tr><th>單位</th><th class="num">5年篇數 (A)</th><th class="num">5年平均</th><th class="num">單年教師數 (B)</th><th class="num">單年師均</th><th class="num">名次</th></tr>
+      <tr><th>單位</th><th class="num">{{ n }}年篇數 (A)</th><th class="num">{{ n }}年平均</th><th class="num">單年教師數 (B)</th><th class="num">單年師均</th><th class="num">名次</th></tr>
       {% for r in t.rows %}
       <tr {% if r.is_ncu %}class="ncu"{% endif %}>
         <td>{{ r.label }}</td>

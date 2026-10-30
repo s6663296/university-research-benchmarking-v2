@@ -32,9 +32,10 @@ class RunManager:
         task = self.tasks.get(run_id)
         return task is not None and not task.done()
 
-    def _launch(self, run_id: int, **kwargs) -> None:
+    def _launch(self, run_id: int, **kwargs) -> bool:
+        """已有作業在執行時不重複啟動，回傳 False。"""
         if self.is_running(run_id):
-            return
+            return False
 
         async def job():
             client = self.client_factory()
@@ -44,12 +45,13 @@ class RunManager:
                 await client.aclose()
 
         self.tasks[run_id] = asyncio.create_task(job())
+        return True
 
-    def start(self, run_id: int) -> None:
-        self._launch(run_id)
+    def start(self, run_id: int) -> bool:
+        return self._launch(run_id)
 
-    def resume(self, run_id: int) -> None:
-        self._launch(run_id, only_unfinished=True)
+    def resume(self, run_id: int) -> bool:
+        return self._launch(run_id, only_unfinished=True)
 
-    def refetch_unit(self, run_id: int, unit_id: int) -> None:
-        self._launch(run_id, unit_ids={unit_id}, use_cache=False)
+    def refetch_unit(self, run_id: int, unit_id: int) -> bool:
+        return self._launch(run_id, unit_ids={unit_id}, use_cache=False)

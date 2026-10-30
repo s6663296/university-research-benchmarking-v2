@@ -91,7 +91,11 @@ class ElsevierClient:
                     if h in resp.headers:
                         self.quota[h] = resp.headers[h]
                 if resp.status_code == 200:
-                    return strip_links(resp.json())
+                    try:
+                        return strip_links(resp.json())
+                    except ValueError:
+                        raise ElsevierError(200, False, "Elsevier 回應不是 JSON（可能是登入頁或代理伺服器），"
+                                                        "請確認是否在校內網路或學校 VPN") from None
                 retryable = resp.status_code == 429 or resp.status_code >= 500
                 error = ElsevierError(resp.status_code, retryable, _http_message(resp.status_code))
             if not error.retryable or attempt >= retries:

@@ -25,7 +25,6 @@ FONT = Pt(12)
 LEFT_X, RIGHT_X, TABLE_Y, TABLE_W = Emu(259080), Emu(6193539), Emu(2450275), Emu(5650000)
 ROW_H = Emu(330000)
 
-COUNT_HEADER = ["單位", "5年篇數 (A)", "單年教師數(B)", "單年師均 (A/5/B)"]
 TOC_ITEMS = [
     "    - 論文發表師均(QS/THE看總篇數、高教深耕看Q1)",
     "    - 論文被引次數達全球前1%論文篇數師均(THE排名/高教深耕指標)",
@@ -88,6 +87,7 @@ class ReportBuilder:
         self.short = self.dept_short.get(ncu_dept, ncu_dept)
         self.college_label = self.college_short.get(self.college, self.college)
         self.period = f"{self.run.period_from}-{self.run.period_to}"
+        self.years = self.run.period_to - self.run.period_from + 1
         self.open_anomalies = session.scalar(select(func.count()).select_from(Anomaly).where(
             Anomaly.run_id == run_id, Anomaly.status != "confirmed"))
         self.prs = Presentation(TEMPLATE)
@@ -138,7 +138,7 @@ class ReportBuilder:
     def summary(self):
         slide = self._slide(f"I、{self.college}各系所論文指標排名")
         highlight = int(get_setting(self.session, "rank_highlight_top"))
-        rows = [["單位", "對外/對內項目", "優質期刊", "5年論文被引次數", "", "", "", "國際合著篇數 (師均)"],
+        rows = [["單位", "對外/對內項目", "優質期刊", f"{self.years}年論文被引次數", "", "", "", "國際合著篇數 (師均)"],
                 ["", "", "Q1師均", "Top1%篇數 (師均)", "Top10%篇數 (師均)", "FWCI", "平均論文被引次數", ""]]
         red = set()
         for s in summary_table(self.session, self.run_id, self.college):
@@ -164,7 +164,8 @@ class ReportBuilder:
             total = {r.unit_id: r for r in indicator_table(self.session, self.run_id, t.comparison, t.key,
                                                            "total").rows}
             rows = [["單位", "Q1", "", "總計", "", "單年教師數(C)", "單年師均", ""],
-                    ["", "5年 總數", "5年 平均 (A)", "5年 總數", "5年 平均(B)", "", "Q1 (A/C)", "總計 (B/C)"]]
+                    ["", f"{self.years}年 總數", f"{self.years}年 平均 (A)", f"{self.years}年 總數",
+                     f"{self.years}年 平均(B)", "", "Q1 (A/C)", "總計 (B/C)"]]
             red = []
             for r in t.rows:
                 tot = total[r.unit_id]
@@ -192,7 +193,8 @@ class ReportBuilder:
         self._footnotes(slide, indicator_id)
 
         def render(slide, t: IndicatorTable, x):
-            rows, red = [COUNT_HEADER], []
+            n = self.years
+            rows, red = [["單位", f"{n}年篇數 (A)", "單年教師數(B)", f"單年師均 (A/{n}/B)"]], []
             for r in t.rows:
                 if r.is_ncu:
                     red.append(len(rows))

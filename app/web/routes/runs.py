@@ -115,8 +115,9 @@ def progress_context(session: Session, run: Run) -> dict:
         u = session.get(Unit, ru.unit_id)
         rows.append(dict(ru=ru, unit=u, status=UNIT_STATUS.get(ru.status, ru.status)))
     done = sum(1 for r in rows if r["ru"].status in ("done", "failed"))
+    unfinished = sum(1 for r in rows if r["ru"].status != "done")
     return dict(run=run, rows=rows, done=done, total=len(rows), run_status=RUN_STATUS.get(run.status, run.status),
-                polling=run.status in ("pending", "running"))
+                polling=run.status in ("pending", "running"), unfinished=unfinished, busy=False)
 
 
 def get_run(session: Session, run_id: int) -> Run:
@@ -164,9 +165,11 @@ def result_context(session: Session, run: Run, ind: str) -> dict:
 
 
 @router.get("/runs/{run_id}")
-def run_detail(request: Request, run_id: int, ind: str = "summary", session: Session = Depends(get_session)):
+def run_detail(request: Request, run_id: int, ind: str = "summary", busy: int = 0,
+               session: Session = Depends(get_session)):
     run = get_run(session, run_id)
     ctx = progress_context(session, run)
+    ctx["busy"] = bool(busy)
     if run.status == "done":
         ctx.update(result_context(session, run, ind))
     return render(request, "run_detail.html", **ctx)
@@ -193,18 +196,19 @@ async def save_notes(request: Request, run_id: int, session: Session = Depends(g
     return RedirectResponse(f"/runs/{run_id}?ind=notes", status_code=303)
 
 
+# 背景任務要建立在 event loop 上，所以這兩個路由必須是 async def
 @router.post("/runs/{run_id}/resume")
-def resume(request: Request, run_id: int, session: Session = Depends(get_session)):
+async def resume(request: Request, run_id: int, session: Session = Depends(get_session)):
     get_run(session, run_id)
-    request.app.state.run_manager.resume(run_id)
-    return RedirectResponse(f"/runs/{run_id}", status_code=303)
+    started = request.app.state.run_manager.resume(run_id)
+    return RedirectResponse(f"/runs/{run_id}" + ("" if started else "?busy=1"), status_code=303)
 
 
 @router.post("/runs/{run_id}/units/{unit_id}/refetch")
-def refetch(request: Request, run_id: int, unit_id: int, session: Session = Depends(get_session)):
+async def refetch(request: Request, run_id: int, unit_id: int, session: Session = Depends(get_session)):
     get_run(session, run_id)
-    request.app.state.run_manager.refetch_unit(run_id, unit_id)
-    return RedirectResponse(f"/runs/{run_id}", status_code=303)
+    started = request.app.state.run_manager.refetch_unit(run_id, unit_id)
+    return RedirectResponse(f"/runs/{run_id}" + ("" if started else "?busy=1"), status_code=303)
 
 
 PPTX_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"

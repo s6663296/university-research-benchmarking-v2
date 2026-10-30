@@ -49,7 +49,8 @@ def _indicator_sheet(wb, session, run, ind, groups, college_short):
         _append(ws, [title], BOLD)
         t = indicator_table(session, run.id, g.comparison, g.key, ind.id)
         if ind.aggregate == "count":
-            _append(ws, ["單位", "5年篇數 (A)", "5年平均", "單年教師數 (B)", "單年師均", "名次", "教師數人工修改"], BOLD)
+            n = run.period_to - run.period_from + 1
+            _append(ws, ["單位", f"{n}年篇數 (A)", f"{n}年平均", "單年教師數 (B)", "單年師均", "名次", "教師數人工修改"], BOLD)
             for r in t.rows:
                 _append(ws, [r.label, PENDING if r.raw is None else int(r.raw), _num(r.five_year_avg),
                              PENDING if r.teachers is None else r.teachers, _num(r.value), r.rank,
