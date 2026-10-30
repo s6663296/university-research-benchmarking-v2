@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, Request, UploadFile
 from sqlalchemy.orm import Session
 
+from app.teachers.moe import latest_import
+from app.teachers.service import auto_link
 from app.mapping.service import diff_versions, import_mapping, issues_of, latest_version, previous_version, units_of
 from app.web.deps import get_session, render
 
@@ -33,10 +35,13 @@ def mapping_page(request: Request, school: str | None = None, session: Session =
 async def upload_mapping(request: Request, file: UploadFile, session: Session = Depends(get_session)):
     data = await file.read()
     try:
-        _, created = import_mapping(session, file.filename or "mapping.xlsx", data)
+        version, created = import_mapping(session, file.filename or "mapping.xlsx", data)
     except Exception:
         session.rollback()
         return _page(request, session, status_code=400,
                      error="無法讀取檔案，請確認上傳的是 mapping 表的 xlsx 檔")
+    imp = latest_import(session)
+    if imp is not None:
+        auto_link(session, version.id, imp.id)
     message = "已匯入新版本" if created else "與目前版本相同，沒有建立新版本"
     return _page(request, session, message=message)

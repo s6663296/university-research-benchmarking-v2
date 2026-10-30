@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>教師數</h1>
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+
+<section class="card">
+  <h2>匯入教育部檔案</h2>
+  <p class="muted">從教育部大專校院校務資訊公開平台下載「教1-1. 專任教師數-以「系(所)」統計」的 xlsx，直接上傳即可。一個檔案包含多個學年度，匯入一次就好。</p>
+  <form method="post" action="/teachers/import" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".xlsx" required>
+    <button type="submit">上傳</button>
+  </form>
+  {% if imp %}
+  <p>目前資料：{{ imp.source_filename }}（{{ years[0] }}～{{ years[-1] }} 學年度，匯入時間 {{ imp.imported_at.strftime("%Y/%m/%d %H:%M") }}）</p>
+  {% else %}
+  <p class="muted">尚未匯入教育部檔案。</p>
+  {% endif %}
+</section>
+
+{% if imp and not version %}<p class="notice">請先到 <a href="/mapping">Mapping 管理</a> 匯入 mapping 表。</p>{% endif %}
+
+{% if unmatched %}
+<section class="card">
+  <h2>未對應的單位（{{ unmatched | length }}）</h2>
+  <p class="muted">從該校的教育部單位清單中挑選，可以選多個（人數相加）。</p>
+  <table>
+    <tr><th>學校</th><th>系所</th><th>中大系所</th><th>教育部單位</th></tr>
+    {% for item in unmatched %}
+    <tr>
+      <td>{{ item.u.school }}</td><td>{{ item.u.dept_zh }}</td><td>{{ item.u.ncu_dept }}</td>
+      <td>
+        {% if item.choices %}
+        <form method="post" action="/teachers/link">
+          <input type="hidden" name="school" value="{{ item.u.school }}">
+          <input type="hidden" name="dept_zh" value="{{ item.u.dept_zh }}">
+          <select name="codes" multiple size="4">
+            {% for code, name in item.choices %}<option value="{{ code }}">{{ name }}（{{ code }}）</option>{% endfor %}
+          </select>
+          <button type="submit">對應</button>
+        </form>
+        {% else %}<span class="error">學校對照中找不到此校，請到「設定」補上</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+{% endif %}
+
+{% if rows %}
+<section class="card">
+  <h2>各單位教師數</h2>
+  <form method="get" action="/teachers">
+    學年度
+    <select name="year" onchange="this.form.submit()">
+      {% for y in years | reverse %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+    </select>
+    <span class="muted">採用欄位：{{ column_label }}</span>
+  </form>
+  <table>
+    <tr><th>學校</th><th>系所</th><th>中大系所</th><th class="num">教師數</th><th>來源</th><th>教育部代碼</th><th>人工修改</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.school }}</td><td>{{ r.dept }}</td><td>{{ r.ncu_dept }}</td>
+      <td class="num">{% if r.tc.value is none %}<span class="pending">待確認</span>{% else %}{{ r.tc.value }}{% endif %}</td>
+      <td>{% if r.tc.source == "manual" %}人工：{{ r.tc.reason }}{% elif r.tc.source == "moe" %}教育部{% else %}<span class="pending">缺資料</span>{% endif %}</td>
+      <td>{{ r.tc.unit_codes | join("、") }}</td>
+      <td>
+        <form method="post" action="/teachers/override" class="inline">
+          <input type="hidden" name="school" value="{{ r.school }}">
+          <input type="hidden" name="dept_zh" value="{{ r.dept }}">
+          <input type="hidden" name="academic_year" value="{{ year }}">
+          <input type="number" name="count" min="0" style="width:5em" required>
+          <input type="text" name="reason" placeholder="修改原因" size="14">
+          <button type="submit" class="secondary">修改</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+{% endif %}
+{% endblock %}

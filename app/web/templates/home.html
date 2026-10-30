@@ -14,7 +14,13 @@
   </section>
   <section class="card">
     <h2>教師數資料</h2>
-    <p class="muted">尚未匯入</p>
+    {% if teacher_import %}
+    <p>{{ teacher_import.source_filename }}</p>
+    <p class="muted">{{ teacher_years[0] }}～{{ teacher_years[-1] }} 學年度</p>
+    {% if unmatched_count %}<p class="warning">有 {{ unmatched_count }} 個單位尚未對應，請到 <a href="/teachers">教師數</a> 處理</p>{% endif %}
+    {% else %}
+    <p class="muted">尚未匯入，請到 <a href="/teachers">教師數</a> 上傳</p>
+    {% endif %}
   </section>
   <section class="card">
     <h2>API 連線狀態</h2>
