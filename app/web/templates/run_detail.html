@@ -96,7 +96,11 @@
   </form>
 
 {% elif ind == "downloads" %}
-  {% block downloads %}<p class="muted">下載功能尚未開放。</p>{% endblock %}
+  <h3>簡報（每個系所一份）</h3>
+  <ul>
+    {% for dept, short in report_depts %}<li><a href="/runs/{{ run.id }}/pptx/{{ dept }}">{{ short }}</a></li>{% endfor %}
+  </ul>
+  <p><a class="button" href="/runs/{{ run.id }}/pptx.zip">下載全部簡報（zip）</a></p>
 {% endif %}
 {% endif %}
 {% endblock %}

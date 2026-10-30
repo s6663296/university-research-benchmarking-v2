@@ -1,8 +1,9 @@
 import json
+import zipfile
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,8 @@ from app.elsevier.client import make_client
 from app.mapping.parser import NCU_SHEET
 from app.mapping.service import latest_version, units_of
 from app.metrics.indicators import BY_ID, INDICATORS
+from app.reports.exports import export_path, record_export
+from app.reports.pptx_report import build_dept_report, report_filename
 from app.reports.tables import SUMMARY_INDICATORS, fmt, indicator_table, run_groups, short_names, summary_table
 from app.runs.anomaly import KIND_LABELS, resolve_anomaly
 from app.runs.scope import COMPARISON_LABELS, RunConfig, default_period
@@ -155,6 +158,7 @@ def result_context(session: Session, run: Run, ind: str) -> dict:
         summary_labels={i: BY_ID[i].label for i in SUMMARY_INDICATORS},
         anomalies=anomalies, open_anomalies=sum(1 for x in anomalies if x["a"].status != "confirmed"),
         notes=json.loads(run.notes_json or "{}"), fmt=fmt,
+        report_depts=[(d, short_names(session)[0].get(d, d)) for d in RunConfig.from_json(run.scope_json).ncu_depts],
     )
 
 
@@ -200,3 +204,37 @@ def refetch(request: Request, run_id: int, unit_id: int, session: Session = Depe
     get_run(session, run_id)
     request.app.state.run_manager.refetch_unit(run_id, unit_id)
     return RedirectResponse(f"/runs/{run_id}", status_code=303)
+
+
+PPTX_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+
+def _done_run(session: Session, run_id: int) -> Run:
+    run = get_run(session, run_id)
+    if run.status != "done":
+        raise HTTPException(409, "分析尚未完成，無法產出報告")
+    return run
+
+
+@router.get("/runs/{run_id}/pptx.zip")
+def download_all_pptx(request: Request, run_id: int, session: Session = Depends(get_session)):
+    run = _done_run(session, run_id)
+    settings = request.app.state.settings
+    zip_path = export_path(settings, run_id, f"{run.period_from}-{run.period_to}各系所論文表現分析.zip")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for dept in RunConfig.from_json(run.scope_json).ncu_depts:
+            name = report_filename(session, run_id, dept)
+            zf.write(build_dept_report(session, run_id, dept, export_path(settings, run_id, name)), name)
+    record_export(session, run_id, "pptx_zip", zip_path)
+    return FileResponse(zip_path, media_type="application/zip", filename=zip_path.name)
+
+
+@router.get("/runs/{run_id}/pptx/{ncu_dept}")
+def download_pptx(request: Request, run_id: int, ncu_dept: str, session: Session = Depends(get_session)):
+    run = _done_run(session, run_id)
+    if ncu_dept not in RunConfig.from_json(run.scope_json).ncu_depts:
+        raise HTTPException(404, "這次分析沒有這個系所")
+    name = report_filename(session, run_id, ncu_dept)
+    path = build_dept_report(session, run_id, ncu_dept, export_path(request.app.state.settings, run_id, name))
+    record_export(session, run_id, "pptx", path)
+    return FileResponse(path, media_type=PPTX_TYPE, filename=name)
