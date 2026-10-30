@@ -8,7 +8,7 @@ from app.db.session import init_db, make_engine, make_session_factory
 from app.elsevier.client import make_client
 from app.runs.manager import RunManager, mark_interrupted
 from app.web.deps import WEB_DIR
-from app.web.routes import home, mapping, settings as settings_routes, teachers
+from app.web.routes import home, mapping, runs, settings as settings_routes, teachers
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -39,4 +39,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(settings_routes.router)
     app.include_router(mapping.router)
     app.include_router(teachers.router)
+    app.include_router(runs.router)
     return app

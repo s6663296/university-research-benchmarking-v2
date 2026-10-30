@@ -1,0 +1,23 @@
+<section class="card" id="progress"
+  {% if polling %}hx-get="/runs/{{ run.id }}/progress" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  <h2>執行進度：{{ run_status }}（{{ done }}／{{ total }}）</h2>
+  {% if run.error %}<div class="notice error">{{ run.error }}</div>{% endif %}
+  {% if run.status == "interrupted" %}
+  <form method="post" action="/runs/{{ run.id }}/resume"><button type="submit">從中斷處繼續</button>
+  <span class="muted">已抓到的部分會使用快取</span></form>
+  {% endif %}
+  <table>
+    <tr><th>學校</th><th>中大系所</th><th>狀態</th><th class="num">篇數</th><th>說明</th><th></th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.unit.school }}</td><td>{{ r.unit.ncu_dept }}</td>
+      <td class="{{ 'error' if r.ru.status == 'failed' else '' }}">{{ r.status }}</td>
+      <td class="num">{{ r.ru.eid_count if r.ru.eid_count is not none else "" }}</td>
+      <td>{{ r.ru.error or "" }}</td>
+      <td>{% if not polling and r.ru.status != "done" %}
+        <form method="post" action="/runs/{{ run.id }}/units/{{ r.ru.unit_id }}/refetch" class="inline"><button type="submit" class="secondary">重新抓取</button></form>
+      {% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>

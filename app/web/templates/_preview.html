@@ -1,0 +1,18 @@
+<section class="card">
+  <h2>查詢預覽</h2>
+  {% for e in errors %}<div class="notice error">{{ e }}</div>{% endfor %}
+  {% if rows %}
+  <p>共 {{ rows | length }} 個單位</p>
+  <table>
+    <tr><th>單位</th><th>Scopus 查詢字串</th><th class="num">教師數</th><th>來源</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.label }}</td>
+      <td><code>{{ r.query }}</code></td>
+      <td class="num">{% if r.teacher.value is none %}<span class="pending">待確認</span>{% else %}{{ r.teacher.value }}{% endif %}</td>
+      <td>{% if r.teacher.source == "manual" %}人工：{{ r.teacher.reason }}{% elif r.teacher.source == "moe" %}教育部{% else %}<span class="pending">缺資料</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</section>

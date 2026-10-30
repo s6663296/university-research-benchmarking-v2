@@ -53,7 +53,10 @@ class FakeElsevier:
     def scopus(self, request: httpx.Request) -> httpx.Response:
         query = request.url.params["query"]
         self.scopus_calls.append(query)
-        name = re.search(r'AFFIL\("([^"]+)"\)', query).group(1)
+        match = re.search(r'AFFIL\("([^"]+)"\)', query)
+        if match is None:  # 連線檢查
+            return httpx.Response(200, json={"search-results": {"opensearch:totalResults": "1", "entry": []}})
+        name = match.group(1)
         for key, status in self.fail.items():
             if key in name:
                 return httpx.Response(status)

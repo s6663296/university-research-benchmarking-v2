@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>分析 #{{ run.id }}（{{ run.period_from }}–{{ run.period_to }}）</h1>
+{% include "_progress.html" %}
+{% endblock %}

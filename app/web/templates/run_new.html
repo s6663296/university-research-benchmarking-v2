@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>新增分析</h1>
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+<section class="card">
+  <h2>API 連線狀態</h2>
+  <div hx-get="/status" hx-trigger="load"><p class="muted">檢查中…</p></div>
+</section>
+
+{% if not ready %}
+<p class="notice">請先匯入 <a href="/mapping">mapping 表</a> 與 <a href="/teachers">教師數</a>。</p>
+{% else %}
+<p><a href="/runs/new?reuse=1">沿用上一版設定</a></p>
+<form method="post" action="/runs" id="run-form">
+<section class="card">
+  <h2>期間與教師數</h2>
+  <label>起 <input type="number" name="year_from" value="{{ cfg.year_from }}" style="width:6em"></label>
+  <label>迄 <input type="number" name="year_to" value="{{ cfg.year_to }}" style="width:6em"></label>
+  <label>教師數學年度
+    <select name="academic_year">
+      {% for y in years | reverse %}<option value="{{ y }}" {% if y == cfg.academic_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+    </select></label>
+  <label><input type="checkbox" name="force_refresh" value="1" {% if cfg.force_refresh %}checked{% endif %}> 重新抓取全部資料（不使用快取）</label>
+</section>
+
+<section class="card">
+  <h2>學院與系所</h2>
+  <p class="muted">勾選學院表示該學院的全部系所。</p>
+  {% for college, depts in colleges.items() %}
+  <div class="field">
+    <label><input type="checkbox" name="colleges" value="{{ college }}"> <strong>{{ college }}</strong></label><br>
+    {% for d in depts %}<label><input type="checkbox" name="ncu_depts" value="{{ d }}" {% if d in cfg.ncu_depts %}checked{% endif %}> {{ d }}</label>{% endfor %}
+  </div>
+  {% else %}
+  <p class="error">mapping 表中沒有中大系所（請確認有「中央」分頁）。</p>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h2>比較範圍</h2>
+  {% for key, label in labels.items() %}
+  <label><input type="checkbox" name="comparisons" value="{{ key }}" {% if key in cfg.comparisons %}checked{% endif %}> {{ label }}</label>
+  {% endfor %}
+  <h3>對標學校</h3>
+  {% for s in schools %}<label><input type="checkbox" name="schools" value="{{ s }}" {% if s in cfg.schools %}checked{% endif %}> {{ s }}</label>{% endfor %}
+  <h3>自訂比較的單位</h3>
+  <select name="custom_unit_ids" multiple size="6">
+    {% for u in units %}<option value="{{ u.id }}" {% if u.id in cfg.custom_unit_ids %}selected{% endif %}>{{ u.school }}－{{ u.ncu_dept }}{% if u.dept_zh and u.school != "中央" %}（{{ u.dept_zh }}）{% endif %}</option>{% endfor %}
+  </select>
+</section>
+
+<button type="button" class="secondary" hx-post="/runs/preview" hx-include="#run-form" hx-target="#preview">預覽查詢條件</button>
+<button type="submit">執行分析</button>
+</form>
+<div id="preview"></div>
+{% endif %}
+{% endblock %}
