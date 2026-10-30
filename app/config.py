@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     host: str = "127.0.0.1"
     port: int = 8000
+    env_path: Path = ENV_FILE
 
 
 def save_env(path: Path, api_key: str, insttoken: str) -> None:

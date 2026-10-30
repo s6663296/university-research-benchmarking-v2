@@ -1,0 +1,8 @@
+<div class="status">
+  {% if ok %}
+  <p class="ok">{{ message }}</p>
+  {% else %}
+  <p class="error">{{ message }}</p>
+  {% endif %}
+  {% if remaining %}<p class="muted">剩餘額度：{{ remaining }}</p>{% endif %}
+</div>

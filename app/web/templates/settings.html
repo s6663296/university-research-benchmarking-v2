@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>設定</h1>
+{% for e in errors %}<div class="notice error">{{ e }}</div>{% endfor %}
+{% if saved %}<div class="notice ok">設定已儲存</div>{% endif %}
+
+<section class="card">
+  <h2>Elsevier API</h2>
+  <p>API Key：{{ key_status }}　insttoken：{{ insttoken_status }}</p>
+  <form method="post" action="/settings/api-key">
+    <div class="field"><label for="api_key">新的 API Key（留空表示不變）</label>
+      <input type="password" id="api_key" name="api_key" size="40" autocomplete="off"></div>
+    <div class="field"><label for="insttoken">insttoken（校外使用時才需要）</label>
+      <input type="password" id="insttoken" name="insttoken" size="40" autocomplete="off"></div>
+    <button type="submit">儲存到 .env</button>
+  </form>
+</section>
+
+<form method="post" action="/settings">
+<section class="card">
+  <h2>抓取與計算</h2>
+  {% for field, label, typ, minimum in numeric_fields %}
+  <div class="field"><label for="{{ field }}">{{ label }}</label>
+    <input type="number" step="any" id="{{ field }}" name="{{ field }}" value="{{ values[field] }}"></div>
+  {% endfor %}
+  <div class="field"><label for="teacher_column">教師數採用欄位</label>
+    <select id="teacher_column" name="teacher_column">
+      {% for k, v in teacher_choices.items() %}<option value="{{ k }}" {% if k == teacher_column %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select></div>
+  <div class="field"><label for="self_citation_strategy">排除自我引用方式</label>
+    <select id="self_citation_strategy" name="self_citation_strategy">
+      {% for k, v in strategy_choices.items() %}<option value="{{ k }}" {% if k == strategy %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select></div>
+</section>
+
+<section class="card">
+  <h2>學校對照</h2>
+  <p class="muted">每行一筆：mapping 分頁名稱, 教育部校名, 報告簡稱</p>
+  <textarea name="school_aliases">{{ aliases }}</textarea>
+</section>
+
+<section class="card">
+  <h2>報告簡稱</h2>
+  <div class="field"><label for="dept_short_names">系所簡稱（每行一筆：全名=簡稱）</label>
+    <textarea id="dept_short_names" name="dept_short_names">{{ dept_short }}</textarea></div>
+  <div class="field"><label for="college_short_names">學院簡稱（每行一筆：全名=簡稱）</label>
+    <textarea id="college_short_names" name="college_short_names">{{ college_short }}</textarea></div>
+</section>
+<button type="submit">儲存設定</button>
+</form>
+{% endblock %}

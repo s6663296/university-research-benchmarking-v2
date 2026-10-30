@@ -8,7 +8,7 @@ from app.main import create_app
 
 @pytest.fixture
 def settings(tmp_path):
-    return Settings(_env_file=None, elsevier_api_key="", data_dir=tmp_path)
+    return Settings(_env_file=None, elsevier_api_key="", data_dir=tmp_path, env_path=tmp_path / ".env")
 
 
 @pytest.fixture
