@@ -1,5 +1,102 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>分析 #{{ run.id }}（{{ run.period_from }}–{{ run.period_to }}）</h1>
+{% if run.status != "done" or rows | selectattr("ru.status", "ne", "done") | list %}
 {% include "_progress.html" %}
+{% endif %}
+
+{% if run.status == "done" %}
+{% if open_anomalies %}<div class="notice">還有 {{ open_anomalies }} 項待人工確認，<a href="?ind=anomalies">前往處理</a>。仍可產出報告，但報告上會加上標示。</div>{% endif %}
+
+<div class="tabs">
+  <a href="?ind=summary" class="{{ 'active' if ind == 'summary' }}">排名總表</a>
+  {% for i in indicators %}<a href="?ind={{ i.id }}" class="{{ 'active' if ind == i.id }}">{{ i.label }}</a>{% endfor %}
+  <a href="?ind=anomalies" class="{{ 'active' if ind == 'anomalies' }}">待確認（{{ open_anomalies }}）</a>
+  <a href="?ind=notes" class="{{ 'active' if ind == 'notes' }}">版本備註</a>
+  <a href="?ind=downloads" class="{{ 'active' if ind == 'downloads' }}">下載</a>
+</div>
+
+{% if ind == "summary" %}
+  {% for college, short, srows in summaries %}
+  <h2>{{ college }}各系所論文指標排名</h2>
+  <table>
+    <tr><th>單位</th><th>對外/對內項目</th>{% for k, label in summary_labels.items() %}<th>{{ label }}</th>{% endfor %}</tr>
+    {% for r in srows %}
+    <tr>
+      <td>{{ r.dept_label }}</td>
+      <td>{% if r.comparison == "benchmark" %}對標學校: {{ r.group_size }}間{% else %}{{ short }}內{% endif %}</td>
+      {% for k in summary_labels %}<td class="num">{% if r.ranks[k] is none %}<span class="pending">待確認</span>{% else %}#{{ r.ranks[k] }}{% endif %}</td>{% endfor %}
+    </tr>
+    {% endfor %}
+  </table>
+  {% endfor %}
+
+{% elif indicator %}
+  <p class="muted">{{ notes.importance[indicator.id] if notes.importance else "" }}　計算：{{ indicator.source }}{% if indicator.per_faculty %}；師均 = A ÷ {{ run.period_to - run.period_from + 1 }} ÷ 單年教師數{% endif %}</p>
+  <div class="pair">
+  {% for title, t in tables %}
+  <div>
+    <h3>{{ title }}</h3>
+    <table>
+      {% if indicator.aggregate == "count" %}
+      <tr><th>單位</th><th class="num">5年篇數 (A)</th><th class="num">5年平均</th><th class="num">單年教師數 (B)</th><th class="num">單年師均</th><th class="num">名次</th></tr>
+      {% for r in t.rows %}
+      <tr {% if r.is_ncu %}class="ncu"{% endif %}>
+        <td>{{ r.label }}</td>
+        <td class="num">{{ r.raw | int if r.raw is not none else "待確認" }}</td>
+        <td class="num">{{ fmt(r.five_year_avg) }}</td>
+        <td class="num">{{ r.teachers if r.teachers is not none else "待確認" }}{% if r.teacher_manual %}*{% endif %}</td>
+        <td class="num">{{ fmt(r.value) }}</td>
+        <td class="num">{{ r.rank or "" }}</td>
+      </tr>
+      {% endfor %}
+      {% else %}
+      <tr><th>單位</th><th class="num">{{ indicator.label }}</th><th class="num">名次</th></tr>
+      {% for r in t.rows %}
+      <tr {% if r.is_ncu %}class="ncu"{% endif %}><td>{{ r.label }}</td><td class="num">{{ fmt(r.value) }}</td><td class="num">{{ r.rank or "" }}</td></tr>
+      {% endfor %}
+      {% endif %}
+    </table>
+  </div>
+  {% endfor %}
+  </div>
+  <p class="muted">* 教師數為人工修改</p>
+
+{% elif ind == "anomalies" %}
+  {% if not anomalies %}<p class="ok">沒有待確認的項目。</p>{% endif %}
+  <table>
+    <tr><th>類型</th><th>單位</th><th>說明</th><th>狀態</th><th>處理</th></tr>
+    {% for x in anomalies %}
+    <tr>
+      <td>{{ x.kind }}</td>
+      <td>{% if x.unit %}{{ x.unit.school }}－{{ x.unit.ncu_dept }}{% endif %}</td>
+      <td>{{ x.a.detail }}</td>
+      <td>{% if x.a.status == "confirmed" %}<span class="ok">已確認</span>{% if x.a.resolution_note %}：{{ x.a.resolution_note }}{% endif %}{% else %}<span class="pending">待確認</span>{% endif %}</td>
+      <td>{% if x.a.status != "confirmed" %}
+        <form method="post" action="/runs/{{ run.id }}/anomalies/{{ x.a.id }}" class="inline">
+          <input type="text" name="note" placeholder="備註" size="16"><button type="submit" class="secondary">標為已確認</button>
+        </form>
+        {% if x.unit %}<form method="post" action="/runs/{{ run.id }}/units/{{ x.unit.id }}/refetch" class="inline"><button type="submit" class="secondary">重新抓取</button></form>{% endif %}
+      {% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+{% elif ind == "notes" %}
+  <table>
+    <tr><th>資料取得日期</th><td>{{ notes.data_date }}</td></tr>
+    <tr><th>資料來源</th><td>{{ notes.source }}</td></tr>
+    <tr><th>教師數</th><td>教育部公開資訊平台 {{ run.academic_year }} 學年度（{{ "專任教師數-教師總數總計" if run.teacher_column == "total" else "專任助理教授以上人數-總計" }}）</td></tr>
+    <tr><th>排除自我引用</th><td>{{ notes.self_citation }}</td></tr>
+    <tr><th>指標重要性</th><td>{% for i in indicators %}{{ i.label }}：{{ notes.importance[i.id] if notes.importance else "" }}<br>{% endfor %}</td></tr>
+  </table>
+  <form method="post" action="/runs/{{ run.id }}/notes">
+    <div class="field"><label for="extra">補充說明</label><textarea id="extra" name="extra">{{ notes.extra or "" }}</textarea></div>
+    <button type="submit">儲存備註</button>
+  </form>
+
+{% elif ind == "downloads" %}
+  {% block downloads %}<p class="muted">下載功能尚未開放。</p>{% endblock %}
+{% endif %}
+{% endif %}
 {% endblock %}

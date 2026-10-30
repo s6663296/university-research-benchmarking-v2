@@ -1,3 +1,4 @@
+import json
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -5,11 +6,14 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Run, RunUnit, Unit
+from app.db.models import Anomaly, Run, RunUnit, Unit
 from app.db.settings_store import get_setting
 from app.elsevier.client import make_client
 from app.mapping.parser import NCU_SHEET
 from app.mapping.service import latest_version, units_of
+from app.metrics.indicators import BY_ID, INDICATORS
+from app.reports.tables import SUMMARY_INDICATORS, fmt, indicator_table, run_groups, short_names, summary_table
+from app.runs.anomaly import KIND_LABELS, resolve_anomaly
 from app.runs.scope import COMPARISON_LABELS, RunConfig, default_period
 from app.runs.service import create_run, last_config, preview_run
 from app.teachers.moe import import_years, latest_import
@@ -127,10 +131,61 @@ def progress(request: Request, run_id: int, session: Session = Depends(get_sessi
     return response
 
 
+def result_context(session: Session, run: Run, ind: str) -> dict:
+    groups = run_groups(session, run)
+    _, _, college_short = short_names(session)
+    colleges = list(dict.fromkeys(g.key for g in groups if g.comparison == "college"))
+    if not colleges:
+        colleges = list(dict.fromkeys(session.get(Unit, g.unit_ids[0]).ncu_college for g in groups
+                                      if g.comparison == "benchmark" and session.get(Unit, g.unit_ids[0]).ncu_college))
+    tables = []
+    if ind in BY_ID:
+        for g in groups:
+            title = {"benchmark": f"對標學校比較：{g.key}",
+                     "college": f"{college_short.get(g.key, g.key)}內系所比較",
+                     "custom": "自訂比較"}[g.comparison]
+            tables.append((title, indicator_table(session, run.id, g.comparison, g.key, ind)))
+    anomalies = []
+    for a in session.scalars(select(Anomaly).where(Anomaly.run_id == run.id).order_by(Anomaly.status.desc(), Anomaly.id)):
+        unit = session.get(Unit, a.unit_id) if a.unit_id else None
+        anomalies.append(dict(a=a, unit=unit, kind=KIND_LABELS.get(a.kind, a.kind)))
+    return dict(
+        indicators=INDICATORS, ind=ind, indicator=BY_ID.get(ind), tables=tables,
+        summaries=[(c, college_short.get(c, c), summary_table(session, run.id, c)) for c in colleges],
+        summary_labels={i: BY_ID[i].label for i in SUMMARY_INDICATORS},
+        anomalies=anomalies, open_anomalies=sum(1 for x in anomalies if x["a"].status != "confirmed"),
+        notes=json.loads(run.notes_json or "{}"), fmt=fmt,
+    )
+
+
 @router.get("/runs/{run_id}")
-def run_detail(request: Request, run_id: int, session: Session = Depends(get_session)):
+def run_detail(request: Request, run_id: int, ind: str = "summary", session: Session = Depends(get_session)):
     run = get_run(session, run_id)
-    return render(request, "run_detail.html", **progress_context(session, run))
+    ctx = progress_context(session, run)
+    if run.status == "done":
+        ctx.update(result_context(session, run, ind))
+    return render(request, "run_detail.html", **ctx)
+
+
+@router.post("/runs/{run_id}/anomalies/{anomaly_id}")
+async def resolve(request: Request, run_id: int, anomaly_id: int, session: Session = Depends(get_session)):
+    form = await request.form()
+    a = session.get(Anomaly, anomaly_id)
+    if a is None or a.run_id != run_id:
+        raise HTTPException(404, "找不到這個待確認項目")
+    resolve_anomaly(session, anomaly_id, str(form.get("note", "")))
+    return RedirectResponse(f"/runs/{run_id}?ind=anomalies", status_code=303)
+
+
+@router.post("/runs/{run_id}/notes")
+async def save_notes(request: Request, run_id: int, session: Session = Depends(get_session)):
+    form = await request.form()
+    run = get_run(session, run_id)
+    notes = json.loads(run.notes_json or "{}")
+    notes["extra"] = str(form.get("extra", "")).strip()
+    run.notes_json = json.dumps(notes, ensure_ascii=False)
+    session.commit()
+    return RedirectResponse(f"/runs/{run_id}?ind=notes", status_code=303)
 
 
 @router.post("/runs/{run_id}/resume")
