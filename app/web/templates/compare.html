@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>版本比較：<a href="/runs/{{ a.id }}">#{{ a.id }}</a> → <a href="/runs/{{ b.id }}">#{{ b.id }}</a></h1>
+<p>
+  A：{{ a.created_at.strftime("%Y/%m/%d %H:%M") }}（{{ a.period_from }}–{{ a.period_to }}）
+  B：{{ b.created_at.strftime("%Y/%m/%d %H:%M") }}（{{ b.period_from }}–{{ b.period_to }}）
+</p>
+<p>
+  {% if show_all %}<a href="?a={{ a.id }}&b={{ b.id }}">只顯示有差異的項目</a>
+  {% else %}<a href="?a={{ a.id }}&b={{ b.id }}&all=1">顯示全部</a>{% endif %}
+</p>
+{% if not rows %}<p class="ok">兩個版本的指標完全相同。</p>{% else %}
+<table>
+  <tr><th>比較範圍</th><th>中大系所</th><th>學校</th><th>指標</th><th class="num">A</th><th class="num">B</th><th class="num">差異</th></tr>
+  {% for r in rows %}
+  <tr {% if r.school == "中央" %}class="ncu"{% endif %}>
+    <td>{{ comparison_labels[r.comparison] }}</td><td>{{ r.ncu_dept }}</td><td>{{ r.school }}</td>
+    <td>{{ labels[r.indicator_id] }}</td>
+    <td class="num">{{ fmt(r.a) if r.a is not none else "—" }}</td>
+    <td class="num">{{ fmt(r.b) if r.b is not none else "—" }}</td>
+    <td class="num">{% if r.delta is not none %}{{ "+" if r.delta > 0 }}{{ fmt(r.delta) }}{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

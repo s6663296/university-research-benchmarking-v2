@@ -28,7 +28,14 @@
   </section>
   <section class="card">
     <h2>最近分析</h2>
-    <p class="muted">尚無分析</p>
+    {% if runs %}
+    <ul>
+      {% for x in runs %}<li><a href="/runs/{{ x.run.id }}">#{{ x.run.id }}</a> {{ x.run.created_at.strftime("%m/%d %H:%M") }} {{ x.depts }}（{{ x.status }}{% if x.open %}，待確認 {{ x.open }}{% endif %}）</li>{% endfor %}
+    </ul>
+    <p><a href="/runs">全部版本紀錄</a></p>
+    {% else %}
+    <p class="muted">尚無分析，<a href="/runs/new">新增分析</a></p>
+    {% endif %}
   </section>
 </div>
 {% endblock %}
