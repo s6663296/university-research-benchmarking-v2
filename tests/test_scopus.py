@@ -9,14 +9,15 @@ def client():
     return ElsevierClient("k", backoff_base=0, rate_per_sec=1000)
 
 
-def test_build_query():
+def test_build_query_matches_scopus_affiliation_search():
+    # 不加引號，和 Scopus 網頁「Search within: Affiliation」相同（清大經濟：加引號 34 篇、不加 40 篇）
     assert build_query("Department of Finance, National Taiwan University", 2021, 2025) == \
-        'AFFIL("Department of Finance, National Taiwan University") AND AFFILCOUNTRY(Taiwan) ' \
-        'AND PUBYEAR > 2020 AND PUBYEAR < 2026'
+        "AFFIL(Department of Finance, National Taiwan University) AND AFFILCOUNTRY(Taiwan) " \
+        "AND PUBYEAR > 2020 AND PUBYEAR < 2026"
 
 
-def test_build_query_removes_quotes():
-    assert build_query('Dept of "X"', 2021, 2025).startswith('AFFIL("Dept of X")')
+def test_build_query_removes_quotes_and_parentheses():
+    assert build_query('Dept of "X" (Taipei)', 2021, 2025).startswith("AFFIL(Dept of X Taipei) AND")
 
 
 async def test_search_follows_cursor(respx_mock):

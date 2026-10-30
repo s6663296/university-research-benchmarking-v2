@@ -51,7 +51,7 @@ def test_new_run_defaults(seeded):
 
 def test_preview_shows_queries(seeded):
     text = seeded.post("/runs/preview", data=FORM).text
-    assert 'AFFIL(&#34;Department of Information Management, National Taiwan University&#34;)' in text
+    assert 'AFFIL(Department of Information Management, National Taiwan University)' in text
     assert "16" in text  # 台大資管教師數
 
 

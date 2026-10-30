@@ -57,7 +57,7 @@ def test_preview_rows(seeded):
     assert errors == []
     by_school = {(r.school, seeded.get(Unit, r.unit_id).ncu_dept): r for r in rows}
     ntu = by_school[("台大", "資訊管理學系")]
-    assert ntu.query.startswith('AFFIL("Department of Information Management, National Taiwan University")')
+    assert ntu.query.startswith('AFFIL(Department of Information Management, National Taiwan University)')
     assert ntu.teacher.value == 16
     assert len(rows) == 5  # 中央 3 系所 + 台大資管 + 政治資管
 

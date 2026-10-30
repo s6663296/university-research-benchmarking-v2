@@ -1,5 +1,6 @@
 """Scopus Search：以單位英文名稱取得期間內所有論文（設計 §6 步驟 4）。"""
 
+import re
 from dataclasses import dataclass
 
 from app.elsevier.client import ElsevierClient
@@ -9,8 +10,13 @@ PAGE_SIZE = 25
 
 
 def build_query(dept_en: str, year_from: int, year_to: int) -> str:
-    name = dept_en.replace('"', "").strip()
-    return (f'AFFIL("{name}") AND AFFILCOUNTRY(Taiwan) '
+    """與 Scopus 網頁「Search within: Affiliation」相同：名稱不加引號，各字出現在同一單位即可。
+
+    加引號會變成連續片語比對，篇數較少（清大經濟 2021–2025：加引號 34 篇、不加 40 篇）。
+    引號與括號會破壞查詢語法，一律移除。
+    """
+    name = " ".join(re.sub(r'["()]', " ", dept_en).split())
+    return (f"AFFIL({name}) AND AFFILCOUNTRY(Taiwan) "
             f"AND PUBYEAR > {year_from - 1} AND PUBYEAR < {year_to + 1}")
 
 
