@@ -1,0 +1,47 @@
+"""可在設定頁修改的執行參數，存於 app_settings。"""
+
+import json
+from copy import deepcopy
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from app.db.models import AppSetting
+
+DEFAULT_SETTINGS: dict[str, Any] = {
+    "rate_per_sec": 3.0,
+    "max_retries": 3,
+    "backoff_base_sec": 1.0,
+    "timeout_sec": 60,
+    "cache_days": 1,                      # 1 = 只用當天的快取
+    "scival_batch_size": 25,
+    "anomaly_change_threshold": 0.30,
+    "teacher_column": "total",            # 或 "asst_prof_plus"
+    "self_citation_strategy": "scival_param",
+    "rank_highlight_top": 2,              # 排名總表中名次 ≤ 2 標紅（範例第 4 頁）
+    "dept_short_names": {
+        "資訊管理學系": "資管系", "財務金融學系": "財金系", "企業管理學系": "企管系",
+        "經濟學系": "經濟系", "產業經濟研究所": "產經所", "人力資源管理研究所": "人資所",
+        "工業管理研究所": "工管所", "會計研究所": "會計所",
+    },
+    "college_short_names": {"管理學院": "管學院"},
+}
+
+
+def get_setting(session: Session, key: str) -> Any:
+    row = session.get(AppSetting, key)
+    if row is not None:
+        return json.loads(row.value_json)
+    return deepcopy(DEFAULT_SETTINGS[key])
+
+
+def set_setting(session: Session, key: str, value: Any) -> None:
+    if key not in DEFAULT_SETTINGS:
+        raise KeyError(key)
+    row = session.get(AppSetting, key)
+    text = json.dumps(value, ensure_ascii=False)
+    if row is None:
+        session.add(AppSetting(key=key, value_json=text))
+    else:
+        row.value_json = text
+    session.commit()
