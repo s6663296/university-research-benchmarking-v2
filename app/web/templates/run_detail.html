@@ -101,6 +101,8 @@
     {% for dept, short in report_depts %}<li><a href="/runs/{{ run.id }}/pptx/{{ dept }}">{{ short }}</a></li>{% endfor %}
   </ul>
   <p><a class="button" href="/runs/{{ run.id }}/pptx.zip">下載全部簡報（zip）</a></p>
+  <h3>Excel（整份分析）</h3>
+  <p><a class="button" href="/runs/{{ run.id }}/xlsx">下載 xlsx</a></p>
 {% endif %}
 {% endif %}
 {% endblock %}

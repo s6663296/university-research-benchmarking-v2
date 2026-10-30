@@ -15,6 +15,7 @@ from app.mapping.service import latest_version, units_of
 from app.metrics.indicators import BY_ID, INDICATORS
 from app.reports.exports import export_path, record_export
 from app.reports.pptx_report import build_dept_report, report_filename
+from app.reports.xlsx_report import build_run_workbook
 from app.reports.tables import SUMMARY_INDICATORS, fmt, indicator_table, run_groups, short_names, summary_table
 from app.runs.anomaly import KIND_LABELS, resolve_anomaly
 from app.runs.scope import COMPARISON_LABELS, RunConfig, default_period
@@ -238,3 +239,13 @@ def download_pptx(request: Request, run_id: int, ncu_dept: str, session: Session
     path = build_dept_report(session, run_id, ncu_dept, export_path(request.app.state.settings, run_id, name))
     record_export(session, run_id, "pptx", path)
     return FileResponse(path, media_type=PPTX_TYPE, filename=name)
+
+
+@router.get("/runs/{run_id}/xlsx")
+def download_xlsx(request: Request, run_id: int, session: Session = Depends(get_session)):
+    run = _done_run(session, run_id)
+    name = f"{run.period_from}-{run.period_to}論文指標分析_run{run_id}.xlsx"
+    path = build_run_workbook(session, run_id, export_path(request.app.state.settings, run_id, name))
+    record_export(session, run_id, "xlsx", path)
+    return FileResponse(path, filename=name,
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
