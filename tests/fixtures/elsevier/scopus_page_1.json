@@ -1,0 +1,188 @@
+{
+ "search-results": {
+  "opensearch:totalResults": "67",
+  "opensearch:startIndex": "0",
+  "opensearch:itemsPerPage": "25",
+  "cursor": {
+   "@current": "*",
+   "@next": "AoE1"
+  },
+  "entry": [
+   {
+    "dc:identifier": "SCOPUS_ID:105014524319",
+    "eid": "2-s2.0-105014524319",
+    "dc:title": "Energy commodities, metal markets, and money supply: Asymmetric information transmission mechanism of easing and tightening",
+    "prism:coverDate": "2025-10-30",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:105022648711",
+    "eid": "2-s2.0-105022648711",
+    "dc:title": "Mandatory IFRS Adoption and Design Innovation",
+    "prism:coverDate": "2025-09-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:105008640939",
+    "eid": "2-s2.0-105008640939",
+    "dc:title": "Present bias: Understanding zero leverage policy and unstable capital structure",
+    "prism:coverDate": "2025-08-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:105008580150",
+    "eid": "2-s2.0-105008580150",
+    "dc:title": "Sample Selection Bias and Collinearity in Analyzing ESG Ratings and Stock Returns in Taiwan",
+    "prism:coverDate": "2025-06-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:105000649718",
+    "eid": "2-s2.0-105000649718",
+    "dc:title": "Robust algorithmic trading in a generalized lattice market",
+    "prism:coverDate": "2025-05-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85217515497",
+    "eid": "2-s2.0-85217515497",
+    "dc:title": "Willingness to pay for green buildings post COVID-19 pandemic outbreak: differences between high- and low-income areas and high- and low-price settlements",
+    "prism:coverDate": "2025-03-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:105038727750",
+    "eid": "2-s2.0-105038727750",
+    "dc:title": "Discussing the role of urban renewal incentive policies based on housing price effects",
+    "prism:coverDate": "2025-03-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85218105854",
+    "eid": "2-s2.0-85218105854",
+    "dc:title": "Has the outbreak of COVID-19 changed the carbon market?",
+    "prism:coverDate": "2025-02-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85218505431",
+    "eid": "2-s2.0-85218505431",
+    "dc:title": "Meta Analysis of Physical Activity Intensity and All-Cause Mortality: Pricing of Wellness Incentive Insurance Policy",
+    "prism:coverDate": "2025-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85213060169",
+    "eid": "2-s2.0-85213060169",
+    "dc:title": "PASS: Portfolio Analysis of Selecting Strategies on quantitative trading via NSGA-II",
+    "prism:coverDate": "2025-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85196097400",
+    "eid": "2-s2.0-85196097400",
+    "dc:title": "The information content of options trading for the CEO employee pay ratio",
+    "prism:coverDate": "2025-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:105015628795",
+    "eid": "2-s2.0-105015628795",
+    "dc:title": "On Risk-Sensitive Decision Making Under Uncertainty",
+    "prism:coverDate": "2025-01-01",
+    "subtypeDescription": "Conference Paper"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85207797512",
+    "eid": "2-s2.0-85207797512",
+    "dc:title": "Inter-regional rail travel and housing markets connectedness between London and other regions",
+    "prism:coverDate": "2024-12-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85206179154",
+    "eid": "2-s2.0-85206179154",
+    "dc:title": "Cost of escaping air pollution: A way to prevent excessive expansion of industrial areas",
+    "prism:coverDate": "2024-12-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85185465166",
+    "eid": "2-s2.0-85185465166",
+    "dc:title": "Features of different asset types and extreme risk transmission during the COVID-19 crisis",
+    "prism:coverDate": "2024-12-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85210002442",
+    "eid": "2-s2.0-85210002442",
+    "dc:title": "Automation of Text-Based Economic Indicator Construction: A Pilot Exploration on Economic Policy Uncertainty Index",
+    "prism:coverDate": "2024-10-21",
+    "subtypeDescription": "Conference Paper"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85207702651",
+    "eid": "2-s2.0-85207702651",
+    "dc:title": "Enhancing Europium Adsorption Effect of Fe on Several Geological Materials by Applying XANES, EXAFS, and Wavelet Transform Techniques",
+    "prism:coverDate": "2024-10-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85201766337",
+    "eid": "2-s2.0-85201766337",
+    "dc:title": "Impacts of COVID-19 on the premiums of proximity to railway stations: An in-depth analysis using passenger flows",
+    "prism:coverDate": "2024-10-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85200805471",
+    "eid": "2-s2.0-85200805471",
+    "dc:title": "In the mood for creativity: Sunshine-induced mood, inventor performance, and firm value",
+    "prism:coverDate": "2024-09-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85187533873",
+    "eid": "2-s2.0-85187533873",
+    "dc:title": "A wise investment by urban governments: Evidence from intelligent sports facilities",
+    "prism:coverDate": "2024-06-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85188113682",
+    "eid": "2-s2.0-85188113682",
+    "dc:title": "Fossil energy risk exposure of the UK electricity system: The moderating role of electricity generation mix and energy source",
+    "prism:coverDate": "2024-05-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85186996606",
+    "eid": "2-s2.0-85186996606",
+    "dc:title": "Determining bid-ask prices for options with stochastic illiquidity and applications to index options",
+    "prism:coverDate": "2024-04-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85182144613",
+    "eid": "2-s2.0-85182144613",
+    "dc:title": "An improved criterion for almost marginal conditional stochastic dominance",
+    "prism:coverDate": "2024-04-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85173826967",
+    "eid": "2-s2.0-85173826967",
+    "dc:title": "On solving robust log-optimal portfolio: A supporting hyperplane approximation approach",
+    "prism:coverDate": "2024-03-16",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85181965683",
+    "eid": "2-s2.0-85181965683",
+    "dc:title": "The ability of energy commodities to hedge the dynamic risk of epidemic black swans",
+    "prism:coverDate": "2024-02-01",
+    "subtypeDescription": "Article"
+   }
+  ]
+ }
+}

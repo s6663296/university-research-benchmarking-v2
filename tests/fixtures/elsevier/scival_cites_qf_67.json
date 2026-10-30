@@ -1,0 +1,1996 @@
+{
+ "dataSource": {
+  "sourceName": "Scopus",
+  "lastUpdated": "2026-10-25",
+  "metricStartYear": 2021,
+  "metricEndYear": 2027
+ },
+ "results": [
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 1,
+      "2025": null,
+      "2026": 3,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "State transformation of information spillover in asset markets and effective dynamic hedging strategies",
+    "id": 85164328030,
+    "doi": "10.1016/j.irfa.2023.102772",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "International Review of Financial Analysis",
+    "topicId": 12458,
+    "topicName": "Gold Price Dynamics and Market Interconnectedness",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets",
+    "sdg": [
+     "SDG 10: Reduced Inequality"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Robust algorithmic trading in a generalized lattice market",
+    "id": 105000649718,
+    "doi": "10.1016/j.jedc.2025.105083",
+    "publicationYear": 2025,
+    "type": "Article",
+    "sourceTitle": "Journal of Economic Dynamics and Control",
+    "topicId": 39510,
+    "topicName": "Statistical Arbitrage Strategies in Financial Markets",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 3,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "A wise investment by urban governments: Evidence from intelligent sports facilities",
+    "id": 85187533873,
+    "doi": "10.1016/j.asieco.2024.101730",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Journal of Asian Economics",
+    "topicId": 16087,
+    "topicName": "Economic Impacts of Sports Facilities on Cities",
+    "topicClusterId": 1151,
+    "topicClusterName": "Impact of Sports Events on Social Dynamics",
+    "sdg": [
+     "SDG 9: Industry, Innovation and Infrastructure",
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 2,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Another application of call options: Explaining the divergence between the housing market and the rental market",
+    "id": 85146676237,
+    "doi": "10.1016/j.frl.2023.103660",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "Finance Research Letters",
+    "topicId": 2871,
+    "topicName": "Dynamics of Real Estate Prices in Global Markets",
+    "topicClusterId": 1195,
+    "topicClusterName": "Dynamics of Housing Market and Labor Mobility",
+    "sdg": [
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 4,
+      "2025": null,
+      "2026": 2,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "A re-examination of housing bubbles: Evidence from European countries",
+    "id": 85126550557,
+    "doi": "10.1016/j.ecosys.2022.100971",
+    "publicationYear": 2022,
+    "type": "Article",
+    "sourceTitle": "Economic Systems",
+    "topicId": 2871,
+    "topicName": "Dynamics of Real Estate Prices in Global Markets",
+    "topicClusterId": 1195,
+    "topicClusterName": "Dynamics of Housing Market and Labor Mobility",
+    "sdg": [
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": 1,
+      "2023": 3,
+      "2024": 8,
+      "2025": 6,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Credit Default Swaps and Debt Overhang",
+    "id": 85130410620,
+    "doi": "10.1287/mnsc.2020.3953",
+    "publicationYear": 2022,
+    "type": "Article",
+    "sourceTitle": "Management Science",
+    "topicId": 1475,
+    "topicName": "Credit Risk Models and Corporate Bond Pricing",
+    "topicClusterId": 1066,
+    "topicClusterName": "Risk Management and Optimization in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": 1,
+      "2023": 5,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Generalization of affine feedback stock trading results to include stop-loss orders",
+    "id": 85120042660,
+    "doi": "10.1016/j.automatica.2021.110051",
+    "publicationYear": 2022,
+    "type": "Article",
+    "sourceTitle": "Automatica",
+    "topicId": 39510,
+    "topicName": "Statistical Arbitrage Strategies in Financial Markets",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 2,
+      "2026": 3,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "In the mood for creativity: Sunshine-induced mood, inventor performance, and firm value",
+    "id": 85200805471,
+    "doi": "10.1016/j.jempfin.2024.101527",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Journal of Empirical Finance",
+    "topicId": 29024,
+    "topicName": "Corporate Governance and Innovation Dynamics",
+    "topicClusterId": 45,
+    "topicClusterName": "Corporate Governance and Ownership Impact on Performance"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Meta Analysis of Physical Activity Intensity and All-Cause Mortality: Pricing of Wellness Incentive Insurance Policy",
+    "id": 85218505431,
+    "doi": "10.6656/MR.202501_44(1).CNI005",
+    "publicationYear": 2025,
+    "type": "Article",
+    "sourceTitle": "Management Review (Taiwan)",
+    "topicId": 7359,
+    "topicName": "Physical Activity's Impact on Cardiovascular Health",
+    "topicClusterId": 445,
+    "topicClusterName": "Physical Activity and Health Promotion Strategies"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 1,
+      "2026": 5,
+      "2027": 1
+     }
+    }
+   ],
+   "publication": {
+    "title": "Discussing the role of urban renewal incentive policies based on housing price effects",
+    "id": 105038727750,
+    "doi": "10.1016/j.eap.2024.12.005",
+    "publicationYear": 2025,
+    "type": "Article",
+    "sourceTitle": "Economic Analysis and Policy",
+    "topicId": 30083,
+    "topicName": "Frameworks for Sustainable Urban Renewal and Development",
+    "topicClusterId": 1119,
+    "topicClusterName": "Urban Renewal and Spatial Planning Dynamics",
+    "sdg": [
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": 2,
+      "2024": null,
+      "2025": 1,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "On Robustness of Double Linear Trading With Transaction Costs",
+    "id": 85141566632,
+    "doi": "10.1109/LCSYS.2022.3218541",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "IEEE Control Systems Letters",
+    "topicId": 39510,
+    "topicName": "Statistical Arbitrage Strategies in Financial Markets",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": 3,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "The information content of options trading for the CEO employee pay ratio",
+    "id": 85196097400,
+    "doi": "10.1007/s11156-024-01307-y",
+    "publicationYear": 2025,
+    "type": "Article",
+    "sourceTitle": "Review of Quantitative Finance and Accounting",
+    "topicId": 1219,
+    "topicName": "Executive Compensation and Corporate Governance Dynamics",
+    "topicClusterId": 45,
+    "topicClusterName": "Corporate Governance and Ownership Impact on Performance"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": 2,
+      "2024": 7,
+      "2025": 8,
+      "2026": 2,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Value capitalization effects of green buildings: A new insight through time trends and differences in various price levels",
+    "id": 85137627782,
+    "doi": "10.1016/j.buildenv.2022.109577",
+    "publicationYear": 2022,
+    "type": "Article",
+    "sourceTitle": "Building and Environment",
+    "topicId": 3979,
+    "topicName": "Housing Market Dynamics and Environmental Influences",
+    "topicClusterId": 1220,
+    "topicClusterName": "Spatial Dynamics in Real Estate Valuation Models",
+    "sdg": [
+     "SDG 7: Affordable and Clean Energy",
+     "SDG 11: Sustainable Cities and Communities",
+     "SDG 12: Responsible Consumption and Production"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": 1,
+      "2024": 3,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Stressed portfolio optimization with semiparametric method",
+    "id": 85126186111,
+    "doi": "10.1186/s40854-022-00333-w",
+    "publicationYear": 2022,
+    "type": "Article",
+    "sourceTitle": "Financial Innovation",
+    "topicId": 1839,
+    "topicName": "Dependence Structures in Financial and Environmental Data",
+    "topicClusterId": 1155,
+    "topicClusterName": "Statistical Models for Copula and Dependence Structures"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "CONFIDENCE LEVEL OF A MOTION FEEDBACK SYSTEM FOR ANALYZING EXERCISE TRAINING EFFICACY",
+    "id": 85121985834,
+    "doi": "10.4015/S1016237222500053",
+    "publicationYear": 2022,
+    "type": "Article",
+    "sourceTitle": "Biomedical Engineering - Applications, Basis and Communications",
+    "topicId": 291,
+    "topicName": "Human Activity Recognition through Sensor Networks",
+    "topicClusterId": 1231,
+    "topicClusterName": "Smart Homes and Activity Recognition Technologies",
+    "sdg": [
+     "SDG 3: Good Health and Well-being"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 2,
+      "2025": 2,
+      "2026": 4,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Fossil energy risk exposure of the UK electricity system: The moderating role of electricity generation mix and energy source",
+    "id": 85188113682,
+    "doi": "10.1016/j.enpol.2024.114065",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Energy Policy",
+    "topicId": 14966,
+    "topicName": "Dynamics of Natural Gas Pricing and Trade",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets",
+    "sdg": [
+     "SDG 7: Affordable and Clean Energy",
+     "SDG 9: Industry, Innovation and Infrastructure",
+     "SDG 13: Climate Action"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 1,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "PASS: Portfolio Analysis of Selecting Strategies on quantitative trading via NSGA-II",
+    "id": 85213060169,
+    "doi": "10.1080/0305215X.2024.2418342",
+    "publicationYear": 2025,
+    "type": "Article",
+    "sourceTitle": "Engineering Optimization",
+    "topicId": 8521,
+    "topicName": "Innovative Approaches to Portfolio Optimization",
+    "topicClusterId": 1066,
+    "topicClusterName": "Risk Management and Optimization in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": 1,
+      "2024": 3,
+      "2025": 2,
+      "2026": 2,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "On solving robust log-optimal portfolio: A supporting hyperplane approximation approach",
+    "id": 85173826967,
+    "doi": "10.1016/j.ejor.2023.09.040",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "European Journal of Operational Research",
+    "topicId": 30233,
+    "topicName": "Optimal Portfolio Strategies for Wealth Growth",
+    "topicClusterId": 1066,
+    "topicClusterName": "Risk Management and Optimization in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 2,
+      "2025": 2,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Long- and short-term price behaviors in presale housing markets in Taiwan",
+    "id": 85126101693,
+    "doi": "10.1016/j.eap.2022.02.007",
+    "publicationYear": 2022,
+    "type": "Article",
+    "sourceTitle": "Economic Analysis and Policy",
+    "topicId": 2871,
+    "topicName": "Dynamics of Real Estate Prices in Global Markets",
+    "topicClusterId": 1195,
+    "topicClusterName": "Dynamics of Housing Market and Labor Mobility",
+    "sdg": [
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "What can inverse VIX contribute to an investment portfolio?",
+    "id": 85096831618,
+    "doi": "10.1002/ijfe.2351",
+    "publicationYear": 2022,
+    "type": "Article",
+    "sourceTitle": "International Journal of Finance and Economics",
+    "topicId": 48704,
+    "topicName": "Implied Volatility and Market Forecasting Insights",
+    "topicClusterId": 840,
+    "topicClusterName": "Stochastic Models for Pricing and Risk Management"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": 1,
+      "2022": 1,
+      "2023": 1,
+      "2024": 1,
+      "2025": null,
+      "2026": 2,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "A fresh look at the risk-return tradeoff",
+    "id": 85106571712,
+    "doi": "10.1016/j.pacfin.2021.101546",
+    "publicationYear": 2021,
+    "type": "Review",
+    "sourceTitle": "Pacific Basin Finance Journal",
+    "topicId": 83728,
+    "topicName": "Risk-Return Dynamics in Financial Markets",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 1,
+      "2025": 1,
+      "2026": 2,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "On Frequency-Based Log-Optimal Portfolio With Transaction Costs",
+    "id": 85178007617,
+    "doi": "10.1109/LCSYS.2023.3334951",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "IEEE Control Systems Letters",
+    "topicId": 30233,
+    "topicName": "Optimal Portfolio Strategies for Wealth Growth",
+    "topicClusterId": 1066,
+    "topicClusterName": "Risk Management and Optimization in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Features of different asset types and extreme risk transmission during the COVID-19 crisis",
+    "id": 85185465166,
+    "doi": "10.1186/s40854-023-00510-5",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Financial Innovation",
+    "topicId": 4997,
+    "topicName": "COVID-19 Impact on Stock Market Volatility",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets",
+    "sdg": [
+     "SDG 3: Good Health and Well-being"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Automation of Text-Based Economic Indicator Construction: A Pilot Exploration on Economic Policy Uncertainty Index",
+    "id": 85210002442,
+    "doi": "10.1145/3627673.3679877",
+    "publicationYear": 2024,
+    "type": "Conference Paper",
+    "sourceTitle": "International Conference on Information and Knowledge Management, Proceedings",
+    "topicId": 8187,
+    "topicName": "Economic Policy Uncertainty and Market Dynamics",
+    "topicClusterId": 118,
+    "topicClusterName": "Sustainable Development in the Tourism Industry"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": 3,
+      "2024": 4,
+      "2025": 7,
+      "2026": 2,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Effect of COVID-19 lockdowns on city-center and suburban housing markets: Evidence from Hangzhou, China",
+    "id": 85138057159,
+    "doi": "10.1016/j.asieco.2022.101544",
+    "publicationYear": 2022,
+    "type": "Article",
+    "sourceTitle": "Journal of Asian Economics",
+    "topicId": 4997,
+    "topicName": "COVID-19 Impact on Stock Market Volatility",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets",
+    "sdg": [
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 1,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Willingness to pay for green buildings post COVID-19 pandemic outbreak: differences between high- and low-income areas and high- and low-price settlements",
+    "id": 85217515497,
+    "doi": "10.1007/s00168-025-01355-9",
+    "publicationYear": 2025,
+    "type": "Article",
+    "sourceTitle": "Annals of Regional Science",
+    "topicId": 15599,
+    "topicName": "Green Building Premiums and Market Dynamics",
+    "topicClusterId": 850,
+    "topicClusterName": "Sustainable Transport and Green Building Integration",
+    "sdg": [
+     "SDG 3: Good Health and Well-being",
+     "SDG 7: Affordable and Clean Energy",
+     "SDG 12: Responsible Consumption and Production"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "On Risk-Sensitive Decision Making Under Uncertainty",
+    "id": 105015628795,
+    "doi": "10.23919/ACC63710.2025.11108105",
+    "publicationYear": 2025,
+    "type": "Conference Paper",
+    "sourceTitle": "Proceedings of the American Control Conference",
+    "topicId": 30233,
+    "topicName": "Optimal Portfolio Strategies for Wealth Growth",
+    "topicClusterId": 1066,
+    "topicClusterName": "Risk Management and Optimization in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 1,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "On Data-Driven Drawdown Control with Restart Mechanism in Trading",
+    "id": 85184959837,
+    "doi": "10.1016/j.ifacol.2023.10.219",
+    "publicationYear": 2023,
+    "type": "Conference Paper",
+    "sourceTitle": "IFAC-PapersOnLine",
+    "topicId": 30233,
+    "topicName": "Optimal Portfolio Strategies for Wealth Growth",
+    "topicClusterId": 1066,
+    "topicClusterName": "Risk Management and Optimization in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": 2,
+      "2022": null,
+      "2023": 2,
+      "2024": 1,
+      "2025": null,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Market integration, systemic risk and diagnostic tests in large mixed panels",
+    "id": 85106658981,
+    "doi": "10.1080/07474938.2021.1889209",
+    "publicationYear": 2021,
+    "type": "Article",
+    "sourceTitle": "Econometric Reviews",
+    "topicId": 3856,
+    "topicName": "Long Memory Dynamics in Time Series Volatility",
+    "topicClusterId": 131,
+    "topicClusterName": "Interconnections of Economic Growth and Environmental Impact"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Present bias: Understanding zero leverage policy and unstable capital structure",
+    "id": 105008640939,
+    "doi": "10.1016/j.jmateco.2025.103148",
+    "publicationYear": 2025,
+    "type": "Article",
+    "sourceTitle": "Journal of Mathematical Economics",
+    "topicId": 12326,
+    "topicName": "Intertemporal Choice and Dynamic Discounting Models",
+    "topicClusterId": 701,
+    "topicClusterName": "Decision Making and Risk in Behavioral Economics"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": 1,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Influence of migration policy risk on international market segmentation: analysis of housing and rental markets in the euro area",
+    "id": 85138732741,
+    "doi": "10.1080/1331677X.2022.2121740",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "Economic Research-Ekonomska Istrazivanja",
+    "topicId": 8187,
+    "topicName": "Economic Policy Uncertainty and Market Dynamics",
+    "topicClusterId": 118,
+    "topicClusterName": "Sustainable Development in the Tourism Industry",
+    "sdg": [
+     "SDG 10: Reduced Inequality",
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": 1,
+      "2023": 2,
+      "2024": 1,
+      "2025": 1,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Revisiting and refining the comparison of conventional and islamic markets’ performance",
+    "id": 85105177416,
+    "doi": "10.1080/00036846.2021.1900533",
+    "publicationYear": 2021,
+    "type": "Article",
+    "sourceTitle": "Applied Economics",
+    "topicId": 25372,
+    "topicName": "Islamic Finance and Conventional Market Dynamics",
+    "topicClusterId": 45,
+    "topicClusterName": "Corporate Governance and Ownership Impact on Performance",
+    "sdg": [
+     "SDG 10: Reduced Inequality"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 3,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Impacts of COVID-19 on the premiums of proximity to railway stations: An in-depth analysis using passenger flows",
+    "id": 85201766337,
+    "doi": "10.1016/j.rtbm.2024.101185",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Research in Transportation Business and Management",
+    "topicId": 11406,
+    "topicName": "Impact of Transit Infrastructure on Land Value",
+    "topicClusterId": 1220,
+    "topicClusterName": "Spatial Dynamics in Real Estate Valuation Models",
+    "sdg": [
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 3,
+      "2025": 5,
+      "2026": 2,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "The gender gap in the ownership of promising land",
+    "id": 85161239306,
+    "doi": "10.1073/pnas.2300189120",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "Proceedings of the National Academy of Sciences of the United States of America",
+    "topicId": 6016,
+    "topicName": "Gender Imbalance and Child Preferences in Asia",
+    "topicClusterId": 425,
+    "topicClusterName": "Contraceptive Methods and Women's Health Access",
+    "sdg": [
+     "SDG 1: No Poverty",
+     "SDG 5: Gender Equality",
+     "SDG 10: Reduced Inequality"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 6,
+      "2025": 4,
+      "2026": 4,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Economic prediction with the FOMC minutes: An application of text mining",
+    "id": 85093682401,
+    "doi": "10.1016/j.iref.2020.09.020",
+    "publicationYear": 2021,
+    "type": "Article",
+    "sourceTitle": "International Review of Economics and Finance",
+    "topicId": 19079,
+    "topicName": "Forecasting Inflation and Economic Growth Dynamics",
+    "topicClusterId": 271,
+    "topicClusterName": "Monetary Policy and Economic Dynamics in Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 1,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "A Jump Start to Stock Trading Research for the Uninitiated Control Scientist: A Tutorial",
+    "id": 86000487779,
+    "doi": "10.1109/CDC56724.2024.10886117",
+    "publicationYear": 2024,
+    "type": "Conference Paper",
+    "sourceTitle": "Proceedings of the IEEE Conference on Decision and Control",
+    "topicId": 39510,
+    "topicName": "Statistical Arbitrage Strategies in Financial Markets",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 1,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "The ability of energy commodities to hedge the dynamic risk of epidemic black swans",
+    "id": 85181965683,
+    "doi": "10.1016/j.resourpol.2023.104622",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Resources Policy",
+    "topicId": 1565,
+    "topicName": "Economic Impacts of Oil Price Volatility",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 1,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "On Robustness of Double Linear Policy with Time-Varying Weights",
+    "id": 85175513143,
+    "doi": "10.1109/CDC49753.2023.10383733",
+    "publicationYear": 2023,
+    "type": "Conference Paper",
+    "sourceTitle": "Proceedings of the IEEE Conference on Decision and Control",
+    "topicId": 39510,
+    "topicName": "Statistical Arbitrage Strategies in Financial Markets",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Mandatory IFRS Adoption and Design Innovation",
+    "id": 105022648711,
+    "doi": "10.2308/JIAR-2022-046",
+    "publicationYear": 2025,
+    "type": "Article",
+    "sourceTitle": "Journal of International Accounting Research",
+    "topicId": 1949,
+    "topicName": "IFRS Adoption and Its Global Financial Impact",
+    "topicClusterId": 45,
+    "topicClusterName": "Corporate Governance and Ownership Impact on Performance",
+    "sdg": [
+     "SDG 10: Reduced Inequality"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 1,
+      "2025": null,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Dynamics of underwriting profits in the US market: Payout patterns and regulation effects",
+    "id": 85121400129,
+    "doi": "10.1002/ijfe.2585",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "International Journal of Finance and Economics",
+    "topicId": 10048,
+    "topicName": "Insurance Risk Management and Efficiency Frameworks",
+    "topicClusterId": 1066,
+    "topicClusterName": "Risk Management and Optimization in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Energy commodities, metal markets, and money supply: Asymmetric information transmission mechanism of easing and tightening",
+    "id": 105014524319,
+    "doi": "10.1016/j.energy.2025.138264",
+    "publicationYear": 2025,
+    "type": "Article",
+    "sourceTitle": "Energy",
+    "topicId": 1565,
+    "topicName": "Economic Impacts of Oil Price Volatility",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": 2,
+      "2023": 3,
+      "2024": 3,
+      "2025": 7,
+      "2026": 3,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Debt maturity dispersion and the cost of bank loans",
+    "id": 85111185319,
+    "doi": "10.1016/j.jcorpfin.2021.102049",
+    "publicationYear": 2021,
+    "type": "Article",
+    "sourceTitle": "Journal of Corporate Finance",
+    "topicId": 2471,
+    "topicName": "Influence of Credit Relationships on Financial Stability",
+    "topicClusterId": 394,
+    "topicClusterName": "Investment Strategies and Financial Structures in Banking"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": 1,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "On Robust Economic Control of Epidemics with Application to COVID-19",
+    "id": 85121829056,
+    "doi": "10.1109/ACCESS.2021.3136191",
+    "publicationYear": 2021,
+    "type": "Article",
+    "sourceTitle": "IEEE Access",
+    "topicId": 141,
+    "topicName": "Modeling COVID-19 Dynamics and Control Strategies",
+    "topicClusterId": 1,
+    "topicClusterName": "COVID-19, Its Impact, and Vaccination",
+    "sdg": [
+     "SDG 3: Good Health and Well-being"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": 1,
+      "2023": null,
+      "2024": 3,
+      "2025": 3,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "The association between non-executive compensation and firm performance",
+    "id": 85079728195,
+    "doi": "10.1080/16081625.2020.1726777",
+    "publicationYear": 2022,
+    "type": "Article",
+    "sourceTitle": "Asia-Pacific Journal of Accounting and Economics",
+    "topicId": 1219,
+    "topicName": "Executive Compensation and Corporate Governance Dynamics",
+    "topicClusterId": 45,
+    "topicClusterName": "Corporate Governance and Ownership Impact on Performance"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": 2,
+      "2024": 3,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "On Data-Driven Log-Optimal Portfolio: A Sliding Window Approach",
+    "id": 85144826309,
+    "doi": "10.1016/j.ifacol.2022.11.098",
+    "publicationYear": 2022,
+    "type": "Conference Paper",
+    "sourceTitle": "IFAC-PapersOnLine",
+    "topicId": 30233,
+    "topicName": "Optimal Portfolio Strategies for Wealth Growth",
+    "topicClusterId": 1066,
+    "topicClusterName": "Risk Management and Optimization in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "An Economic Policy Uncertainty Index for Taiwan",
+    "id": 85180284303,
+    "doi": "10.6277/TER.202106_49(2).0004",
+    "publicationYear": 2021,
+    "type": "Article",
+    "sourceTitle": "Taiwan Economic Review",
+    "topicId": 8187,
+    "topicName": "Economic Policy Uncertainty and Market Dynamics",
+    "topicClusterId": 118,
+    "topicClusterName": "Sustainable Development in the Tourism Industry",
+    "sdg": [
+     "SDG 1: No Poverty",
+     "SDG 8: Decent Work and Economic Growth"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 2,
+      "2025": 3,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Semantics matter: An empirical study on economic policy uncertainty index",
+    "id": 85170429613,
+    "doi": "10.1016/j.iref.2023.08.015",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "International Review of Economics and Finance",
+    "topicId": 8187,
+    "topicName": "Economic Policy Uncertainty and Market Dynamics",
+    "topicClusterId": 118,
+    "topicClusterName": "Sustainable Development in the Tourism Industry"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 3,
+      "2025": 2,
+      "2026": 2,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Empirical performance of component GARCH models in pricing VIX term structure and VIX futures",
+    "id": 85150390837,
+    "doi": "10.1016/j.jempfin.2023.03.005",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "Journal of Empirical Finance",
+    "topicId": 820,
+    "topicName": "Stochastic Models in Option Pricing Dynamics",
+    "topicClusterId": 840,
+    "topicClusterName": "Stochastic Models for Pricing and Risk Management"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 1,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Determining bid-ask prices for options with stochastic illiquidity and applications to index options",
+    "id": 85186996606,
+    "doi": "10.1016/j.pacfin.2024.102314",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Pacific Basin Finance Journal",
+    "topicId": 7291,
+    "topicName": "Dynamic Risk Measures in Financial Optimization",
+    "topicClusterId": 1066,
+    "topicClusterName": "Risk Management and Optimization in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 1,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Cost of escaping air pollution: A way to prevent excessive expansion of industrial areas",
+    "id": 85206179154,
+    "doi": "10.1016/j.asieco.2024.101823",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Journal of Asian Economics",
+    "topicId": 24067,
+    "topicName": "Air Pollution Effects on Health and Economy",
+    "topicClusterId": 251,
+    "topicClusterName": "Health Impacts of Air Pollution Exposure",
+    "sdg": [
+     "SDG 8: Decent Work and Economic Growth",
+     "SDG 9: Industry, Innovation and Infrastructure",
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 1,
+      "2026": 3,
+      "2027": 1
+     }
+    }
+   ],
+   "publication": {
+    "title": "Inter-regional rail travel and housing markets connectedness between London and other regions",
+    "id": 85207797512,
+    "doi": "10.1016/j.jtrangeo.2024.104044",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Journal of Transport Geography",
+    "topicId": 2871,
+    "topicName": "Dynamics of Real Estate Prices in Global Markets",
+    "topicClusterId": 1195,
+    "topicClusterName": "Dynamics of Housing Market and Labor Mobility",
+    "sdg": [
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": 1,
+      "2023": 3,
+      "2024": 6,
+      "2025": 8,
+      "2026": 7,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Optimal Short-Termism",
+    "id": 85125446373,
+    "doi": "10.1287/mnsc.2021.4139",
+    "publicationYear": 2022,
+    "type": "Article",
+    "sourceTitle": "Management Science",
+    "topicId": 51004,
+    "topicName": "Dynamic Contracts and Incentives in Agency Models",
+    "topicClusterId": 25,
+    "topicClusterName": "Value Creation in Supply Chain Management Systems"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 2,
+      "2026": 3,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Has the outbreak of COVID-19 changed the carbon market?",
+    "id": 85218105854,
+    "doi": "10.1007/s10644-024-09851-2",
+    "publicationYear": 2025,
+    "type": "Article",
+    "sourceTitle": "Economic Change and Restructuring",
+    "topicId": 3721,
+    "topicName": "Carbon Emission Trading and Market Dynamics",
+    "topicClusterId": 403,
+    "topicClusterName": "Climate Policy and Carbon Emission Dynamics",
+    "sdg": [
+     "SDG 3: Good Health and Well-being",
+     "SDG 13: Climate Action"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 2,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "The special effect of interest rate cuts on housing prices",
+    "id": 85104604121,
+    "doi": "10.3846/jbem.2021.14576",
+    "publicationYear": 2021,
+    "type": "Article",
+    "sourceTitle": "Journal of Business Economics and Management",
+    "topicId": 2871,
+    "topicName": "Dynamics of Real Estate Prices in Global Markets",
+    "topicClusterId": 1195,
+    "topicClusterName": "Dynamics of Housing Market and Labor Mobility",
+    "sdg": [
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": 1,
+      "2024": 1,
+      "2025": 1,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "FinTech on the Web: An Overview",
+    "id": 85154588015,
+    "doi": "10.1145/3572404",
+    "publicationYear": 2023,
+    "type": "Review",
+    "sourceTitle": "ACM Transactions on the Web",
+    "topicId": 2821,
+    "topicName": "Machine Learning Techniques in Stock Market Prediction",
+    "topicClusterId": 518,
+    "topicClusterName": "Machine Learning Applications in Transport and Commerce",
+    "sdg": [
+     "SDG 8: Decent Work and Economic Growth"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Option Valuation with Nonmonotonic Pricing Kernel and Embedded Volatility Component Premiums",
+    "id": 85202202492,
+    "doi": "10.3905/jod.2023.1.184",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "Journal of Derivatives",
+    "topicId": 820,
+    "topicName": "Stochastic Models in Option Pricing Dynamics",
+    "topicClusterId": 840,
+    "topicClusterName": "Stochastic Models for Pricing and Risk Management",
+    "sdg": [
+     "SDG 10: Reduced Inequality"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 1,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Exploring the effect of carbon cap-and-trade policy in China based on the evidence from multi-dimensional association",
+    "id": 85168610546,
+    "doi": "10.1080/15567249.2023.2250775",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "Energy Sources, Part B: Economics, Planning and Policy",
+    "topicId": 3721,
+    "topicName": "Carbon Emission Trading and Market Dynamics",
+    "topicClusterId": 403,
+    "topicClusterName": "Climate Policy and Carbon Emission Dynamics",
+    "sdg": [
+     "SDG 10: Reduced Inequality",
+     "SDG 13: Climate Action"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": 1,
+      "2022": 1,
+      "2023": 1,
+      "2024": null,
+      "2025": 2,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "House prices, rental costs, and mortgage interest rates",
+    "id": 85111322941,
+    "doi": "10.3846/ijspm.2021.14966",
+    "publicationYear": 2021,
+    "type": "Article",
+    "sourceTitle": "International Journal of Strategic Property Management",
+    "topicId": 2871,
+    "topicName": "Dynamics of Real Estate Prices in Global Markets",
+    "topicClusterId": 1195,
+    "topicClusterName": "Dynamics of Housing Market and Labor Mobility",
+    "sdg": [
+     "SDG 11: Sustainable Cities and Communities"
+    ]
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Enhancing Europium Adsorption Effect of Fe on Several Geological Materials by Applying XANES, EXAFS, and Wavelet Transform Techniques",
+    "id": 85207702651,
+    "doi": "10.3390/toxics12100706",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Toxics",
+    "topicId": 31240,
+    "topicName": "Ionic Strength Effects on Europium Sorption Mechanisms",
+    "topicClusterId": 768,
+    "topicClusterName": "Organic Matter Dynamics in Environmental Systems"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "How does the deterrence of fraud affect firms’ innovation outputs?",
+    "id": 85131360266,
+    "doi": "10.1080/13504851.2022.2081659",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "Applied Economics Letters",
+    "topicId": 33647,
+    "topicName": "Financial Restatement Impacts on Corporate Governance",
+    "topicClusterId": 45,
+    "topicClusterName": "Corporate Governance and Ownership Impact on Performance"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Sample Selection Bias and Collinearity in Analyzing ESG Ratings and Stock Returns in Taiwan",
+    "id": 105008580150,
+    "doi": "10.1142/S0219091525500080",
+    "publicationYear": 2025,
+    "type": "Article",
+    "sourceTitle": "Review of Pacific Basin Financial Markets and Policies",
+    "topicId": 995,
+    "topicName": "Corporate Social Responsibility and Financial Performance",
+    "topicClusterId": 499,
+    "topicClusterName": "Sustainability and Corporate Responsibility in Business"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "The VolCo index: a measure of the transition from pandemic to equity market",
+    "id": 85132413004,
+    "doi": "10.1080/13504851.2022.2089338",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "Applied Economics Letters",
+    "topicId": 5894,
+    "topicName": "Volatility Forecasting in Stock Market Dynamics",
+    "topicClusterId": 102,
+    "topicClusterName": "Volatility and Investor Behavior in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": 2,
+      "2024": 4,
+      "2025": 3,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "On asymptotic log-optimal portfolio optimization",
+    "id": 85148687464,
+    "doi": "10.1016/j.automatica.2023.110901",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "Automatica",
+    "topicId": 30233,
+    "topicName": "Optimal Portfolio Strategies for Wealth Growth",
+    "topicClusterId": 1066,
+    "topicClusterName": "Risk Management and Optimization in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "An improved criterion for almost marginal conditional stochastic dominance",
+    "id": 85182144613,
+    "doi": "10.1007/s11156-023-01235-3",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Review of Quantitative Finance and Accounting",
+    "topicId": 30980,
+    "topicName": "Stochastic Dominance and Investor Decision-Making",
+    "topicClusterId": 1066,
+    "topicClusterName": "Risk Management and Optimization in Financial Markets"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": 1,
+      "2025": 1,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Monitoring by busy compensation committee members",
+    "id": 85171975235,
+    "doi": "10.1016/j.iref.2023.08.026",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "International Review of Economics and Finance",
+    "topicId": 146,
+    "topicName": "Corporate Governance and Firm Performance Dynamics",
+    "topicClusterId": 45,
+    "topicClusterName": "Corporate Governance and Ownership Impact on Performance"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": 2,
+      "2026": 1,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Modeling underwriting risk: A copula regression analysis on U.S. property-casualty insurance byline loss ratios",
+    "id": 85178013474,
+    "doi": "10.1016/j.pacfin.2023.102206",
+    "publicationYear": 2024,
+    "type": "Article",
+    "sourceTitle": "Pacific Basin Finance Journal",
+    "topicId": 35839,
+    "topicName": "Innovative Approaches to Claims Reserving in Insurance",
+    "topicClusterId": 1115,
+    "topicClusterName": "Probability Models for Random Processes and Data"
+   }
+  },
+  {
+   "metrics": [
+    {
+     "metricType": "CitationCount",
+     "valueByYear": {
+      "0": 0,
+      "2021": null,
+      "2022": null,
+      "2023": null,
+      "2024": null,
+      "2025": null,
+      "2026": null,
+      "2027": null
+     }
+    }
+   ],
+   "publication": {
+    "title": "Securities auctions with pre-project information management",
+    "id": 85148948697,
+    "doi": "10.1016/j.ijindorg.2023.102929",
+    "publicationYear": 2023,
+    "type": "Article",
+    "sourceTitle": "International Journal of Industrial Organization",
+    "topicId": 4983,
+    "topicName": "Mechanism Design and Revenue Optimization in Auctions",
+    "topicClusterId": 614,
+    "topicClusterName": "Market Dynamics in Cooperative Auctions and Games"
+   }
+  }
+ ]
+}

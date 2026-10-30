@@ -1,0 +1,132 @@
+{
+ "search-results": {
+  "opensearch:totalResults": "67",
+  "opensearch:startIndex": "0",
+  "opensearch:itemsPerPage": "17",
+  "cursor": {
+   "@current": "AoE2",
+   "@next": "AoE3"
+  },
+  "entry": [
+   {
+    "dc:identifier": "SCOPUS_ID:85096831618",
+    "eid": "2-s2.0-85096831618",
+    "dc:title": "What can inverse VIX contribute to an investment portfolio?",
+    "prism:coverDate": "2022-07-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85126550557",
+    "eid": "2-s2.0-85126550557",
+    "dc:title": "A re-examination of housing bubbles: Evidence from European countries",
+    "prism:coverDate": "2022-06-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85126101693",
+    "eid": "2-s2.0-85126101693",
+    "dc:title": "Long- and short-term price behaviors in presale housing markets in Taiwan",
+    "prism:coverDate": "2022-06-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85121985834",
+    "eid": "2-s2.0-85121985834",
+    "dc:title": "CONFIDENCE LEVEL OF A MOTION FEEDBACK SYSTEM FOR ANALYZING EXERCISE TRAINING EFFICACY",
+    "prism:coverDate": "2022-06-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85130410620",
+    "eid": "2-s2.0-85130410620",
+    "dc:title": "Credit Default Swaps and Debt Overhang",
+    "prism:coverDate": "2022-03-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85120042660",
+    "eid": "2-s2.0-85120042660",
+    "dc:title": "Generalization of affine feedback stock trading results to include stop-loss orders",
+    "prism:coverDate": "2022-02-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85144826309",
+    "eid": "2-s2.0-85144826309",
+    "dc:title": "On Data-Driven Log-Optimal Portfolio: A Sliding Window Approach",
+    "prism:coverDate": "2022-01-01",
+    "subtypeDescription": "Conference Paper"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85079728195",
+    "eid": "2-s2.0-85079728195",
+    "dc:title": "The association between non-executive compensation and firm performance",
+    "prism:coverDate": "2022-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85111185319",
+    "eid": "2-s2.0-85111185319",
+    "dc:title": "Debt maturity dispersion and the cost of bank loans",
+    "prism:coverDate": "2021-10-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85106571712",
+    "eid": "2-s2.0-85106571712",
+    "dc:title": "A fresh look at the risk-return tradeoff",
+    "prism:coverDate": "2021-09-01",
+    "subtypeDescription": "Review"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85111322941",
+    "eid": "2-s2.0-85111322941",
+    "dc:title": "House prices, rental costs, and mortgage interest rates",
+    "prism:coverDate": "2021-06-30",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85180284303",
+    "eid": "2-s2.0-85180284303",
+    "dc:title": "An Economic Policy Uncertainty Index for Taiwan",
+    "prism:coverDate": "2021-06-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85104604121",
+    "eid": "2-s2.0-85104604121",
+    "dc:title": "The special effect of interest rate cuts on housing prices",
+    "prism:coverDate": "2021-02-18",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85121829056",
+    "eid": "2-s2.0-85121829056",
+    "dc:title": "On Robust Economic Control of Epidemics with Application to COVID-19",
+    "prism:coverDate": "2021-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85106658981",
+    "eid": "2-s2.0-85106658981",
+    "dc:title": "Market integration, systemic risk and diagnostic tests in large mixed panels",
+    "prism:coverDate": "2021-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85105177416",
+    "eid": "2-s2.0-85105177416",
+    "dc:title": "Revisiting and refining the comparison of conventional and islamic markets’ performance",
+    "prism:coverDate": "2021-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85093682401",
+    "eid": "2-s2.0-85093682401",
+    "dc:title": "Economic prediction with the FOMC minutes: An application of text mining",
+    "prism:coverDate": "2021-01-01",
+    "subtypeDescription": "Article"
+   }
+  ]
+ }
+}

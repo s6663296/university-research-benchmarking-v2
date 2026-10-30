@@ -1,0 +1,188 @@
+{
+ "search-results": {
+  "opensearch:totalResults": "67",
+  "opensearch:startIndex": "0",
+  "opensearch:itemsPerPage": "25",
+  "cursor": {
+   "@current": "AoE1",
+   "@next": "AoE2"
+  },
+  "entry": [
+   {
+    "dc:identifier": "SCOPUS_ID:85178013474",
+    "eid": "2-s2.0-85178013474",
+    "dc:title": "Modeling underwriting risk: A copula regression analysis on U.S. property-casualty insurance byline loss ratios",
+    "prism:coverDate": "2024-02-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:86000487779",
+    "eid": "2-s2.0-86000487779",
+    "dc:title": "A Jump Start to Stock Trading Research for the Uninitiated Control Scientist: A Tutorial",
+    "prism:coverDate": "2024-01-01",
+    "subtypeDescription": "Conference Paper"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85171975235",
+    "eid": "2-s2.0-85171975235",
+    "dc:title": "Monitoring by busy compensation committee members",
+    "prism:coverDate": "2024-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85170429613",
+    "eid": "2-s2.0-85170429613",
+    "dc:title": "Semantics matter: An empirical study on economic policy uncertainty index",
+    "prism:coverDate": "2024-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85164328030",
+    "eid": "2-s2.0-85164328030",
+    "dc:title": "State transformation of information spillover in asset markets and effective dynamic hedging strategies",
+    "prism:coverDate": "2023-10-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85184959837",
+    "eid": "2-s2.0-85184959837",
+    "dc:title": "On Data-Driven Drawdown Control with Restart Mechanism in Trading",
+    "prism:coverDate": "2023-07-01",
+    "subtypeDescription": "Conference Paper"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85121400129",
+    "eid": "2-s2.0-85121400129",
+    "dc:title": "Dynamics of underwriting profits in the US market: Payout patterns and regulation effects",
+    "prism:coverDate": "2023-07-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85202202492",
+    "eid": "2-s2.0-85202202492",
+    "dc:title": "Option Valuation with Nonmonotonic Pricing Kernel and Embedded Volatility Component Premiums",
+    "prism:coverDate": "2023-06-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85150390837",
+    "eid": "2-s2.0-85150390837",
+    "dc:title": "Empirical performance of component GARCH models in pricing VIX term structure and VIX futures",
+    "prism:coverDate": "2023-06-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85148948697",
+    "eid": "2-s2.0-85148948697",
+    "dc:title": "Securities auctions with pre-project information management",
+    "prism:coverDate": "2023-05-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85148687464",
+    "eid": "2-s2.0-85148687464",
+    "dc:title": "On asymptotic log-optimal portfolio optimization",
+    "prism:coverDate": "2023-05-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85146676237",
+    "eid": "2-s2.0-85146676237",
+    "dc:title": "Another application of call options: Explaining the divergence between the housing market and the rental market",
+    "prism:coverDate": "2023-05-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85154588015",
+    "eid": "2-s2.0-85154588015",
+    "dc:title": "FinTech on the Web: An Overview",
+    "prism:coverDate": "2023-03-27",
+    "subtypeDescription": "Review"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85178007617",
+    "eid": "2-s2.0-85178007617",
+    "dc:title": "On Frequency-Based Log-Optimal Portfolio With Transaction Costs",
+    "prism:coverDate": "2023-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85175513143",
+    "eid": "2-s2.0-85175513143",
+    "dc:title": "On Robustness of Double Linear Policy with Time-Varying Weights",
+    "prism:coverDate": "2023-01-01",
+    "subtypeDescription": "Conference Paper"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85168610546",
+    "eid": "2-s2.0-85168610546",
+    "dc:title": "Exploring the effect of carbon cap-and-trade policy in China based on the evidence from multi-dimensional association",
+    "prism:coverDate": "2023-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85161239306",
+    "eid": "2-s2.0-85161239306",
+    "dc:title": "The gender gap in the ownership of promising land",
+    "prism:coverDate": "2023-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85141566632",
+    "eid": "2-s2.0-85141566632",
+    "dc:title": "On Robustness of Double Linear Trading With Transaction Costs",
+    "prism:coverDate": "2023-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85138732741",
+    "eid": "2-s2.0-85138732741",
+    "dc:title": "Influence of migration policy risk on international market segmentation: analysis of housing and rental markets in the euro area",
+    "prism:coverDate": "2023-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85132413004",
+    "eid": "2-s2.0-85132413004",
+    "dc:title": "The VolCo index: a measure of the transition from pandemic to equity market",
+    "prism:coverDate": "2023-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85131360266",
+    "eid": "2-s2.0-85131360266",
+    "dc:title": "How does the deterrence of fraud affect firms’ innovation outputs?",
+    "prism:coverDate": "2023-01-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85138057159",
+    "eid": "2-s2.0-85138057159",
+    "dc:title": "Effect of COVID-19 lockdowns on city-center and suburban housing markets: Evidence from Hangzhou, China",
+    "prism:coverDate": "2022-12-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85126186111",
+    "eid": "2-s2.0-85126186111",
+    "dc:title": "Stressed portfolio optimization with semiparametric method",
+    "prism:coverDate": "2022-12-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85137627782",
+    "eid": "2-s2.0-85137627782",
+    "dc:title": "Value capitalization effects of green buildings: A new insight through time trends and differences in various price levels",
+    "prism:coverDate": "2022-10-01",
+    "subtypeDescription": "Article"
+   },
+   {
+    "dc:identifier": "SCOPUS_ID:85125446373",
+    "eid": "2-s2.0-85125446373",
+    "dc:title": "Optimal Short-Termism",
+    "prism:coverDate": "2022-09-01",
+    "subtypeDescription": "Article"
+   }
+  ]
+ }
+}

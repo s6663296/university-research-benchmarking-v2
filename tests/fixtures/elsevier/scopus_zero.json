@@ -1,0 +1,17 @@
+{
+ "search-results": {
+  "opensearch:totalResults": "0",
+  "opensearch:startIndex": "0",
+  "opensearch:itemsPerPage": "0",
+  "cursor": {
+   "@current": "*",
+   "@next": "AoE0"
+  },
+  "entry": [
+   {
+    "@_fa": "true",
+    "error": "Result set was empty"
+   }
+  ]
+ }
+}
