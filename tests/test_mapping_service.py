@@ -6,7 +6,8 @@ from app.db.models import MappingIssue, MappingVersion
 from app.mapping.service import diff_versions, import_mapping, latest_version, previous_version, units_of
 from tests.mapping_builder import build_mapping, ncu_rows
 
-REAL = Path("docs/中大與他校mapping表.xlsx").read_bytes()
+# 2026/10 的原始檔（尚無「中央」分頁），固定下來，docs/ 中的檔案填寫後測試不受影響
+REAL = Path("tests/fixtures/mapping_2026-10.xlsx").read_bytes()
 
 
 def test_import_creates_version_with_units_and_issues(session):
