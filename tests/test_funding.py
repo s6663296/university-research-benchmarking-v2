@@ -119,3 +119,23 @@ def test_web_upload_list_and_delete(client):
 def test_web_upload_rejects_wrong_file(client):
     r = client.post("/funding/import", files={"file": ("x.xlsx", b"not an xlsx")})
     assert r.status_code == 400 and "無法讀取" in r.text
+
+
+def test_funding_template_download(client):
+    from io import BytesIO
+    from openpyxl import load_workbook
+    from app.funding.template import HEADERS
+    r = client.get("/funding/template.xlsx")
+    assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
+    ws = load_workbook(BytesIO(r.content)).active
+    assert [c.value for c in ws[2]] == list(HEADERS) and len(HEADERS) == 102
+    assert ws.max_row == 2                                         # 沒有任何資料
+    with pytest.raises(FundingFormatError, match="沒有任何計畫資料"):   # 欄位名稱列讀得到，只是沒有資料
+        parse_funding(r.content)
+    assert "/funding/template.xlsx" in client.get("/funding").text
+
+
+def test_funding_template_matches_parser_columns():
+    from app.funding.parser import COLUMNS
+    from app.funding.template import HEADERS
+    assert set(COLUMNS.values()) <= set(HEADERS)

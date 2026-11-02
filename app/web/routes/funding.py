@@ -8,9 +8,11 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.funding.parser import FundingFormatError
+from app.funding.template import funding_template
 from app.funding.service import (INDUSTRY_CATEGORIES, NSTC_CATEGORIES, category_of, delete_import,
                                  effective_imports, import_funding, import_years, imports, money, projects_of)
 from app.web.deps import get_session, render
+from app.web.routes.mapping import xlsx_download
 
 router = APIRouter()
 UNSET = "（未設定）"
@@ -45,6 +47,11 @@ def _page(request: Request, session: Session, college: str | None = None, error:
 @router.get("/funding")
 def funding_page(request: Request, college: str | None = None, session: Session = Depends(get_session)):
     return _page(request, session, college)
+
+
+@router.get("/funding/template.xlsx")
+def template():
+    return xlsx_download(funding_template(), "經分表_空白範本.xlsx")
 
 
 @router.post("/funding/import")

@@ -1,13 +1,29 @@
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.teachers.moe import latest_import
 from app.teachers.service import auto_link
+from app.mapping.template import mapping_template
 from app.mapping.service import (diff_versions, import_mapping, issues_of, latest_version, previous_version,
                                  recheck_mapping, units_of)
 from app.web.deps import get_session, render
 
 router = APIRouter()
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def xlsx_download(data: bytes, filename: str) -> Response:
+    """下載 xlsx；中文檔名依 RFC 5987 編碼。"""
+    return Response(data, media_type=XLSX,
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"})
+
+
+@router.get("/mapping/template.xlsx")
+def template():
+    return xlsx_download(mapping_template(), "對標學校資料表_空白範本.xlsx")
 
 
 def _page(request: Request, session: Session, school: str | None = None, status_code: int = 200, **extra):
