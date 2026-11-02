@@ -275,14 +275,10 @@ class ReportBuilder:
                 red.append(len(rows))
             rows.append([r.ncu_dept, count_text(r.nstc_count_avg), money(r.nstc_avg), money(r.industry_avg),
                          money(r.total_avg), _teachers(r), money(r.per_faculty)])
-        # 說明列（與其他頁相同位置）：左邊是計算公式，右邊是資料註腳
-        formula = (f"A = 國科會計畫經費加總 ÷ {n}（年度數）\n"
-                   f"B = 產學合作計畫經費加總 ÷ {n}（年度數）\n"
-                   "C = A + B；師均經費 = C ÷ D（單年教師數）")
-        _text(slide, formula, LEFT_X, INFO_Y, HALF_W, INFO_H, Pt(14))
-        _text(slide, "\n".join(funding_notes(t)), RIGHT_X, INFO_Y, HALF_W, INFO_H, Pt(10))
-        top = LABEL_Y
-        table = _table(slide, rows, MARGIN, top, CONTENT_W, BOTTOM - top, red_rows=red, max_size=FONT_SIZES[0])
+        # 表格緊接標題，下方留給公式與註腳
+        top, gap = INFO_Y, 100000
+        area = BOTTOM - INFO_H - gap - top
+        table = _table(slide, rows, MARGIN, top, CONTENT_W, area, red_rows=red, max_size=FONT_SIZES[0])
         # 固定欄寬比例：自動分配會把只有數字的件數欄擠得太窄，表頭變成一字一行
         size = table.cell(0, 0).text_frame.paragraphs[0].runs[0].font.size.pt
         for c, ratio in enumerate(FUNDING_COLS):
@@ -291,12 +287,19 @@ class ReportBuilder:
         table.columns[last].width = Emu(CONTENT_W - sum(table.columns[c].width for c in range(last)))
         header_lines = max(len(text.split("\n")) for text in rows[0])
         table.rows[0].height = Emu(int(header_lines * size * PT * LINE) + 2 * PAD_Y)
-        # 系所少時表格只佔上方一小塊：把多餘的高度平均分給資料列，填到頁面下緣為止（每列有上限）
+        # 系所少時表格只佔上方一小塊：把多餘的高度平均分給資料列，填到說明文字上方為止（每列有上限）
         body = list(table.rows)[1:]
-        spare = BOTTOM - top - sum(row.height for row in table.rows)
+        spare = area - sum(row.height for row in table.rows)
         if body and spare > 0:
             for row in body:
                 row.height = Emu(min(row.height + spare // len(body), max(row.height, FUNDING_ROW_MAX)))
+        # 表格下方：左邊是計算公式，右邊是資料註腳
+        note_y = top + sum(row.height for row in table.rows) + gap
+        formula = (f"A = 國科會計畫經費加總 ÷ {n}（年度數）\n"
+                   f"B = 產學合作計畫經費加總 ÷ {n}（年度數）\n"
+                   "C = A + B；師均經費 = C ÷ D（單年教師數）")
+        _text(slide, formula, LEFT_X, note_y, HALF_W, INFO_H, Pt(14))
+        _text(slide, "\n".join(funding_notes(t)), RIGHT_X, note_y, HALF_W, INFO_H, Pt(10))
 
     def summary(self):
         highlight = int(get_setting(self.session, "rank_highlight_top"))
