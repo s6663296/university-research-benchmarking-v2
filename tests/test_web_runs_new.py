@@ -154,4 +154,4 @@ def test_department_picker_cards(seeded):
     assert 'class="college-card' in r.text and "data-college-all" in r.text
     # 學院勾選框只負責在頁面上勾選系所，不另外送出；送出的永遠是實際勾選的系所
     assert 'name="colleges"' not in r.text
-    assert r.text.count('name="ncu_depts"') == 3
+    assert r.text.count('type="checkbox" name="ncu_depts"') == 3
