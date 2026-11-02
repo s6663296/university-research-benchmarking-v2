@@ -84,7 +84,8 @@ async def test_pptx_has_funding_section_and_renumbers(session, done_run, tmp_pat
     assert "I. 管理學院國科會及產學計畫經費年平均" in _texts(p.slides[2])
     table = next(s.table for s in p.slides[2].shapes if s.has_table)
     rows = [[c.text for c in r.cells] for r in table.rows]
-    assert rows[0] == ["系所", "國科會件數", "國科會經費", "產學經費", "加總", "單年教師數", "師均經費"]
+    assert rows[0] == ["系所", "國科會\n件數", "國科會\n年平均 (A)", "產學\n年平均 (B)", "加總\n(C=A+B)", "單年教師數\n(D)",
+                       "師均經費\n(C/D)"]
     assert rows[1][:5] == ["資訊管理學系", "2", "1,500,000", "300,000", "1,800,000"]
     assert rows[3][3] == "-"                                       # 會計所沒有產學計畫
     assert table.cell(1, 0).text_frame.paragraphs[0].runs[0].font.color.rgb == (0xFF, 0, 0)   # 本系所標紅

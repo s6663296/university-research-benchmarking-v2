@@ -206,11 +206,10 @@ def funding_notes(table: FundingTable) -> list[str]:
     files = "、".join(dict.fromkeys(
         imp.filename + (f"（產製 {imp.generated_at}）" if imp.generated_at else "") for imp in table.sources.values()))
     notes = [
-        f"註1：資料來源為計畫管理系統經分表 {files}；採用 {'、'.join(map(str, table.years))} 年度，"
-        f"年平均 = 各年度加總 ÷ {len(table.years)}。",
+        f"註1：資料來源為計畫管理系統經分表 {files}，採用 {'、'.join(map(str, table.years))} 年度。",
         f"註2：國科會為計畫主類「{'、'.join(NSTC_CATEGORIES)}」，產學為「{'、'.join(INDUSTRY_CATEGORIES)}」；"
         "以計畫主持人主聘單位計算。",
-        "註3：師均經費 = 加總 ÷ 單年教師數（教育部公開資訊平台）；標 * 者為人工修改。",
+        "註3：單年教師數來自教育部公開資訊平台；標 * 者為人工修改。",
     ]
     if table.missing_years:
         notes.append(f"※經分表缺少 {'、'.join(map(str, table.missing_years))} 年度，年平均只以有資料的年度計算。")

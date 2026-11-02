@@ -42,7 +42,10 @@ SUMMARY_Y = 950000
 BOTTOM = SLIDE_H - 150000
 
 # 表格自動排版：由大到小試字級，直到欄寬放得下、總高度不超出版面
-FONT_SIZES = (16, 14, 12, 11, 10, 9)
+FONT_SIZES = (20, 18, 16, 14, 12, 11, 10, 9)
+DEFAULT_MAX_SIZE = 16            # 一般表格最大 16pt；欄位少的表格（計畫經費）可指定到 20pt
+FUNDING_ROW_MAX = 640000         # 計畫經費表列高上限：表格拉高填滿版面，但列數少時不會過高
+FUNDING_COLS = (0.21, 0.085, 0.145, 0.145, 0.145, 0.13, 0.14)  # 計畫經費表欄寬比例（系所名稱最長、件數最短）
 PAD_X, PAD_Y = 45720, 22860
 LINE = 1.3                       # 行高 / 字級（中文字型行距較大，取保守值）
 PT = 12700                       # EMU per point
@@ -91,7 +94,7 @@ def _spans(merges) -> dict[tuple[int, int], tuple[int, int]]:
 
 
 def _fit(rows: list[list[str]], header_rows: int, merges, width: int, max_height: int,
-         max_size: int = FONT_SIZES[0]) -> _Fit:
+         max_size: int = DEFAULT_MAX_SIZE) -> _Fit:
     """挑最大可用字級：資料格不斷行（單位欄依 \\n 斷行），表頭可斷行；欄寬按內容分配。"""
     spans = _spans(merges)
     covered = {(r, c) for (r0, c0), (rs, cs) in spans.items()
@@ -137,7 +140,7 @@ def _fit(rows: list[list[str]], header_rows: int, merges, width: int, max_height
 
 
 def _table(slide, rows: list[list[str]], left, top, width, max_height, header_rows=1, merges=(),
-           red_rows=(), red_cells=(), max_size=FONT_SIZES[0]):
+           red_rows=(), red_cells=(), max_size=DEFAULT_MAX_SIZE):
     fit = _fit(rows, header_rows, merges, width, max_height, max_size)
     shape = slide.shapes.add_table(len(rows), len(rows[0]), Emu(left), Emu(top), Emu(width), Emu(sum(fit.heights)))
     table = shape.table
@@ -233,7 +236,7 @@ class ReportBuilder:
                 tables.append((x, label, render(table), red))
         max_height = BOTTOM - TABLE_Y
         size = min((_fit(rows, header_rows, merges, HALF_W, max_height).size for _, _, rows, _ in tables),
-                   default=FONT_SIZES[0])
+                   default=DEFAULT_MAX_SIZE)
         for x, label, rows, red in tables:
             _text(slide, label, x, LABEL_Y, HALF_W, LABEL_H, Pt(16), bold=True)
             _table(slide, rows, x, TABLE_Y, HALF_W, max_height, header_rows, merges, red, max_size=size)
@@ -261,20 +264,39 @@ class ReportBuilder:
         """範例第 3 頁：學院各系所國科會及產學計畫經費年平均（資料來自經分表），本系所列標紅。"""
         t = self.funding
         slide = self._slide(f"I. {self.college}國科會及產學計畫經費年平均")
-        avg = "年平均" if len(t.years) > 1 else ""
-        rows = [["系所", f"國科會件數{'(年平均)' if avg else ''}", f"國科會{avg or '經費'}", f"產學{avg or '經費'}",
-                 "加總", "單年教師數", "師均經費"]]
+        n = len(t.years)
+        # 表頭附公式代號（與論文指標頁的「單年師均 (A/5/B)」相同寫法）
+        # 表頭手動分兩行，窄欄才不會被擠成一字一行
+        rows = [["系所", "國科會\n件數" + ("(年平均)" if n > 1 else ""), "國科會\n年平均 (A)", "產學\n年平均 (B)",
+                 "加總\n(C=A+B)", "單年教師數\n(D)", "師均經費\n(C/D)"]]
         red = []
         for r in t.rows:
             if r.unit_id == self.unit_id:
                 red.append(len(rows))
             rows.append([r.ncu_dept, count_text(r.nstc_count_avg), money(r.nstc_avg), money(r.industry_avg),
                          money(r.total_avg), _teachers(r), money(r.per_faculty)])
-        notes = funding_notes(t)
-        note_h = 220000 * len(notes) + 100000
-        table = _table(slide, rows, MARGIN, SUMMARY_Y, CONTENT_W, BOTTOM - SUMMARY_Y - note_h, red_rows=red)
-        bottom = SUMMARY_Y + sum(row.height for row in table.rows) + 100000
-        _text(slide, "\n".join(notes), MARGIN, bottom, CONTENT_W, note_h, Pt(10))
+        # 說明列（與其他頁相同位置）：左邊是計算公式，右邊是資料註腳
+        formula = (f"A = 國科會計畫經費加總 ÷ {n}（年度數）\n"
+                   f"B = 產學合作計畫經費加總 ÷ {n}（年度數）\n"
+                   "C = A + B；師均經費 = C ÷ D（單年教師數）")
+        _text(slide, formula, LEFT_X, INFO_Y, HALF_W, INFO_H, Pt(14))
+        _text(slide, "\n".join(funding_notes(t)), RIGHT_X, INFO_Y, HALF_W, INFO_H, Pt(10))
+        top = LABEL_Y
+        table = _table(slide, rows, MARGIN, top, CONTENT_W, BOTTOM - top, red_rows=red, max_size=FONT_SIZES[0])
+        # 固定欄寬比例：自動分配會把只有數字的件數欄擠得太窄，表頭變成一字一行
+        size = table.cell(0, 0).text_frame.paragraphs[0].runs[0].font.size.pt
+        for c, ratio in enumerate(FUNDING_COLS):
+            table.columns[c].width = Emu(int(CONTENT_W * ratio))
+        last = len(FUNDING_COLS) - 1
+        table.columns[last].width = Emu(CONTENT_W - sum(table.columns[c].width for c in range(last)))
+        header_lines = max(len(text.split("\n")) for text in rows[0])
+        table.rows[0].height = Emu(int(header_lines * size * PT * LINE) + 2 * PAD_Y)
+        # 系所少時表格只佔上方一小塊：把多餘的高度平均分給資料列，填到頁面下緣為止（每列有上限）
+        body = list(table.rows)[1:]
+        spare = BOTTOM - top - sum(row.height for row in table.rows)
+        if body and spare > 0:
+            for row in body:
+                row.height = Emu(min(row.height + spare // len(body), max(row.height, FUNDING_ROW_MAX)))
 
     def summary(self):
         highlight = int(get_setting(self.session, "rank_highlight_top"))

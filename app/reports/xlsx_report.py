@@ -95,8 +95,11 @@ def _funding_sheets(wb, session: Session, run: Run) -> None:
                      "計畫主持人", "主聘單位一級", "主聘單位二級", "執行單位二級", "委託單位", "經費總額", "經分表列號"], BOLD)
     for t in tables:
         _append(ws, [f"{t.college}國科會及產學計畫經費年平均（{'、'.join(map(str, t.years))} 年度）"], BOLD)
-        _append(ws, ["系所", "國科會件數", "國科會件數年平均", "國科會經費合計", "國科會年平均", "產學件數",
-                     "產學經費合計", "產學年平均", "加總(年平均)", "單年教師數", "師均經費", "年度數"], BOLD)
+        n = len(t.years)
+        ws.append([f"計算：A = 國科會經費合計 ÷ {n}（年度數）；B = 產學經費合計 ÷ {n}；C = A + B；"
+                   "師均經費 = C ÷ D（單年教師數）"])
+        _append(ws, ["系所", "國科會件數", "國科會件數年平均", "國科會經費合計", "國科會年平均 (A)", "產學件數",
+                     "產學經費合計", "產學年平均 (B)", "加總 (C=A+B)", "單年教師數 (D)", "師均經費 (C/D)", "年度數"], BOLD)
         for r in t.rows:
             ws.append([r.ncu_dept, r.nstc_count, float(r.nstc_count_avg), float(r.nstc_amount), float(r.nstc_avg),
                        r.industry_count, float(r.industry_amount), float(r.industry_avg), float(r.total_avg),
