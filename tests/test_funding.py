@@ -81,7 +81,9 @@ async def test_pptx_has_funding_section_and_renumbers(session, done_run, tmp_pat
     p = Presentation(build_dept_report(session, done_run.id, "資訊管理學系", tmp_path / "r.pptx"))
     toc = _texts(p.slides[1])
     assert "I. 管理學院國科會及產學計畫經費年平均" in toc and "II. 管理學院各系所論文指標於對標學校排名" in toc
-    assert "I. 管理學院國科會及產學計畫經費年平均" in _texts(p.slides[2])
+    funding = _texts(p.slides[2])
+    assert "I. 國科會及產學計畫經費" in funding                      # 章節標籤
+    assert p.slides[2].shapes.title.text == "管理學院國科會及產學計畫經費年平均"
     table = next(s.table for s in p.slides[2].shapes if s.has_table)
     rows = [[c.text for c in r.cells] for r in table.rows]
     assert rows[0] == ["系所", "國科會\n件數", "國科會\n年平均 (A)", "產學\n年平均 (B)", "加總\n(C=A+B)", "單年教師數\n(D)",
@@ -90,14 +92,16 @@ async def test_pptx_has_funding_section_and_renumbers(session, done_run, tmp_pat
     assert rows[3][3] == "-"                                       # 會計所沒有產學計畫
     assert table.cell(1, 0).text_frame.paragraphs[0].runs[0].font.color.rgb == (0xFF, 0, 0)   # 本系所標紅
     assert "缺少 110、111、112、113 年度" in _texts(p.slides[2])
-    assert "II、管理學院各系所論文指標排名" in _texts(p.slides[3])
-    assert "III. 2021-2025論文發表篇數師均" in _texts(p.slides[4])
+    assert "II. 論文指標排名總覽" in _texts(p.slides[3])
+    assert "III. 資訊管理學系各指標比較" in _texts(p.slides[4])
+    assert p.slides[4].shapes.title.text == "2021-2025 論文發表篇數師均"
 
 
 async def test_pptx_without_funding_is_unchanged(session, done_run, tmp_path):
     p = Presentation(build_dept_report(session, done_run.id, "資訊管理學系", tmp_path / "r.pptx"))
     assert "I. 管理學院各系所論文指標於對標學校排名" in _texts(p.slides[1])
-    assert "I、管理學院各系所論文指標排名" in _texts(p.slides[2])
+    assert "I. 論文指標排名總覽" in _texts(p.slides[2])
+    assert "II. 資訊管理學系各指標比較" in _texts(p.slides[3])
 
 
 async def test_xlsx_funding_sheets(session, done_run, tmp_path):

@@ -39,7 +39,7 @@ async def test_ncu_row_red_and_values(session, done_run, tmp_path):
     p = build(session, done_run, tmp_path)
     t = tables_on(p.slides[4])[0]                   # Top1% 對標表
     rows = [[c.text for c in r.cells] for r in t.rows]
-    assert rows[0] == ["單位", "5年篇數 (A)", "單年教師數(B)", "單年師均 (A/5/B)"]
+    assert rows[0] == ["單位", "5年篇數\n(A)", "單年教師數\n(B)", "單年師均\n(A/5/B)"]
     ncu = next(r for r in t.rows if r.cells[0].text == "資訊管理學系\n中央")
     colors = {run.font.color.rgb for c in ncu.cells for para in c.text_frame.paragraphs for run in para.runs}
     assert colors == {RED}
@@ -54,7 +54,7 @@ async def test_ncu_row_red_and_values(session, done_run, tmp_path):
 async def test_pubs_page_has_both_tables(session, done_run, tmp_path):
     p = build(session, done_run, tmp_path)
     left, right = tables_on(p.slides[3])
-    assert len(left.columns) == 8 and left.cell(1, 6).text == "Q1 (A/C)"
+    assert len(left.columns) == 8 and left.cell(1, 6).text == "Q1\n(A/C)"
     assert "管理學院內系所比較" in texts_on(p.slides[3])
     assert len(right.rows) == 2 + 3
 
