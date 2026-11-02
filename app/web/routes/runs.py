@@ -64,13 +64,16 @@ def _form_page(request: Request, session: Session, cfg: RunConfig | None = None,
     for u in ncu:
         colleges.setdefault(u.ncu_college or "（未分學院）", []).append(u.ncu_dept)
     schools = list(dict.fromkeys(u.school for u in units if not is_ncu(u.school)))
+    unit_groups: dict[str, list[Unit]] = {}   # 自訂比較的單位清單：依學校分組，中大排最前
+    for u in sorted(units, key=lambda u: not is_ncu(u.school)):
+        unit_groups.setdefault(u.school, []).append(u)
     years = import_years(imp) if imp else []
     if cfg is None:
         y_from, y_to = default_period(date.today())
         cfg = RunConfig(y_from, y_to, (), frozenset({"benchmark", "college"}), tuple(schools), (),
                         years[-1] if years else 0, get_setting(session, "teacher_column"))
     return render(request, "run_new.html", status_code=status_code, cfg=cfg, colleges=colleges, schools=schools,
-                  units=units, years=years, labels=COMPARISON_LABELS, error=error,
+                  units=units, unit_groups=unit_groups, years=years, labels=COMPARISON_LABELS, error=error,
                   ready=version is not None and imp is not None)
 
 

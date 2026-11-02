@@ -155,3 +155,23 @@ def test_department_picker_cards(seeded):
     # 學院勾選框只負責在頁面上勾選系所，不另外送出；送出的永遠是實際勾選的系所
     assert 'name="colleges"' not in r.text
     assert r.text.count('type="checkbox" name="ncu_depts"') == 3
+
+
+def test_comparison_cards(seeded):
+    r = seeded.get("/runs/new")
+    assert r.text.count('class="compare-card"') == 3
+    assert "簡報左邊表格" in r.text and "簡報右邊表格" in r.text
+    # 自訂比較改為勾選清單（依學校分組，中大在最前），不再是多選下拉框
+    assert '<select name="custom_unit_ids"' not in r.text
+    assert 'type="checkbox" name="custom_unit_ids"' in r.text
+    assert r.text.index('class="unit-school">中央') < r.text.index('class="unit-school">台大')
+
+
+def test_custom_units_submitted_as_checkboxes(seeded, respx_mock):
+    FakeElsevier().install(respx_mock)
+    with seeded.app.state.session_factory() as s:
+        from app.db.models import Unit
+        ids = [str(u.id) for u in s.query(Unit).limit(2)]
+    form = {**FORM, "comparisons": ["benchmark", "college", "custom"], "custom_unit_ids": ids}
+    r = seeded.post("/runs/preview", data=form)
+    assert r.status_code == 200

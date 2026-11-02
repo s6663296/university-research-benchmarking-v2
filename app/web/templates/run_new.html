@@ -57,6 +57,7 @@
       total += n;
     }
     picker.querySelector("[data-total]").textContent = `已選 ${total} 個系所`;
+    picker.dispatchEvent(new CustomEvent("depts-changed"));
   };
   for (const card of cards) {
     card.querySelector("[data-college-all]").addEventListener("change", e => {
@@ -73,18 +74,96 @@
 })();
 </script>
 
-<section class="card">
+<section class="card" id="compare-picker">
   <h2>比較範圍</h2>
-  {% for key, label in labels.items() %}
-  <label><input type="checkbox" name="comparisons" value="{{ key }}" {% if key in cfg.comparisons %}checked{% endif %}> {{ label }}</label>
-  {% endfor %}
-  <h3>對標學校</h3>
-  {% for s in schools %}<label><input type="checkbox" name="schools" value="{{ s }}" {% if s in cfg.schools %}checked{% endif %}> {{ s }}</label>{% endfor %}
-  <h3>自訂比較的單位</h3>
-  <select name="custom_unit_ids" multiple size="6">
-    {% for u in units %}<option value="{{ u.id }}" {% if u.id in cfg.custom_unit_ids %}selected{% endif %}>{{ u.school }}－{{ u.ncu_dept }}{% if u.dept_zh and not is_ncu(u.school) %}（{{ u.dept_zh }}）{% endif %}</option>{% endfor %}
-  </select>
+  <p class="muted">決定每個系所要跟誰排名，報告上的名次就是在這些群組內排出來的。</p>
+
+  <fieldset class="compare-card" data-compare>
+    <legend><label><input type="checkbox" name="comparisons" value="benchmark" {% if "benchmark" in cfg.comparisons %}checked{% endif %}> {{ labels.benchmark }}</label>
+      <span class="compare-where">簡報左邊表格</span></legend>
+    <p class="muted">中大的系所與其他學校的同一個系所比較（依對標學校資料表的對應；該校填 x 或空白的不列入）。</p>
+    <div class="compare-body">
+      <div class="picker-head">
+        <strong>對標學校</strong><span class="muted" data-school-count></span>
+        <span class="picker-actions"><button type="button" class="secondary" data-schools="all">全選</button>
+          <button type="button" class="secondary" data-schools="none">全不選</button></span>
+      </div>
+      <div class="option-grid">
+        {% for s in schools %}<label><input type="checkbox" name="schools" value="{{ s }}" {% if s in cfg.schools %}checked{% endif %}> {{ s }}</label>{% endfor %}
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="compare-card" data-compare>
+    <legend><label><input type="checkbox" name="comparisons" value="college" {% if "college" in cfg.comparisons %}checked{% endif %}> {{ labels.college }}</label>
+      <span class="compare-where">簡報右邊表格</span></legend>
+    <p class="muted">同一學院的全部系所互相比較（不論上面只勾了幾個系所，都會納入整個學院）。<span data-college-summary></span></p>
+  </fieldset>
+
+  <fieldset class="compare-card" data-compare>
+    <legend><label><input type="checkbox" name="comparisons" value="custom" {% if "custom" in cfg.comparisons %}checked{% endif %}> {{ labels.custom }}</label>
+      <span class="compare-where">只出現在網頁與 Excel，簡報沒有</span></legend>
+    <p class="muted">自己挑選單位湊成一組比較，例如跨學院、跨學校。</p>
+    <div class="compare-body">
+      <div class="picker-head">
+        <input type="search" placeholder="搜尋學校或系所" data-unit-search>
+        <span class="muted" data-unit-count></span>
+      </div>
+      <div class="unit-list">
+        {% for school, items in unit_groups.items() %}
+        <div class="unit-group" data-unit-group>
+          <div class="unit-school">{{ school }}</div>
+          {% for u in items %}<label data-unit><input type="checkbox" name="custom_unit_ids" value="{{ u.id }}" {% if u.id in cfg.custom_unit_ids %}checked{% endif %}> {{ u.ncu_dept }}{% if u.dept_zh and not is_ncu(u.school) and u.dept_zh != u.ncu_dept %}（{{ u.dept_zh }}）{% endif %}</label>{% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </fieldset>
 </section>
+<script>
+// 比較範圍：沒勾的比較收起設定；對標學校全選／全不選與計數；自訂單位搜尋；院內比較顯示本次會比較哪些學院
+(() => {
+  const box = document.getElementById("compare-picker");
+  if (!box) return;
+  const cards = [...box.querySelectorAll("[data-compare]")];
+  const schools = [...box.querySelectorAll('input[name="schools"]')];
+  const units = [...box.querySelectorAll('input[name="custom_unit_ids"]')];
+  const refresh = () => {
+    for (const card of cards) {
+      const body = card.querySelector(".compare-body");
+      const on = card.querySelector('input[name="comparisons"]').checked;
+      card.classList.toggle("off", !on);
+      if (body) body.hidden = !on;
+    }
+    box.querySelector("[data-school-count]").textContent = `${schools.filter(s => s.checked).length}/${schools.length}`;
+    box.querySelector("[data-unit-count]").textContent = `已選 ${units.filter(u => u.checked).length} 個單位`;
+    const picked = [...document.querySelectorAll("#dept-picker [data-college]")]
+      .filter(c => c.querySelector('input[name="ncu_depts"]:checked'))
+      .map(c => `${c.querySelector("legend label").textContent.trim()} ${c.querySelectorAll('input[name="ncu_depts"]').length} 個系所`);
+    box.querySelector("[data-college-summary]").textContent = picked.length ? `本次：${picked.join("、")}` : "";
+  };
+  box.addEventListener("change", refresh);
+  document.getElementById("dept-picker")?.addEventListener("depts-changed", refresh);
+  box.querySelectorAll("[data-schools]").forEach(b => b.addEventListener("click", () => {
+    schools.forEach(s => { s.checked = b.dataset.schools === "all"; });
+    refresh();
+  }));
+  box.querySelector("[data-unit-search]").addEventListener("input", e => {
+    const q = e.target.value.trim();
+    for (const group of box.querySelectorAll("[data-unit-group]")) {
+      const school = group.querySelector(".unit-school").textContent;
+      let shown = 0;
+      for (const label of group.querySelectorAll("[data-unit]")) {
+        const hit = !q || school.includes(q) || label.textContent.includes(q);
+        label.hidden = !hit;
+        shown += hit;
+      }
+      group.hidden = shown === 0;
+    }
+  });
+  refresh();
+})();
+</script>
 
 <button type="button" class="secondary" hx-post="/runs/preview" hx-include="#run-form" hx-target="#preview">預覽查詢條件</button>
 <button type="submit">開始分析</button>
