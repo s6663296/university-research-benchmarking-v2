@@ -134,8 +134,9 @@ def test_funding_template_download(client):
     assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
     ws = load_workbook(BytesIO(r.content)).active
     assert [c.value for c in ws[2]] == list(HEADERS) and len(HEADERS) == 102
-    assert ws.max_row == 2                                         # 沒有任何資料
-    with pytest.raises(FundingFormatError, match="沒有任何計畫資料"):   # 欄位名稱列讀得到，只是沒有資料
+    assert ws.max_row == 3 and ws["A3"].value == "範例"             # 只有一列示範資料
+    assert any(str(c.value).startswith("【範例資料】") for c in ws[3] if c.value)
+    with pytest.raises(FundingFormatError, match="沒有任何計畫資料"):   # 欄位名稱列讀得到，示範列被略過
         parse_funding(r.content)
     assert "/funding/template.xlsx" in client.get("/funding").text
 
@@ -153,3 +154,22 @@ def test_run_detail_funding_tab(client, web_done_run):
     r = client.get(f"/runs/{web_done_run}?ind=funding")
     assert "計算：A = 國科會計畫經費加總 ÷ 1" in r.text and "師均經費 = C ÷ D" in r.text
     assert "1,800,000" in r.text and "計入的計畫明細" in r.text
+
+
+
+def test_funding_template_example_row_skipped_but_real_rows_imported():
+    """直接在範本填資料、忘了刪示範列時，示範列不會被當成真的計畫。"""
+    from io import BytesIO
+    from openpyxl import load_workbook
+    from app.funding.template import HEADERS, funding_template
+    wb = load_workbook(BytesIO(funding_template()))
+    ws = wb.active
+    row = [None] * len(HEADERS)
+    for name, value in {"計畫主類": "國科會計畫", "計畫主持人主聘單位二級": "財務金融學系", "年度": 114,
+                        "經費總額": 500000}.items():
+        row[HEADERS.index(name)] = value
+    ws.append(row)
+    buf = BytesIO()
+    wb.save(buf)
+    parsed = parse_funding(buf.getvalue())
+    assert [(p.pi_dept, p.amount) for p in parsed.projects] == [("財務金融學系", 500000)]

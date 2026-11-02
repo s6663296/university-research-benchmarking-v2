@@ -1,4 +1,4 @@
-"""空白的經分表範本：與計畫管理系統匯出的「計畫基本資料」xlsx 欄位完全相同（共 102 欄），沒有任何資料。
+"""空白的經分表範本：與計畫管理系統匯出的「計畫基本資料」xlsx 欄位完全相同（共 102 欄），第 3 列是標明【範例資料】的示範列。
 
 系統會讀取的欄位以底色標示。範本必須能被 parse_funding 找到欄位名稱列（測試會檢查）。
 """
@@ -10,6 +10,7 @@ from openpyxl.comments import Comment
 from openpyxl.styles import Font, PatternFill
 
 from app.funding.parser import COLUMNS, REQUIRED
+from app.textnorm import EXAMPLE_MARK
 
 # 第 1 列的區塊標題：（欄位索引, 文字）
 BLOCKS = ((1, "計畫基本資料 【報表產製日期時間:】"), (57, "分項分總簽核資訊"), (65, "經費資訊"), (78, "經費用途說明"))
@@ -34,6 +35,21 @@ HEADERS = (
     "國外差旅費(503)", "執行國際合作與移地研究(503-01)", "出席國際學術會議(503-02)", "出國參訪及考察(503-03)",
     "參與國際展覽費(503-04)", "研究設備費(980)",
 )
+# 示範列：欄位名稱 → 值（同名欄位填第一個）；其餘欄位留空
+EXAMPLE = {
+    "#": "範例",
+    "計畫主類代碼": "MOST", "計畫主類": "國科會計畫", "計畫類別代碼": "MOST-01", "計畫類別": "國科會專題研究計畫",
+    "計畫流水號": "11400000", "期別": 1, "國科會計畫編號": "NSTC 114-2410-H-008-000-",
+    "計畫名稱-中文": f"{EXAMPLE_MARK}此列僅供參考格式，上傳時系統會自動略過",
+    "委託單位名稱": "國家科學及技術委員會", "委託單位屬性": "國科會",
+    "計畫執行單位一級名稱": "管理學院", "計畫執行單位二級名稱": "管理學院資訊管理學系",
+    "計畫主持人主聘單位一級": "管理學院", "計畫主持人主聘單位二級": "資訊管理學系", "計畫主持人": "王小明",
+    "計畫主持人身分別": "教師(專任)", "(西元年)計畫起日": "2025-08-01", "(西元年)計畫迄日": "2026-07-31",
+    "年度": 114, "學年度": 114, "經費總額": 1000000, "業務費(300)": 800000, "管理費(333)": 100000,
+    "研究設備費(980)": 100000,
+}
+EXAMPLE_FILL = PatternFill("solid", fgColor="FFF2CC")
+EXAMPLE_FONT = Font(italic=True, color="7F6000")
 REQUIRED_FILL = PatternFill("solid", fgColor="F8CBAD")   # 必要欄位：缺少就無法匯入
 USED_FILL = PatternFill("solid", fgColor="DDE7F3")       # 系統會讀取，但缺少仍可匯入
 NOTES = {
@@ -53,6 +69,9 @@ def funding_template() -> bytes:
         first[idx] = text
     ws.append(first)
     ws.append(HEADERS)
+    ws.append([EXAMPLE.get(name) if HEADERS.index(name) == i else None for i, name in enumerate(HEADERS)])
+    for cell in ws[3]:
+        cell.fill, cell.font = EXAMPLE_FILL, EXAMPLE_FONT
     required = {COLUMNS[k] for k in REQUIRED}
     used = set(COLUMNS.values())
     for col, name in enumerate(HEADERS, start=1):

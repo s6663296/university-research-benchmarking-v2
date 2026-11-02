@@ -11,7 +11,7 @@ from io import BytesIO
 
 from openpyxl import load_workbook
 
-from app.textnorm import clean
+from app.textnorm import clean, is_example_row
 
 HEADER_SCAN_ROWS = 10
 
@@ -112,7 +112,7 @@ def parse_funding(data: bytes) -> ParsedFunding:
                 elif n >= HEADER_SCAN_ROWS:
                     raise FundingFormatError("找不到欄位名稱列（需要有「計畫主類」與「經費總額」欄位）")
                 continue
-            if not any(v not in (None, "") for v in row):
+            if not any(v not in (None, "") for v in row) or is_example_row(row):   # 範本的示範列不匯入
                 continue
             values = {k: (row[header[_key(name)]] if _key(name) in header and header[_key(name)] < len(row) else None)
                       for k, name in COLUMNS.items()}
