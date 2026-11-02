@@ -1,7 +1,7 @@
 """解析人工維護的 mapping 表（設計 §5.2）。
 
-每間學校一個分頁；欄位：學院 | 中大系所 | <學校> | 系所中文名稱 | 系所英文名稱 | 備註。
-「中央」分頁放中大各系所自己的英文名稱。
+每間學校一個分頁；欄位：學院 | 中大系所（標題只要以「系所」結尾）| <學校> | 系所中文名稱 | 系所英文名稱 | 備註。
+中大分頁（「國立中央大學」，舊版用「中央」）放中大各系所自己的英文名稱。
 """
 
 from dataclasses import dataclass, field
@@ -13,8 +13,18 @@ from openpyxl.utils import get_column_letter
 
 from app.textnorm import clean, norm_name
 
-NCU_SHEET = "中央"
+NCU_SHEET = "國立中央大學"
+NCU_SHEETS = (NCU_SHEET, "中央")  # 舊版 mapping 的分頁用簡稱
+
+
+def is_ncu(school: str) -> bool:
+    return school in NCU_SHEETS
 MAX_COLUMNS = 6  # 第 7 欄（G）以後的內容忽略並提醒
+
+
+def _is_dept_header(title: str | None) -> bool:
+    """第二欄標題的寫法每年可能不同（「中大系所」「國立中央大學系所」…），以「系所」結尾即可。"""
+    return bool(title) and title.replace(" ", "").endswith("系所") and len(title.replace(" ", "")) > 2
 
 
 @dataclass(frozen=True)
@@ -56,7 +66,7 @@ def _parse_sheet(ws, result: ParseResult) -> list[ParsedUnit]:
     if not rows:
         return []
     header = [clean(v) for v in rows[0]]
-    col_dept = 1 if len(header) > 1 and header[1] == "中大系所" else None
+    col_dept = 1 if len(header) > 1 and _is_dept_header(header[1]) else None
     col_zh = _find_column(header, "系所中文名稱")
     col_en = _find_column(header, "系所英文名稱")
     col_remark = _find_column(header, "備註")
@@ -82,7 +92,7 @@ def _parse_sheet(ws, result: ParseResult) -> list[ParsedUnit]:
         ncu_college, college = cell(row, 0), cell(row, 2)
         dept_zh, dept_en = cell(row, col_zh), cell(row, col_en)
         if dept_en is None:
-            if sheet == NCU_SHEET and ncu_college is not None:
+            if is_ncu(sheet) and ncu_college is not None:
                 result.issues.append(Issue(sheet, r_idx, "error", f"中大系所「{ncu_dept}」缺少英文名稱，無法查詢"))
             elif dept_zh is not None:
                 result.issues.append(Issue(sheet, r_idx, "warning",
@@ -106,11 +116,14 @@ def parse_mapping(data: bytes) -> ParseResult:
     for ws in wb.worksheets:
         result.units += _parse_sheet(ws, result)
 
-    if NCU_SHEET not in wb.sheetnames:
-        result.issues.insert(0, Issue(NCU_SHEET, None, "error", "缺少「中央」分頁，沒有中大系所的英文名稱，無法建立分析"))
+    ncu_sheet = next((s for s in wb.sheetnames if is_ncu(s)), None)
+    if ncu_sheet is None:
+        result.issues.insert(0, Issue(NCU_SHEET, None, "error",
+                                      f"缺少「{NCU_SHEET}」分頁，沒有中大系所的英文名稱，無法建立分析"))
     else:
-        ncu_rows = {clean(r[1]) for r in wb[NCU_SHEET].iter_rows(min_row=2, values_only=True) if len(r) > 1}
+        ncu_rows = {clean(r[1]) for r in wb[ncu_sheet].iter_rows(min_row=2, values_only=True) if len(r) > 1}
         for u in result.units:
-            if u.school != NCU_SHEET and u.ncu_dept not in ncu_rows:
-                result.issues.append(Issue(u.school, u.row, "warning", f"中大系所「{u.ncu_dept}」不在「中央」分頁中"))
+            if not is_ncu(u.school) and u.ncu_dept not in ncu_rows:
+                result.issues.append(Issue(u.school, u.row, "warning",
+                                           f"中大系所「{u.ncu_dept}」不在「{ncu_sheet}」分頁中"))
     return result

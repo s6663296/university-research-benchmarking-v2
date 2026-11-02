@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from sqlalchemy import ForeignKey, Index, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -32,6 +32,9 @@ class MappingVersion(Base):
     sha256: Mapped[str] = mapped_column(String)
     imported_at: Mapped[datetime]
     note: Mapped[str | None] = mapped_column(Text)
+    # 原始檔與檢查時的規則指紋：規則改了才用原始檔重新檢查（設計 §5.2）；content 很大，不隨查詢載入
+    content: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    rules_hash: Mapped[str | None] = mapped_column(String)
 
 
 class Unit(Base):
@@ -55,13 +58,6 @@ class MappingIssue(Base):
     row: Mapped[int | None] = mapped_column(Integer)
     level: Mapped[str] = mapped_column(String)
     message: Mapped[str] = mapped_column(Text)
-
-
-class SchoolAlias(Base):
-    __tablename__ = "school_aliases"
-    sheet_name: Mapped[str] = mapped_column(String, primary_key=True)
-    moe_name: Mapped[str] = mapped_column(String)
-    display_name: Mapped[str] = mapped_column(String)
 
 
 class TeacherImport(Base):
@@ -135,6 +131,8 @@ class RunUnit(Base):
     eid_count: Mapped[int | None] = mapped_column(Integer)
     teacher_count: Mapped[int | None] = mapped_column(Integer)
     teacher_source: Mapped[str] = mapped_column(Text, default="missing")
+    # 建立分析時的教師數來源快照（教育部各列、人工修改）；舊分析為 None
+    teacher_detail_json: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)
 
 
@@ -155,6 +153,16 @@ class ApiCache(Base):
     endpoint: Mapped[str] = mapped_column(String)
     fetched_at: Mapped[datetime]
     response_json: Mapped[str] = mapped_column(Text)
+
+
+class ApiQuota(Base):
+    """各 API 最近一次回應標頭中的額度（X-RateLimit-*）。"""
+    __tablename__ = "api_quota"
+    api: Mapped[str] = mapped_column(String, primary_key=True)
+    limit: Mapped[int | None]
+    remaining: Mapped[int | None]
+    reset_at: Mapped[datetime | None]
+    observed_at: Mapped[datetime]
 
 
 class Result(Base):

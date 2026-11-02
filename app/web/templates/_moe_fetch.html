@@ -1,0 +1,30 @@
+<div id="moe-fetch" {% if just_imported %}data-imported{% endif %}
+  {% if fetcher.running %}hx-get="/teachers/fetch?poll=1" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+  <div class="dialog-head">
+    <h2>從教育部下載</h2>
+    <button type="button" class="secondary" aria-label="關閉" onclick="this.closest('dialog').close()">✕</button>
+  </div>
+  <form hx-post="/teachers/fetch" hx-target="#moe-fetch" hx-swap="outerHTML">
+    <p>學年度（可多選）</p>
+    <div class="year-grid">
+      {% for y in years | reverse %}
+      <label><input type="checkbox" name="years" value="{{ y }}" {% if loop.first %}checked{% endif %}
+        {% if fetcher.running %}disabled{% endif %}> {{ y }}</label>
+      {% endfor %}
+    </div>
+    <p class="muted">下載後會取代目前的教師數資料並清除所有人工修改，需要多個學年度請一次勾選。</p>
+    <button type="submit" {% if fetcher.running or not years %}disabled{% endif %}>
+      {{ "下載中…" if fetcher.running else "開始下載" }}</button>
+  </form>
+  {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+  {% if job %}
+  <div class="notice {{ {'done': 'ok', 'failed': 'error'}.get(job.status, '') }}">
+    <ol class="fetch-steps">
+      {% for step in job.steps %}<li>{{ step }}{% if loop.last and job.status == "running" %}…{% endif %}</li>{% endfor %}
+    </ol>
+    {% if job.status == "done" %}完成：匯入 {{ job.row_count }} 筆。<a href="/teachers/fetch/file">下載原始 xlsx</a>
+    {% elif job.status == "failed" %}失敗：{{ job.error }}{% endif %}
+  </div>
+  {% endif %}
+  <p class="muted">資料來源：<a href="{{ source_url }}" target="_blank" rel="noopener">{{ source_name }}</a></p>
+</div>

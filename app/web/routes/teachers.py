@@ -1,11 +1,14 @@
+import httpx
 from fastapi import APIRouter, Depends, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.db.settings_store import get_setting
 from app.mapping.service import latest_version
 from app.teachers.moe import TEACHER_COLUMNS, import_moe, import_years, latest_import
-from app.teachers.service import teacher_keys, auto_link, add_override, set_links, teacher_count, unit_choices, unmatched
+from app.teachers.moe_fetch import SOURCE_NAME, SOURCE_URL, MoeFetchError
+from app.teachers.service import (teacher_keys, auto_link, add_override, set_links, check_links, teacher_count,
+                                  unit_choices)
 from app.web.deps import get_session, render
 
 router = APIRouter()
@@ -21,7 +24,8 @@ def _page(request: Request, session: Session, year: int | None = None, status_co
         for school, dept, ncu_dept in teacher_keys(session, version.id):
             tc = teacher_count(session, imp.id, year, column, school, dept)
             rows.append(dict(school=school, dept=dept, ncu_dept=ncu_dept, tc=tc))
-        left = [dict(u=u, choices=unit_choices(session, imp.id, u.school)) for u in unmatched(session, version.id)]
+        left = [dict(u=u, choices=unit_choices(session, imp.id, u.school, u.dept_zh))
+                for u in sum(check_links(session, version.id, imp.id), [])]
     return render(request, "teachers.html", status_code=status_code, imp=imp, version=version, years=years,
                   year=year, column_label=TEACHER_COLUMNS[column], rows=rows, unmatched=left, error=error)
 
@@ -35,7 +39,7 @@ def teachers_page(request: Request, year: int | None = None, session: Session = 
 async def import_teachers(request: Request, file: UploadFile, session: Session = Depends(get_session)):
     data = await file.read()
     try:
-        imp, _ = import_moe(session, file.filename or "moe.xlsx", data)
+        imp = import_moe(session, file.filename or "moe.xlsx", data)
     except Exception:
         session.rollback()
         return _page(request, session, status_code=400,
@@ -44,6 +48,41 @@ async def import_teachers(request: Request, file: UploadFile, session: Session =
     if version:
         auto_link(session, version.id, imp.id)
     return RedirectResponse("/teachers", status_code=303)
+
+
+def _fetch_panel(request: Request, years: list[int], error: str | None = None, poll: bool = False):
+    fetcher = request.app.state.moe_fetcher
+    # 輪詢時剛完成匯入：標記起來，關閉對話框後重新載入整頁以更新表格
+    just_imported = poll and not fetcher.running and fetcher.job is not None and fetcher.job.status == "done"
+    return render(request, "_moe_fetch.html", fetcher=fetcher, job=fetcher.job, years=years, error=error,
+                  just_imported=just_imported, source_url=SOURCE_URL, source_name=SOURCE_NAME)
+
+
+@router.get("/teachers/fetch")
+async def fetch_panel(request: Request, poll: bool = False):
+    try:
+        years = await request.app.state.moe_fetcher.available_years()
+    except (MoeFetchError, httpx.HTTPError):
+        return _fetch_panel(request, [], error="無法從教育部網站取得學年度清單，請稍後重新整理")
+    return _fetch_panel(request, years, poll=poll)
+
+
+@router.post("/teachers/fetch")
+async def start_fetch(request: Request):
+    fetcher = request.app.state.moe_fetcher
+    years = [int(y) for y in (await request.form()).getlist("years")]
+    if not years:
+        return _fetch_panel(request, fetcher.years, error="請至少選一個學年度")
+    fetcher.start(years)
+    return _fetch_panel(request, fetcher.years)
+
+
+@router.get("/teachers/fetch/file")
+def fetched_file(request: Request):
+    job = request.app.state.moe_fetcher.job
+    if not job or not job.file_path or not job.file_path.exists():
+        return RedirectResponse("/teachers", status_code=303)
+    return FileResponse(job.file_path, filename=job.file_path.name)
 
 
 @router.post("/teachers/link")

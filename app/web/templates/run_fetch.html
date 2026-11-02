@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>分析 #{{ run.id }}（{{ run.period_from }}–{{ run.period_to }}）抓取狀態</h1>
+{% if run.status == "done" %}<p><a href="/runs/{{ run.id }}">查看分析結果</a></p>{% endif %}
+{% include "_progress.html" %}
+{% endblock %}

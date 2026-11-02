@@ -7,10 +7,10 @@ from datetime import datetime
 from io import BytesIO
 
 from openpyxl import load_workbook
-from sqlalchemy import insert, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
-from app.db.models import TeacherCountRow, TeacherImport
+from app.db.models import TeacherCountRow, TeacherImport, TeacherOverride
 
 TEACHER_COLUMNS = {"total": "專任教師數-教師總數總計", "asst_prof_plus": "專任助理教授以上人數-總計"}
 REQUIRED = ("學年度", "學校名稱", "單位代碼", "單位名稱", *TEACHER_COLUMNS.values())
@@ -72,14 +72,14 @@ def import_years(imp: TeacherImport) -> list[int]:
     return json.loads(imp.years_json)
 
 
-def import_moe(session: Session, filename: str, data: bytes) -> tuple[TeacherImport, bool]:
+def import_moe(session: Session, filename: str, data: bytes) -> TeacherImport:
+    """每次上傳都建立新的匯入並成為目前資料（即使內容相同）；舊的匯入保留，供過去的 run 引用。
+    人工修改一併清除，以新匯入的教育部數字為準（過去的 run 已存下當時的教師數，不受影響）。"""
     sha = hashlib.sha256(data).hexdigest()
-    existing = session.scalars(select(TeacherImport).where(TeacherImport.sha256 == sha)).first()
-    if existing is not None:
-        return existing, False
     rows = parse_moe(data)
     imp = TeacherImport(source_filename=filename, sha256=sha, imported_at=datetime.now(),
                         years_json=json.dumps(sorted({r.academic_year for r in rows})))
+    session.execute(delete(TeacherOverride))
     session.add(imp)
     session.flush()
     if rows:
@@ -88,4 +88,4 @@ def import_moe(session: Session, filename: str, data: bytes) -> tuple[TeacherImp
                  moe_unit_code=r.unit_code, moe_unit_name=r.unit_name, total=r.total,
                  asst_prof_plus=r.asst_prof_plus) for r in rows])
     session.commit()
-    return imp, True
+    return imp

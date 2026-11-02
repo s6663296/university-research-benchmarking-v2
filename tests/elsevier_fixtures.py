@@ -30,9 +30,18 @@ def scopus_pages_handler(request: httpx.Request) -> httpx.Response:
 
 
 def scival_handler(request: httpx.Request, drop: set[str] = frozenset()) -> httpx.Response:
-    """依 metricTypes 與 publicationIds 回傳錄下來的逐篇結果。"""
-    ids = set(request.url.params["publicationIds"].split(",")) - set(drop)
-    name = "scival_cites_qf_67.json" if request.url.params["metricTypes"] == "CitationCount" else "scival_qf_67.json"
-    data = load(name)
-    results = [r for r in data["results"] if str(r["publication"]["id"]) in ids]
+    """依 metricTypes 與 publicationIds 回傳錄下來的逐篇結果；與真實 API 一樣一次最多 100 篇。"""
+    requested = request.url.params["publicationIds"].split(",")
+    if len(requested) > 100:
+        return httpx.Response(400, text="<html>HTTP Status 400 – Bad Request</html>")
+    ids = set(requested) - set(drop)
+    types = set(request.url.params["metricTypes"].split(","))
+    data = load("scival_qf_67.json")
+    cites = {str(r["publication"]["id"]): r["metrics"] for r in load("scival_cites_qf_67.json")["results"]}
+    results = []
+    for r in data["results"]:
+        sid = str(r["publication"]["id"])
+        if sid in ids:
+            metrics = [m for m in r["metrics"] + cites[sid] if m["metricType"] in types]
+            results.append({**r, "metrics": metrics})
     return httpx.Response(200, json={"dataSource": data["dataSource"], "results": results})

@@ -16,6 +16,12 @@ def test_teachers_page_empty(client):
     assert "尚未匯入" in client.get("/teachers").text
 
 
+def test_teachers_upload_keeps_form_without_download_instructions(client):
+    text = client.get('/teachers').text
+    assert '從教育部大專校院校務資訊公開平台下載' not in text
+    assert 'action="/teachers/import"' in text
+
+
 def test_teachers_page_shows_counts(client):
     upload_mapping(client, sample_mapping())
     r = upload_moe(client, sample_moe())

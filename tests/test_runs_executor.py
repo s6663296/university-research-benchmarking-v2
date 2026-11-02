@@ -7,7 +7,7 @@ from app.db.models import Anomaly, Result, Run, RunPublication, RunUnit, Unit
 from app.runs.anomaly import resolve_anomaly
 from app.runs.executor import execute_run, recompute
 from app.runs.manager import mark_interrupted
-from tests.run_helpers import FakeElsevier, fake_client, make_run
+from tests.run_helpers import PAPERS, FakeElsevier, fake_client, make_run
 
 
 def unit_of(session, school, dept):
@@ -49,6 +49,20 @@ async def test_full_run_writes_results(session, session_factory, respx_mock):
     assert notes["importance"]["intl_collab"].startswith("※QS")
     pub = session.scalars(select(RunPublication).where(RunPublication.run_id == run.id)).first()
     assert "apiKey" not in pub.metrics_json
+
+
+async def test_each_paper_requested_from_scival_once_with_citations(session, session_factory, respx_mock):
+    run = make_run(session)
+    # 中央財金與中央資管有 20 篇共同論文（不同查詢），SciVal 只問一次
+    FakeElsevier(papers={**PAPERS, "Finance, National Central": slice(0, 30)}).install(respx_mock)
+    await execute_run(run.id, session_factory, fake_client())
+    calls = [c.request.url.params for c in respx_mock.calls if "/scival/" in str(c.request.url)]
+    requested = [i for p in calls for i in p["publicationIds"].split(",")]
+    assert sorted(requested) == sorted(set(requested))
+    assert all("CitationCount" in p["metricTypes"] and p["yearRange"] == "5yrsAndCurrentAndFuture" for p in calls)
+    pubs = session.scalars(select(RunPublication).where(RunPublication.run_id == run.id)).all()
+    assert len(pubs) == 20 + 20 + 10 + 30 + 7
+    assert all(json.loads(p.metrics_json)["citations"] is not None for p in pubs)
 
 
 async def test_ranks_within_group(session, session_factory, respx_mock):
@@ -115,6 +129,32 @@ async def test_resume_after_interrupt(session, session_factory, respx_mock):
     assert len(fake.scopus_calls) == 1 and "National Taiwan" in fake.scopus_calls[0]
     assert session.scalar(select(func.count()).select_from(RunPublication)) == before + 20
     assert session.get(Run, run.id).status == "done"
+
+
+async def test_resume_keeps_scopus_progress(session, session_factory, respx_mock, monkeypatch):
+    """暫停時已過 Scopus 的單位，接續時直接進 SciVal，不會退回 Scopus（儀表板才不會倒退）。"""
+    from app.runs import executor
+    FakeElsevier().install(respx_mock)
+    run = make_run(session)
+    await execute_run(run.id, session_factory, fake_client())
+    ntu = run_unit(session, run.id, "台大", "資訊管理學系")
+    ntu.status = "pending"  # 暫停時在 SciVal 階段，退回 pending、保留 eid_count
+    session.get(Run, run.id).status = "interrupted"
+    session.commit()
+    seen = []
+    original = executor.search_docs
+
+    async def spy(*args, **kwargs):
+        with session_factory() as s:
+            ru = s.get(RunUnit, ntu.id)
+            seen.append((ru.status, ru.eid_count))
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(executor, "search_docs", spy)
+    await execute_run(run.id, session_factory, fake_client(), only_unfinished=True)
+    assert seen == [("scival", 20)]
+    session.expire_all()
+    assert session.get(RunUnit, ntu.id).status == "done"
 
 
 async def test_refetch_unit_recomputes(session, session_factory, respx_mock):
@@ -186,3 +226,56 @@ def test_app_startup_marks_interrupted(settings):
         assert c.app.state.run_manager is not None
         with c.app.state.session_factory() as s:
             assert s.get(Run, run_id).status == "interrupted"
+
+
+async def test_unit_status_goes_through_scopus_then_scival(session, session_factory, respx_mock, monkeypatch):
+    run = make_run(session)
+    FakeElsevier().install(respx_mock)
+    import app.runs.executor as executor
+    at_search, at_fetch = [], []
+
+    def units(**where):
+        with session_factory() as s:
+            q = select(RunUnit).where(RunUnit.run_id == run.id, *(getattr(RunUnit, k) == v for k, v in where.items()))
+            return [(ru.status, ru.eid_count) for ru in s.scalars(q)]
+
+    real_search, real_fetch = executor.search_docs, executor.MetricsFetcher.fetch
+
+    async def search(client, query, **k):
+        at_search.extend(units(query=query))
+        return await real_search(client, query, **k)
+
+    async def fetch(self, ids):
+        at_fetch.append(len(units(status="scival", eid_count=len(ids))))
+        return await real_fetch(self, ids)
+    monkeypatch.setattr(executor, "search_docs", search)
+    monkeypatch.setattr(executor.MetricsFetcher, "fetch", fetch)
+    await execute_run(run.id, session_factory, fake_client())
+    assert at_search and set(at_search) == {("scopus", None)}
+    assert at_fetch and all(n >= 1 for n in at_fetch)
+
+
+async def test_scival_failure_keeps_scopus_count(session, session_factory, respx_mock, monkeypatch):
+    from app.elsevier.client import ElsevierError
+    run = make_run(session)
+    FakeElsevier().install(respx_mock)
+    import app.runs.executor as executor
+
+    async def fail(self, ids):
+        raise ElsevierError(500, False, "SciVal 壞了")
+    monkeypatch.setattr(executor.MetricsFetcher, "fetch", fail)
+    await execute_run(run.id, session_factory, fake_client())
+    session.expire_all()
+    ru = run_unit(session, run.id, "中央", "資訊管理學系")
+    assert (ru.status, ru.eid_count) == ("failed", 20)
+
+
+def test_mark_interrupted_resets_both_fetch_steps(session):
+    run = make_run(session)
+    rus = session.scalars(select(RunUnit).where(RunUnit.run_id == run.id).order_by(RunUnit.id)).all()
+    rus[0].status, rus[1].status = "scopus", "scival"
+    session.get(Run, run.id).status = "running"
+    session.commit()
+    mark_interrupted(session)
+    session.expire_all()
+    assert session.get(RunUnit, rus[0].id).status == session.get(RunUnit, rus[1].id).status == "pending"

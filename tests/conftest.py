@@ -62,4 +62,5 @@ def web_done_run(client, respx_mock):
         run_id = make_run(s).id
     FakeElsevier().install(respx_mock)
     asyncio.run(execute_run(run_id, factory, fake_client()))
+    client.app.state.run_manager.current_run_id = run_id  # 視同由背景程式執行
     return run_id

@@ -6,7 +6,7 @@ from datetime import date
 from typing import Literal
 
 from app.db.models import Unit
-from app.mapping.parser import NCU_SHEET
+from app.mapping.parser import is_ncu
 
 Comparison = Literal["benchmark", "college", "custom"]
 COMPARISON_LABELS = {"benchmark": "對標學校比較", "college": "院內比較", "custom": "自訂比較"}
@@ -57,20 +57,20 @@ def default_period(today: date) -> tuple[int, int]:
 
 
 def build_groups(units: list[Unit], cfg: RunConfig) -> list[Group]:
-    ncu = {u.ncu_dept: u for u in units if u.school == NCU_SHEET}
+    ncu = {u.ncu_dept: u for u in units if is_ncu(u.school)}
     groups: list[Group] = []
     if "benchmark" in cfg.comparisons:
         for dept in cfg.ncu_depts:
             if dept not in ncu:
                 continue
-            others = [u for school in cfg.schools if school != NCU_SHEET
+            others = [u for school in cfg.schools if not is_ncu(school)
                       for u in units if u.school == school and u.ncu_dept == dept]
             groups.append(Group("benchmark", dept, (ncu[dept].id, *(u.id for u in others))))
     if "college" in cfg.comparisons:
         colleges = dict.fromkeys(ncu[d].ncu_college for d in cfg.ncu_depts if d in ncu and ncu[d].ncu_college)
         for college in colleges:
             groups.append(Group("college", college,
-                                tuple(u.id for u in units if u.school == NCU_SHEET and u.ncu_college == college)))
+                                tuple(u.id for u in units if is_ncu(u.school) and u.ncu_college == college)))
     if "custom" in cfg.comparisons and cfg.custom_unit_ids:
         groups.append(Group("custom", "custom", tuple(cfg.custom_unit_ids)))
     return groups

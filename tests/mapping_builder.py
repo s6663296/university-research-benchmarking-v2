@@ -27,7 +27,7 @@ def build_mapping(sheets: dict[str, list[tuple]], header: tuple = HEADER) -> byt
 
 
 def ncu_rows(depts=("資訊管理學系", "財務金融學系", "會計研究所")) -> list[tuple]:
-    return [("管理學院", d, "管理學院", d, NCU_EN[d], None) for d in depts]
+    return [("管理學院", d, "管理學院", d, NCU_EN.get(d, f"Department {d}, National Central University"), None) for d in depts]
 
 
 def sample_mapping() -> bytes:

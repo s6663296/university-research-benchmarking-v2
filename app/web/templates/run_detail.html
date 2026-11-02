@@ -1,14 +1,19 @@
 {% extends "base.html" %}
+{% from "_evidence.html" import ev %}
 {% block content %}
 <h1>分析 #{{ run.id }}（{{ run.period_from }}–{{ run.period_to }}）</h1>
 {% if busy %}<div class="notice">已有抓取作業正在執行，請等它完成後再試。</div>{% endif %}
 {% set n = run.period_to - run.period_from + 1 %}
-{% if run.status != "done" or rows | selectattr("ru.status", "ne", "done") | list %}
+{% if polling or run.status != "done" or rows | selectattr("ru.status", "ne", "done") | list %}
 {% include "_progress.html" %}
 {% endif %}
 
 {% if run.status == "done" %}
 {% if open_anomalies %}<div class="notice">還有 {{ open_anomalies }} 項待人工確認，<a href="?ind=anomalies">前往處理</a>。仍可產出報告，但報告上會加上標示。</div>{% endif %}
+{% if mismatches %}<div class="notice error">有 {{ mismatches | length }} 格重算值與存檔值不符，可能是計算後資料或程式有變動，可對該單位「重新抓取」：
+  <ul>{% for m in mismatches[:20] %}{% set w = m.e.where %}<li><a href="?ind={{ w[2] }}&amp;hl={{ w[0] }}#u{{ w[0] }}-{{ w[1] }}">{{ m.label }}・{{ m.indicator }}・{{ m.e.title.split("（")[0] }}</a>：{{ m.e.check_text }}</li>{% endfor %}</ul>
+  {% if mismatches | length > 20 %}<p>（另有 {{ mismatches | length - 20 }} 格未列出）</p>{% endif %}
+</div>{% endif %}
 
 <div class="tabs">
   <a href="?ind=summary" class="{{ 'active' if ind == 'summary' }}">排名總表</a>
@@ -19,18 +24,20 @@
 </div>
 
 {% if ind == "summary" %}
-  {% for college, short, srows in summaries %}
+  {% for college, srows in summaries %}
   <h2>{{ college }}各系所論文指標排名</h2>
+  <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>
     <tr><th>單位</th><th>對外/對內項目</th>{% for k, label in summary_labels.items() %}<th>{{ label }}</th>{% endfor %}</tr>
     {% for r in srows %}
     <tr>
       <td>{{ r.dept_label }}</td>
-      <td>{% if r.comparison == "benchmark" %}對標學校: {{ r.group_size }}間{% else %}{{ short }}內{% endif %}</td>
-      {% for k in summary_labels %}<td class="num">{% if r.ranks[k] is none %}<span class="pending">待確認</span>{% else %}#{{ r.ranks[k] }}{% endif %}</td>{% endfor %}
+      <td>{% if r.comparison == "benchmark" %}對標學校: {{ r.group_size }}間{% else %}{{ college }}內{% endif %}</td>
+      {% for k in summary_labels %}{% set e = r.explain[k] %}<td class="num">{% if r.ranks[k] is none %}<span class="pending">待確認</span>{% else %}#{{ r.ranks[k] }}{% endif %}{{ ev(e, run.id, "?ind=%s&hl=%d#u%d-%s" % (k, e.where[0], e.where[0], r.comparison)) }}</td>{% endfor %}
     </tr>
     {% endfor %}
   </table>
+  </div>
   {% endfor %}
 
 {% elif indicator %}
@@ -39,33 +46,36 @@
   {% for title, t in tables %}
   <div>
     <h3>{{ title }}</h3>
+    <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
     <table>
       {% if indicator.aggregate == "count" %}
       <tr><th>單位</th><th class="num">{{ n }}年篇數 (A)</th><th class="num">{{ n }}年平均</th><th class="num">單年教師數 (B)</th><th class="num">單年師均</th><th class="num">名次</th></tr>
       {% for r in t.rows %}
-      <tr {% if r.is_ncu %}class="ncu"{% endif %}>
+      <tr id="u{{ r.unit_id }}-{{ t.comparison }}"{% if r.is_ncu or hl == r.unit_id %} class="{{ 'ncu' if r.is_ncu }}{{ ' hl' if hl == r.unit_id }}"{% endif %}>
         <td>{{ r.label }}</td>
-        <td class="num">{{ r.raw | int if r.raw is not none else "待確認" }}</td>
-        <td class="num">{{ fmt(r.five_year_avg) }}</td>
-        <td class="num">{{ r.teachers if r.teachers is not none else "待確認" }}{% if r.teacher_manual %}*{% endif %}</td>
-        <td class="num">{{ fmt(r.value) }}</td>
-        <td class="num">{{ r.rank or "" }}</td>
+        <td class="num">{{ r.raw | int if r.raw is not none else "待確認" }}{{ ev(r.explain.raw, run.id) }}</td>
+        <td class="num">{{ fmt(r.five_year_avg) }}{{ ev(r.explain.avg, run.id) }}</td>
+        <td class="num">{{ r.teachers if r.teachers is not none else "待確認" }}{% if r.teacher_manual %}*{% endif %}{{ ev(r.explain.teachers, run.id) }}</td>
+        <td class="num">{{ fmt(r.value) }}{{ ev(r.explain.value, run.id) }}</td>
+        <td class="num">{{ r.rank or "" }}{{ ev(r.explain.rank, run.id) }}</td>
       </tr>
       {% endfor %}
       {% else %}
       <tr><th>單位</th><th class="num">{{ indicator.label }}</th><th class="num">名次</th></tr>
       {% for r in t.rows %}
-      <tr {% if r.is_ncu %}class="ncu"{% endif %}><td>{{ r.label }}</td><td class="num">{{ fmt(r.value) }}</td><td class="num">{{ r.rank or "" }}</td></tr>
+      <tr id="u{{ r.unit_id }}-{{ t.comparison }}"{% if r.is_ncu or hl == r.unit_id %} class="{{ 'ncu' if r.is_ncu }}{{ ' hl' if hl == r.unit_id }}"{% endif %}><td>{{ r.label }}</td><td class="num">{{ fmt(r.value) }}{{ ev(r.explain.value, run.id) }}</td><td class="num">{{ r.rank or "" }}{{ ev(r.explain.rank, run.id) }}</td></tr>
       {% endfor %}
       {% endif %}
     </table>
+    </div>
   </div>
   {% endfor %}
   </div>
-  <p class="muted">* 教師數為人工修改</p>
+  <p class="muted">* 教師數為人工修改　｜　數字格可停留查看計算方式與來源，點擊查看明細</p>
 
 {% elif ind == "anomalies" %}
   {% if not anomalies %}<p class="ok">沒有待確認的項目。</p>{% endif %}
+  <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>
     <tr><th>類型</th><th>單位</th><th>說明</th><th>狀態</th><th>處理</th></tr>
     {% for x in anomalies %}
@@ -83,8 +93,10 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 
 {% elif ind == "notes" %}
+  <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>
     <tr><th>資料取得日期</th><td>{{ notes.data_date }}</td></tr>
     <tr><th>資料來源</th><td>{{ notes.source }}</td></tr>
@@ -92,6 +104,7 @@
     <tr><th>排除自我引用</th><td>{{ notes.self_citation }}</td></tr>
     <tr><th>指標重要性</th><td>{% for i in indicators %}{{ i.label }}：{{ notes.importance[i.id] if notes.importance else "" }}<br>{% endfor %}</td></tr>
   </table>
+  </div>
   <form method="post" action="/runs/{{ run.id }}/notes">
     <div class="field"><label for="extra">補充說明</label><textarea id="extra" name="extra">{{ notes.extra or "" }}</textarea></div>
     <button type="submit">儲存備註</button>
@@ -100,7 +113,7 @@
 {% elif ind == "downloads" %}
   <h3>簡報（每個系所一份）</h3>
   <ul>
-    {% for dept, short in report_depts %}<li><a href="/runs/{{ run.id }}/pptx/{{ dept }}">{{ short }}</a></li>{% endfor %}
+    {% for dept in report_depts %}<li><a href="/runs/{{ run.id }}/pptx/{{ dept }}">{{ dept }}</a></li>{% endfor %}
   </ul>
   <p><a class="button" href="/runs/{{ run.id }}/pptx.zip">下載全部簡報（zip）</a></p>
   <h3>Excel（整份分析）</h3>

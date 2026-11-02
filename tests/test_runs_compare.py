@@ -56,4 +56,48 @@ def test_history_and_compare_pages(client, web_done_run, respx_mock):
     assert f"/runs/{web_done_run}" in text and f"/runs/{second}" in text
     compare = client.get("/runs/compare", params={"a": web_done_run, "b": second}).text
     assert "0.10" in compare and "資訊管理學系" in compare
+    # 每列 A、B、差異都可查；這裡直接改了存檔值，所以 A、B 會標出與重算值不符
+    assert compare.count('<template class="ev-body"') == 3 and "1.20 − 1.10 = +0.10" in compare
+    assert "⚠ 重算值與存檔值不符（存檔 1.10" in compare and f"/runs/{second}/evidence?" in compare
     assert f"#{second}" in client.get("/").text
+
+
+def test_delete_run_removes_it_and_its_data(client, web_done_run):
+    from app.db.models import Result, RunUnit
+    r = client.post(f"/runs/{web_done_run}/delete", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/runs"
+    assert client.get(f"/runs/{web_done_run}").status_code == 404
+    with client.app.state.session_factory() as s:
+        assert s.scalar(select(Result).where(Result.run_id == web_done_run)) is None
+        assert s.scalar(select(RunUnit).where(RunUnit.run_id == web_done_run)) is None
+
+
+def test_cannot_delete_running_run(client, web_done_run):
+    client.app.state.run_manager.is_running = lambda run_id: True
+    assert client.post(f"/runs/{web_done_run}/delete").status_code == 409
+    assert client.get(f"/runs/{web_done_run}").status_code == 200
+
+
+def test_delete_run_renumbers_the_rest(client, web_done_run):
+    import asyncio
+    factory = client.app.state.session_factory
+    with factory() as s:
+        second, third = make_run(s).id, make_run(s).id
+    for rid in (second, third):
+        asyncio.run(execute_run(rid, factory, fake_client()))
+    exports = client.app.state.settings.data_dir / "exports"
+    (exports / str(third)).mkdir(parents=True)
+    (exports / str(third) / "r.xlsx").write_bytes(b"x")
+    with factory() as s:
+        from app.db.models import Export
+        s.add(Export(run_id=third, kind="xlsx", path=str(exports / str(third) / "r.xlsx"),
+                     created_at=__import__("datetime").datetime.now()))
+        s.commit()
+    assert client.post(f"/runs/{second}/delete", follow_redirects=False).status_code == 303
+    with factory() as s:
+        from app.db.models import Export, Run, RunUnit
+        assert list(s.scalars(select(Run.id).order_by(Run.id))) == [web_done_run, second]
+        assert s.scalar(select(RunUnit).where(RunUnit.run_id == second)) is not None  # 原 third 的資料跟著改號
+        assert s.scalars(select(Export.path)).one() == str(exports / str(second) / "r.xlsx")
+    assert (exports / str(second) / "r.xlsx").exists() and not (exports / str(third)).exists()
+    assert client.get(f"/runs/{third}").status_code == 404

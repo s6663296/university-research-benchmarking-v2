@@ -14,17 +14,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "backoff_base_sec": 1.0,
     "timeout_sec": 60,
     "cache_days": 1,                      # 1 = 只用當天的快取
-    "scival_batch_size": 25,
     "anomaly_change_threshold": 0.30,
     "teacher_column": "total",            # 或 "asst_prof_plus"
     "self_citation_strategy": "scival_param",
     "rank_highlight_top": 2,              # 排名總表中名次 ≤ 2 標紅（範例第 4 頁）
-    "dept_short_names": {
-        "資訊管理學系": "資管系", "財務金融學系": "財金系", "企業管理學系": "企管系",
-        "經濟學系": "經濟系", "產業經濟研究所": "產經所", "人力資源管理研究所": "人資所",
-        "工業管理研究所": "工管所", "會計研究所": "會計所",
-    },
-    "college_short_names": {"管理學院": "管學院"},
 }
 
 

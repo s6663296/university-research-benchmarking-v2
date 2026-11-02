@@ -19,7 +19,7 @@ def test_mapping_page_empty(client):
 def test_upload_page_shows_issues_and_diff(client):
     r = upload(client, REAL)
     assert r.status_code == 200
-    assert "缺少「中央」分頁" in r.text
+    assert "缺少「國立中央大學」分頁" in r.text
     assert "新增 161" in r.text
 
 

@@ -3,6 +3,7 @@
 <h1>設定</h1>
 {% for e in errors %}<div class="notice error">{{ e }}</div>{% endfor %}
 {% if saved %}<div class="notice ok">設定已儲存</div>{% endif %}
+{% if reset %}<div class="notice ok">所有資料已清除，設定已回到預設值</div>{% endif %}
 
 <section class="card">
   <h2>Elsevier API</h2>
@@ -33,19 +34,15 @@
     </select></div>
 </section>
 
-<section class="card">
-  <h2>學校對照</h2>
-  <p class="muted">每行一筆：mapping 分頁名稱, 教育部校名, 報告簡稱</p>
-  <textarea name="school_aliases">{{ aliases }}</textarea>
-</section>
-
-<section class="card">
-  <h2>報告簡稱</h2>
-  <div class="field"><label for="dept_short_names">系所簡稱（每行一筆：全名=簡稱）</label>
-    <textarea id="dept_short_names" name="dept_short_names">{{ dept_short }}</textarea></div>
-  <div class="field"><label for="college_short_names">學院簡稱（每行一筆：全名=簡稱）</label>
-    <textarea id="college_short_names" name="college_short_names">{{ college_short }}</textarea></div>
-</section>
 <button type="submit">儲存設定</button>
 </form>
+
+<section class="card danger-zone">
+  <h2>清除所有資料</h2>
+  <p>刪除對照表、教師數、所有分析結果與產出檔、API 快取與額度紀錄，並清空 .env 中的 API Key 與 insttoken；上方參數回到預設值。此動作無法復原。</p>
+  <form method="post" action="/settings/reset">
+    <button type="submit" class="danger"
+      onclick="return confirm('確定要清除所有資料？包含 API Key、對照表、教師數與所有分析結果，無法復原。')">清除所有資料</button>
+  </form>
+</section>
 {% endblock %}

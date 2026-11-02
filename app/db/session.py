@@ -5,6 +5,8 @@ from alembic.config import Config
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.db.models import Base
+
 ALEMBIC_DIR = Path(__file__).resolve().parents[2] / "alembic"
 
 
@@ -33,3 +35,12 @@ def init_db(engine: Engine) -> None:
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(engine, expire_on_commit=False)
+
+
+def clear_all_data(engine: Engine) -> None:
+    """清空所有資料表（含 app_settings，設定因此回到預設值），保留資料表結構與 migration 版本。"""
+    with engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            conn.execute(table.delete())
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql("VACUUM")  # 釋放磁碟空間

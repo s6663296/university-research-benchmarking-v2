@@ -1,12 +1,15 @@
 """SciVal Publication Metrics：逐篇取得報告需要的指標（設計 §6 步驟 4）。"""
 
+import asyncio
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from app.elsevier.cache import cache_key
 from app.elsevier.client import ElsevierClient
 
 METRICS_PATH = "/analytics/scival/publication/metrics"
 METRIC_TYPES = "PublicationsInTopJournalPercentiles,OutputsInTopCitationPercentiles,FieldWeightedCitationImpact,Collaboration"
+MAX_IDS = 100  # 一次請求最多 100 篇（實測 200 篇回 HTTP 400）
 
 
 @dataclass
@@ -51,6 +54,10 @@ def _has(metric: dict | None, key: str, value) -> bool | None:
     return any(year_sum(v) > 0 for v in found) if found else None
 
 
+def citation_count(result: dict) -> int:
+    return sum(year_sum(m) for m in result.get("metrics", []) if m.get("metricType") == "CitationCount")
+
+
 def parse_result(result: dict) -> PubMetrics:
     pub = result.get("publication", {})
     metrics = {m.get("metricType"): m for m in result.get("metrics", [])}
@@ -64,25 +71,83 @@ def parse_result(result: dict) -> PubMetrics:
         top10=_has(metrics.get("OutputsInTopCitationPercentiles"), "threshold", 10),
         fwci=Decimal(str(fwci_values[0])) if fwci_values else None,
         intl_collab=_has(metrics.get("Collaboration"), "collabType", "International collaboration"),
+        citations=citation_count(result) if "CitationCount" in metrics else None,
         raw=result,
     )
 
 
-async def fetch_metrics(client: ElsevierClient, ids: list[str], *, year_range: str, batch_size: int,
-                        use_cache: bool) -> tuple[dict[str, PubMetrics], dict]:
-    out: dict[str, PubMetrics] = {}
-    source: dict = {}
-    for chunk in batches(ids, batch_size):
-        data = await client.get_json(METRICS_PATH, {
-            "metricTypes": METRIC_TYPES,
-            "publicationIds": ",".join(chunk),
+def _settle(fut: asyncio.Future, error: BaseException) -> None:
+    if fut.done():
+        return
+    if isinstance(error, Exception):
+        fut.set_exception(error)
+        fut.exception()  # 沒有其他單位在等時，不要在關閉時印出「exception was never retrieved」
+    else:
+        fut.cancel()
+
+
+class MetricsFetcher:
+    """同一次分析共用：每篇論文只向 SciVal 要一次，並逐篇快取。
+
+    各單位的論文常有重疊（院與系、合聘），逐篇處理後重疊的論文不會重複消耗額度；
+    逐篇快取也讓續跑、重抓時即使批次組合不同，仍可重用當天已抓過的論文。
+    include_self 不為 None 時，被引數（CitationCount）與其他指標同一次請求取得。
+    """
+
+    def __init__(self, client: ElsevierClient, *, year_range: str, include_self: str | None = None,
+                 use_cache: bool):
+        self.client = client
+        self.use_cache = use_cache
+        self.params = {
+            "metricTypes": METRIC_TYPES + (",CitationCount" if include_self is not None else ""),
             "yearRange": year_range,
             "byYear": "true",
             "journalImpactType": "CiteScore",
             "includedDocs": "AllPublicationTypes",
-        }, use_cache=use_cache)
-        source = data.get("dataSource") or source
-        for result in data.get("results", []):
-            m = parse_result(result)
-            out[m.scopus_id] = m
-    return out, source
+        }
+        if include_self is not None:
+            self.params["includeSelfCitations"] = include_self
+        self.data_source: dict = {}
+        self._results: dict[str, asyncio.Future] = {}  # scopus_id → 該篇結果（SciVal 沒有的為 None）
+
+    def _key(self, sid: str) -> str:
+        return cache_key(METRICS_PATH, {**self.params, "publicationIds": sid})
+
+    async def fetch(self, ids: list[str]) -> dict[str, PubMetrics]:
+        """回傳 SciVal 有資料的論文；SciVal 沒有的 id 不出現在 dict 中。"""
+        new = [sid for sid in dict.fromkeys(ids) if sid not in self._results]
+        loop = asyncio.get_running_loop()
+        for sid in new:
+            self._results[sid] = loop.create_future()
+        if new:
+            try:
+                await self._load(new)
+            except BaseException as e:
+                for sid in new:
+                    _settle(self._results[sid], e)
+                raise
+        results = [await self._results[sid] for sid in dict.fromkeys(ids)]
+        return {m.scopus_id: m for m in map(parse_result, filter(None, results))}
+
+    async def _load(self, ids: list[str]) -> None:
+        cache = self.client.cache
+        cached = cache.get_many([self._key(sid) for sid in ids]) if cache is not None and self.use_cache else {}
+        missing = []
+        for sid in ids:
+            entry = cached.get(self._key(sid))
+            if entry is None:
+                missing.append(sid)
+            else:
+                self.data_source = self.data_source or entry.get("dataSource") or {}
+                self._results[sid].set_result(entry.get("result"))
+        for chunk in batches(missing, MAX_IDS):
+            data = await self.client.get_json(METRICS_PATH, {**self.params, "publicationIds": ",".join(chunk)},
+                                              use_cache=False, store=False)
+            source = data.get("dataSource") or {}
+            self.data_source = source or self.data_source
+            found = {str(r.get("publication", {}).get("id")): r for r in data.get("results", [])}
+            entries = {sid: {"result": found.get(sid), "dataSource": source} for sid in chunk}
+            if cache is not None:
+                cache.put_many(METRICS_PATH, {self._key(sid): e for sid, e in entries.items()})
+            for sid, e in entries.items():
+                self._results[sid].set_result(e["result"])

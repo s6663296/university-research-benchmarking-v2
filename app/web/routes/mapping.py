@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.teachers.moe import latest_import
 from app.teachers.service import auto_link
-from app.mapping.service import diff_versions, import_mapping, issues_of, latest_version, previous_version, units_of
+from app.mapping.service import (diff_versions, import_mapping, issues_of, latest_version, previous_version,
+                                 recheck_mapping, units_of)
 from app.web.deps import get_session, render
 
 router = APIRouter()
@@ -14,6 +15,7 @@ def _page(request: Request, session: Session, school: str | None = None, status_
     ctx = dict(version=version, issues=[], diff=None, units=[], schools=[], school=school,
                message=None, error=None)
     if version is not None:
+        recheck_mapping(session, version)
         prev = previous_version(session, version.id)
         units = units_of(session, version.id)
         ctx.update(

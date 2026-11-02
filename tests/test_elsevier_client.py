@@ -8,8 +8,14 @@ from sqlalchemy import select
 from app.db.models import ApiCache as ApiCacheRow
 from app.elsevier.cache import ApiCache, cache_key
 from app.elsevier.client import ElsevierClient, ElsevierError, strip_links
+from app.elsevier.quota import Quota, QuotaStore, quota_rows
 
 SCOPUS = r".*/content/search/scopus.*"
+SCIVAL = r".*/analytics/scival/.*"
+
+
+def quota_headers(limit, remaining, reset="1793849792"):
+    return {"X-RateLimit-Limit": str(limit), "X-RateLimit-Remaining": str(remaining), "X-RateLimit-Reset": reset}
 
 
 def make(**kw):
@@ -103,13 +109,27 @@ def test_cache_expires_next_day(session_factory):
     assert cache.get("k1") is None
 
 
-async def test_quota_read_from_headers(respx_mock):
-    respx_mock.get(url__regex=SCOPUS).mock(return_value=httpx.Response(
-        200, json={}, headers={"X-RateLimit-Limit": "20000", "X-RateLimit-Remaining": "19990",
-                               "X-RateLimit-Reset": "1700000000"}))
-    c = make()
+async def test_quota_tracked_per_api(respx_mock):
+    respx_mock.get(url__regex=SCOPUS).mock(return_value=httpx.Response(200, json={}, headers=quota_headers(20000, 19990)))
+    respx_mock.get(url__regex=SCIVAL).mock(return_value=httpx.Response(200, json={}, headers=quota_headers(5000, 3700)))
+    seen = []
+    c = make(on_quota=lambda api, q: seen.append((api, q.remaining)))
     await c.get_json("/content/search/scopus", {})
-    assert c.quota["X-RateLimit-Remaining"] == "19990"
+    await c.get_json("/analytics/scival/publication/metrics", {})
+    assert c.quota["scopus"] == Quota(20000, 19990, datetime.fromtimestamp(1793849792))
+    assert c.quota["scival"].limit == 5000 and c.quota["scival"].remaining == 3700
+    assert seen == [("scopus", 19990), ("scival", 3700)]
+
+
+def test_quota_store_keeps_latest_per_api(session_factory):
+    store = QuotaStore(session_factory)
+    store.record("scival", Quota(5000, 3800, None))
+    store.record("scopus", Quota(20000, 19000, None))
+    store.record("scival", Quota(5000, 3700, None))
+    with session_factory() as s:
+        rows = quota_rows(s)
+    assert [(r.api, r.label, r.remaining, r.limit) for r in rows] == [
+        ("scopus", "Scopus Search API", 19000, 20000), ("scival", "SciVal API", 3700, 5000)]
 
 
 async def test_check_connection_reports_unreachable(respx_mock):
@@ -119,11 +139,22 @@ async def test_check_connection_reports_unreachable(respx_mock):
     assert "無法連線" in status.message and "VPN" in status.message
 
 
-async def test_check_connection_ok(respx_mock):
-    respx_mock.get(url__regex=SCOPUS).mock(return_value=httpx.Response(
-        200, json={}, headers={"X-RateLimit-Remaining": "123"}))
+async def test_check_connection_checks_both_apis(respx_mock):
+    scopus = respx_mock.get(url__regex=SCOPUS).mock(return_value=httpx.Response(
+        200, json={}, headers=quota_headers(20000, 123)))
+    scival = respx_mock.get(url__regex=SCIVAL).mock(return_value=httpx.Response(
+        200, json={}, headers=quota_headers(5000, 45)))
+    c = make()
+    status = await c.check_connection()
+    assert status.ok is True and scopus.call_count == 1 and scival.call_count == 1
+    assert c.quota["scopus"].remaining == 123 and c.quota["scival"].remaining == 45
+
+
+async def test_check_connection_scival_denied(respx_mock):
+    respx_mock.get(url__regex=SCOPUS).mock(return_value=httpx.Response(200, json={}))
+    respx_mock.get(url__regex=SCIVAL).mock(return_value=httpx.Response(403))
     status = await make().check_connection()
-    assert status.ok is True and status.remaining == "123"
+    assert status.ok is False and status.message.startswith("SciVal") and "API Key" in status.message
 
 
 async def test_check_connection_bad_key(respx_mock):

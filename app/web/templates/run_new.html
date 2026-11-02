@@ -1,16 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>新增分析</h1>
+<h1>分析設定</h1>
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
-<section class="card">
-  <h2>API 連線狀態</h2>
-  <div hx-get="/status" hx-trigger="load"><p class="muted">檢查中…</p></div>
-</section>
-
 {% if not ready %}
-<p class="notice">請先匯入 <a href="/mapping">mapping 表</a> 與 <a href="/teachers">教師數</a>。</p>
+<p class="notice">請先匯入 <a href="/mapping">對標學校資料表</a> 與 <a href="/teachers">教師人數統計表</a>。</p>
 {% else %}
-<p><a href="/runs/new?reuse=1">沿用上一版設定</a></p>
 <form method="post" action="/runs" id="run-form">
 <section class="card">
   <h2>期間與教師數</h2>
@@ -32,7 +26,7 @@
     {% for d in depts %}<label><input type="checkbox" name="ncu_depts" value="{{ d }}" {% if d in cfg.ncu_depts %}checked{% endif %}> {{ d }}</label>{% endfor %}
   </div>
   {% else %}
-  <p class="error">mapping 表中沒有中大系所（請確認有「中央」分頁）。</p>
+  <p class="error">mapping 表中沒有中大系所（請確認有「{{ NCU_SHEET }}」分頁）。</p>
   {% endfor %}
 </section>
 
@@ -45,12 +39,12 @@
   {% for s in schools %}<label><input type="checkbox" name="schools" value="{{ s }}" {% if s in cfg.schools %}checked{% endif %}> {{ s }}</label>{% endfor %}
   <h3>自訂比較的單位</h3>
   <select name="custom_unit_ids" multiple size="6">
-    {% for u in units %}<option value="{{ u.id }}" {% if u.id in cfg.custom_unit_ids %}selected{% endif %}>{{ u.school }}－{{ u.ncu_dept }}{% if u.dept_zh and u.school != "中央" %}（{{ u.dept_zh }}）{% endif %}</option>{% endfor %}
+    {% for u in units %}<option value="{{ u.id }}" {% if u.id in cfg.custom_unit_ids %}selected{% endif %}>{{ u.school }}－{{ u.ncu_dept }}{% if u.dept_zh and not is_ncu(u.school) %}（{{ u.dept_zh }}）{% endif %}</option>{% endfor %}
   </select>
 </section>
 
 <button type="button" class="secondary" hx-post="/runs/preview" hx-include="#run-form" hx-target="#preview">預覽查詢條件</button>
-<button type="submit">執行分析</button>
+<button type="submit">開始分析</button>
 </form>
 <div id="preview"></div>
 {% endif %}

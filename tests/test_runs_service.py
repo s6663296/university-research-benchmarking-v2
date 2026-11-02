@@ -26,7 +26,7 @@ def cfg(**kw):
 @pytest.fixture
 def seeded(session):
     v, _ = import_mapping(session, "m.xlsx", sample_mapping())
-    imp, _ = import_moe(session, "moe.xlsx", sample_moe())
+    imp = import_moe(session, "moe.xlsx", sample_moe())
     auto_link(session, v.id, imp.id)
     return session
 
@@ -57,7 +57,7 @@ def test_preview_rows(seeded):
     assert errors == []
     by_school = {(r.school, seeded.get(Unit, r.unit_id).ncu_dept): r for r in rows}
     ntu = by_school[("台大", "資訊管理學系")]
-    assert ntu.query.startswith('AFFIL(Department of Information Management, National Taiwan University)')
+    assert ntu.query.startswith('(AFFIL("Department of Information Management" W/15 "National Taiwan University")')
     assert ntu.teacher.value == 16
     assert len(rows) == 5  # 中央 3 系所 + 台大資管 + 政治資管
 
@@ -96,3 +96,32 @@ def test_last_config_roundtrip(seeded):
 
 def run_units(session, run_id):
     return session.scalars(select(RunUnit).where(RunUnit.run_id == run_id)).all()
+
+
+def test_create_run_snapshots_teacher_detail(seeded):
+    import json
+    from app.db.models import UnitTeacherLink
+    run = create_run(seeded, cfg(), today=TODAY)
+    ru = next(ru for ru in run_units(seeded, run.id)
+              if seeded.get(Unit, ru.unit_id).school == "中央" and seeded.get(Unit, ru.unit_id).ncu_dept == "資訊管理學系")
+    d = json.loads(ru.teacher_detail_json)
+    assert (d["source"], d["academic_year"], d["column"]) == ("moe", 114, "total")
+    assert sum(r["value"] for r in d["rows"]) == 24 and all(r["code"] and r["name"] for r in d["rows"])
+    assert "override" not in d
+    # 事後改對應，快照不變
+    seeded.query(UnitTeacherLink).delete()
+    seeded.commit()
+    seeded.expire_all()
+    assert json.loads(seeded.get(RunUnit, ru.id).teacher_detail_json) == d
+
+
+def test_teacher_detail_records_override_and_moe_rows(seeded):
+    import json
+    add_override(seeded, "中央", "資訊管理學系", 114, 23, "依 SciVal")
+    run = create_run(seeded, cfg(), today=TODAY)
+    ru = next(ru for ru in run_units(seeded, run.id)
+              if seeded.get(Unit, ru.unit_id).school == "中央" and seeded.get(Unit, ru.unit_id).ncu_dept == "資訊管理學系")
+    d = json.loads(ru.teacher_detail_json)
+    assert d["source"] == "manual" and d["override"]["count"] == 23 and d["override"]["reason"] == "依 SciVal"
+    assert d["override"]["created_at"]
+    assert sum(r["value"] for r in d["rows"]) == 24  # 教育部原本的人數仍記錄

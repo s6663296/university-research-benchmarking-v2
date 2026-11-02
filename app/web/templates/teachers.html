@@ -1,15 +1,19 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>教師數</h1>
+<h1>教師人數統計表</h1>
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
 
 <section class="card">
   <h2>匯入教育部檔案</h2>
-  <p class="muted">從教育部大專校院校務資訊公開平台下載「教1-1. 專任教師數-以「系(所)」統計」的 xlsx，直接上傳即可。一個檔案包含多個學年度，匯入一次就好。</p>
   <form method="post" action="/teachers/import" enctype="multipart/form-data">
     <input type="file" name="file" accept=".xlsx" required>
     <button type="submit">上傳</button>
+    <button type="button" class="secondary" hx-get="/teachers/fetch" hx-target="#moe-fetch" hx-swap="outerHTML"
+      onclick="document.getElementById('moe-dialog').showModal()">從教育部下載</button>
   </form>
+  <dialog id="moe-dialog" class="dialog" onclose="if (this.querySelector('[data-imported]')) location.reload()">
+    <div id="moe-fetch"><p class="muted">正在向教育部網站取得學年度清單…</p></div>
+  </dialog>
   {% if imp %}
   <p>目前資料：{{ imp.source_filename }}（{{ years[0] }}～{{ years[-1] }} 學年度，匯入時間 {{ imp.imported_at.strftime("%Y/%m/%d %H:%M") }}）</p>
   {% else %}
@@ -17,12 +21,13 @@
   {% endif %}
 </section>
 
-{% if imp and not version %}<p class="notice">請先到 <a href="/mapping">Mapping 管理</a> 匯入 mapping 表。</p>{% endif %}
+{% if imp and not version %}<p class="notice">請先到 <a href="/mapping">對標學校資料表</a> 匯入 mapping 表。</p>{% endif %}
 
 {% if unmatched %}
 <section class="card">
   <h2>未對應的單位（{{ unmatched | length }}）</h2>
-  <p class="muted">從該校的教育部單位清單中挑選，可以選多個（人數相加）。</p>
+  <p class="muted">從該校的教育部單位清單中挑選，可以選多個（人數相加）。已對應但代碼不在目前教育部資料中的單位也列在這裡，需重新對應。</p>
+  <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>
     <tr><th>學校</th><th>系所</th><th>中大系所</th><th>教育部單位</th></tr>
     {% for item in unmatched %}
@@ -43,6 +48,7 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 </section>
 {% endif %}
 
@@ -56,6 +62,7 @@
     </select>
     <span class="muted">採用欄位：{{ column_label }}</span>
   </form>
+  <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>
     <tr><th>學校</th><th>系所</th><th>中大系所</th><th class="num">教師數</th><th>來源</th><th>教育部代碼</th><th>人工修改</th></tr>
     {% for r in rows %}
@@ -77,6 +84,7 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 </section>
 {% endif %}
 {% endblock %}

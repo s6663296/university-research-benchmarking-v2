@@ -3,6 +3,7 @@
   {% for e in errors %}<div class="notice error">{{ e }}</div>{% endfor %}
   {% if rows %}
   <p>共 {{ rows | length }} 個單位</p>
+  <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>
     <tr><th>單位</th><th>Scopus 查詢字串</th><th class="num">教師數</th><th>來源</th></tr>
     {% for r in rows %}
@@ -14,5 +15,6 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
   {% endif %}
 </section>

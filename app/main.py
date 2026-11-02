@@ -7,6 +7,8 @@ from app.config import Settings
 from app.db.session import init_db, make_engine, make_session_factory
 from app.elsevier.client import make_client
 from app.runs.manager import RunManager, mark_interrupted
+from app.runs.renumber import renumber_runs
+from app.teachers.moe_fetch import MoeFetcher
 from app.web.deps import WEB_DIR
 from app.web.routes import history, home, mapping, runs, settings as settings_routes, teachers
 
@@ -23,12 +25,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.session_factory = session_factory
         with session_factory() as s:
             mark_interrupted(s)
+            renumber_runs(s, settings.data_dir)  # 啟動時沒有任何分析在跑，順便補上先前刪除留下的空號
 
         def client_factory():
             with session_factory() as s:
                 return make_client(app.state.settings, s)
 
         app.state.run_manager = RunManager(session_factory, client_factory)
+        app.state.moe_fetcher = MoeFetcher(session_factory, settings.data_dir)
         yield
         engine.dispose()
 

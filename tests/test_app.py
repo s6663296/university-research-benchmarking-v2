@@ -4,8 +4,16 @@ from app.config import save_env
 def test_home_page_renders(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert "員額小組論文指標" in r.text
+    assert "<h1>首頁</h1>" in r.text
     assert "htmx.min.js" in r.text and "cdn" not in r.text.lower()
+    assert 'aria-label="返回首頁"' not in r.text
+
+
+def test_subpages_offer_back_navigation(client):
+    for path in ("/mapping", "/teachers", "/runs/new", "/runs", "/settings"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert 'href="/" aria-label="返回首頁"' in response.text
 
 
 def test_save_env_keeps_other_lines(tmp_path):

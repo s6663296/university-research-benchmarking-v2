@@ -5,8 +5,8 @@ from app.db.models import Anomaly, RunUnit, Unit
 
 def test_detail_page_marks_ncu(client, web_done_run):
     text = client.get(f"/runs/{web_done_run}", params={"ind": "total"}).text
-    assert 'class="ncu"' in text and "資管系-中央" in text and "對標學校比較" in text
-    assert "管學院內系所比較" in text
+    assert 'class="ncu"' in text and "資訊管理學系-中央" in text and "對標學校比較" in text
+    assert "管理學院內系所比較" in text
 
 
 def test_detail_page_summary(client, web_done_run):

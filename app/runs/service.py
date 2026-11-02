@@ -1,5 +1,6 @@
 """建立分析版本：查詢預覽、教師數快照（設計 §5.6、§6 步驟 3）。"""
 
+import json
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -9,8 +10,8 @@ from sqlalchemy.orm import Session
 from app.db.models import Run, RunUnit, Unit
 from app.db.settings_store import get_setting
 from app.elsevier.scival import scival_year_ranges
-from app.elsevier.scopus import build_query
-from app.mapping.parser import NCU_SHEET
+from app.elsevier.scopus import build_query, school_names
+from app.mapping.parser import NCU_SHEET, is_ncu
 from app.mapping.service import latest_version, units_of
 from app.runs.scope import RunConfig, build_groups
 from app.teachers.moe import import_years, latest_import
@@ -27,7 +28,7 @@ class PreviewRow:
 
 
 def _plan(session: Session, cfg: RunConfig, today: date | None):
-    """回傳（mapping 版本, 教師數匯入, 本次的單位清單, 阻擋錯誤）。"""
+    """回傳（mapping 版本, 教師數匯入, 本次的單位清單, mapping 中的英文校名, 阻擋錯誤）。"""
     today = today or date.today()
     errors: list[str] = []
     version, imp = latest_version(session), latest_import(session)
@@ -42,13 +43,15 @@ def _plan(session: Session, cfg: RunConfig, today: date | None):
     except ValueError as e:
         errors.append(str(e))
     units: list[Unit] = []
+    schools: list[str] = []
     if version is not None:
         all_units = {u.id: u for u in units_of(session, version.id)}
+        schools = school_names(u.dept_en for u in all_units.values())
         ids = dict.fromkeys(uid for g in build_groups(list(all_units.values()), cfg) for uid in g.unit_ids)
         units = [all_units[i] for i in ids if i in all_units]
         if not units:
-            errors.append("沒有任何可分析的單位，請確認已選擇系所，且 mapping 的「中央」分頁有這些系所的英文名稱")
-    return version, imp, units, errors
+            errors.append(f"沒有任何可分析的單位，請確認已選擇系所，且 mapping 的「{NCU_SHEET}」分頁有這些系所的英文名稱")
+    return version, imp, units, schools, errors
 
 
 def _teacher(session: Session, imp, cfg: RunConfig, unit: Unit) -> TeacherCount:
@@ -58,15 +61,15 @@ def _teacher(session: Session, imp, cfg: RunConfig, unit: Unit) -> TeacherCount:
 
 
 def preview_run(session: Session, cfg: RunConfig, today: date | None = None) -> tuple[list[PreviewRow], list[str]]:
-    _, imp, units, errors = _plan(session, cfg, today)
-    rows = [PreviewRow(u.id, f"{u.ncu_dept}－{u.school}" + (f"（{u.dept_zh}）" if u.school != NCU_SHEET else ""),
-                       u.school, build_query(u.dept_en, cfg.year_from, cfg.year_to), _teacher(session, imp, cfg, u))
+    _, imp, units, schools, errors = _plan(session, cfg, today)
+    rows = [PreviewRow(u.id, f"{u.ncu_dept}－{u.school}" + (f"（{u.dept_zh}）" if not is_ncu(u.school) else ""),
+                       u.school, build_query(u.dept_en, cfg.year_from, cfg.year_to, schools), _teacher(session, imp, cfg, u))
             for u in units]
     return rows, errors
 
 
 def create_run(session: Session, cfg: RunConfig, today: date | None = None) -> Run:
-    version, imp, units, errors = _plan(session, cfg, today)
+    version, imp, units, schools, errors = _plan(session, cfg, today)
     if errors:
         raise ValueError("；".join(errors))
     run = Run(created_at=datetime.now(), period_from=cfg.year_from, period_to=cfg.year_to,
@@ -79,9 +82,13 @@ def create_run(session: Session, cfg: RunConfig, today: date | None = None) -> R
     for u in units:
         tc = _teacher(session, imp, cfg, u)
         source = f"manual:{tc.reason}" if tc.source == "manual" else tc.source
-        session.add(RunUnit(run_id=run.id, unit_id=u.id, role="ncu" if u.school == NCU_SHEET else "benchmark",
-                            query=build_query(u.dept_en, cfg.year_from, cfg.year_to), status="pending",
-                            teacher_count=tc.value, teacher_source=source))
+        detail = dict(source=tc.source, academic_year=cfg.academic_year, column=cfg.teacher_column, rows=tc.rows)
+        if tc.override:
+            detail["override"] = tc.override
+        session.add(RunUnit(run_id=run.id, unit_id=u.id, role="ncu" if is_ncu(u.school) else "benchmark",
+                            query=build_query(u.dept_en, cfg.year_from, cfg.year_to, schools), status="pending",
+                            teacher_count=tc.value, teacher_source=source,
+                            teacher_detail_json=json.dumps(detail, ensure_ascii=False)))
     session.commit()
     return run
 

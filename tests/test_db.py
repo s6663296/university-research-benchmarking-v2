@@ -5,12 +5,12 @@ from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import inspect, select
 
-from app.db.models import Base, MappingVersion, Result, Run, SchoolAlias, Unit
+from app.db.models import Base, MappingVersion, Result, Run, Unit
 from app.db.session import init_db, make_engine
 from app.db.settings_store import get_setting, set_setting
 
-EXPECTED = {"mapping_versions", "units", "mapping_issues", "school_aliases", "teacher_imports", "teacher_counts",
-            "unit_teacher_links", "teacher_overrides", "runs", "run_units", "run_publications", "api_cache",
+EXPECTED = {"mapping_versions", "units", "mapping_issues", "teacher_imports", "teacher_counts",
+            "unit_teacher_links", "teacher_overrides", "runs", "run_units", "run_publications", "api_cache", "api_quota",
             "results", "anomalies", "exports", "app_settings", "alembic_version"}
 
 
@@ -36,18 +36,10 @@ def test_migration_matches_models(tmp_path):
         assert compare_metadata(MigrationContext.configure(c), Base.metadata) == []
 
 
-def test_default_school_aliases(session):
-    a = session.get(SchoolAlias, "政治")
-    assert (a.moe_name, a.display_name) == ("國立政治大學", "政大")
-    assert session.get(SchoolAlias, "中央").moe_name == "國立中央大學"
-    assert len(session.scalars(select(SchoolAlias)).all()) == 10
-
-
 def test_settings_default_and_override(session):
-    assert get_setting(session, "scival_batch_size") == 25
-    set_setting(session, "scival_batch_size", 50)
-    assert get_setting(session, "scival_batch_size") == 50
-    assert get_setting(session, "dept_short_names")["資訊管理學系"] == "資管系"
+    assert get_setting(session, "timeout_sec") == 60
+    set_setting(session, "timeout_sec", 45)
+    assert get_setting(session, "timeout_sec") == 45
 
 
 def test_decimal_roundtrip(session):

@@ -33,6 +33,11 @@ def run_count(client):
         return s.scalar(select(func.count()).select_from(Run))
 
 
+def latest_run_id(client):
+    with client.app.state.session_factory() as s:
+        return s.scalar(select(func.max(Run.id)))
+
+
 def wait_done(client, run_id, timeout=10):
     end = time.time() + timeout
     while time.time() < end:
@@ -49,15 +54,22 @@ def test_new_run_defaults(seeded):
     assert 'value="台大" checked' in text and 'value="政治" checked' in text
 
 
+def test_new_run_omits_connection_panel_and_reuse_link(seeded):
+    text = seeded.get('/runs/new').text
+    assert 'API 連線狀態' not in text
+    assert '沿用上一版設定' not in text
+    assert 'name="year_from"' in text
+
+
 def test_preview_shows_queries(seeded):
     text = seeded.post("/runs/preview", data=FORM).text
-    assert 'AFFIL(Department of Information Management, National Taiwan University)' in text
+    assert 'AFFIL(&#34;Department of Information Management&#34; W/15 &#34;National Taiwan University&#34;)' in text
     assert "16" in text  # 台大資管教師數
 
 
 def test_preview_college_selects_all_depts(seeded):
     form = {**FORM, "ncu_depts": [], "colleges": ["管理學院"]}
-    assert "Graduate Institute of Accounting, National Central University" in seeded.post("/runs/preview", data=form).text
+    assert "Graduate Institute of Accounting&#34; W/15 &#34;National Central University" in seeded.post("/runs/preview", data=form).text
 
 
 def test_preview_shows_blocking_errors(seeded):
@@ -73,8 +85,8 @@ def test_create_blocked_when_offline(seeded, respx_mock):
 def test_create_runs_in_background(seeded, respx_mock):
     FakeElsevier().install(respx_mock)
     r = seeded.post("/runs", data=FORM, follow_redirects=False)
-    assert r.status_code == 303
-    run_id = int(r.headers["location"].rsplit("/", 1)[1])
+    assert r.status_code == 303 and r.headers["location"] == "/"  # 回首頁看儀表板
+    run_id = latest_run_id(seeded)
     assert wait_done(seeded, run_id) == "done"
     frag = seeded.get(f"/runs/{run_id}/progress")
     assert 'every 1s' not in frag.text and frag.headers.get("HX-Refresh") == "true"
@@ -83,7 +95,54 @@ def test_create_runs_in_background(seeded, respx_mock):
 
 def test_reuse_last_config(seeded, respx_mock):
     FakeElsevier().install(respx_mock)
-    r = seeded.post("/runs", data={**FORM, "schools": ["台大"]}, follow_redirects=False)
-    wait_done(seeded, int(r.headers["location"].rsplit("/", 1)[1]))
+    seeded.post("/runs", data={**FORM, "schools": ["台大"]}, follow_redirects=False)
+    wait_done(seeded, latest_run_id(seeded))
     text = seeded.get("/runs/new", params={"reuse": 1}).text
     assert 'value="台大" checked' in text and 'value="政治" checked' not in text
+
+
+def test_settings_page_renamed(seeded):
+    text = seeded.get("/runs/new").text
+    assert "<h1>分析設定</h1>" in text and ">開始分析</button>" in text
+    assert '<a href="/runs/new">分析設定</a>' in text  # 上方選單
+
+
+def test_home_start_without_previous_run_goes_to_settings(seeded):
+    r = seeded.post("/runs/start", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/runs/new" and run_count(seeded) == 0
+
+
+def test_home_start_reuses_last_settings(seeded, respx_mock):
+    FakeElsevier().install(respx_mock)
+    seeded.post("/runs", data={**FORM, "schools": ["台大"]}, follow_redirects=False)
+    wait_done(seeded, latest_run_id(seeded))
+    r = seeded.post("/runs/start", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/" and run_count(seeded) == 2
+    wait_done(seeded, latest_run_id(seeded))
+    with seeded.app.state.session_factory() as s:
+        first, second = s.scalars(select(Run).order_by(Run.id)).all()
+        assert first.scope_json == second.scope_json
+
+
+def test_home_start_blocked_while_running(seeded):
+    from tests.run_helpers import TODAY, default_config
+    from app.runs.service import create_run
+    with seeded.app.state.session_factory() as s:
+        run_id = create_run(s, default_config(), today=TODAY).id
+        s.get(Run, run_id).status = "running"
+        s.commit()
+    manager = seeded.app.state.run_manager
+    manager.any_running = manager.is_running = lambda *a: True
+    manager.current_run_id = run_id
+    r = seeded.post("/runs/start", follow_redirects=False)
+    assert r.headers["location"] == "/" and run_count(seeded) == 1
+    assert ">❚❚ 暫停</button>" in seeded.get("/").text
+
+
+def test_fetch_page_shows_unit_status_after_done(seeded, respx_mock):
+    FakeElsevier().install(respx_mock)
+    seeded.post("/runs", data=FORM, follow_redirects=False)
+    run_id = latest_run_id(seeded)
+    wait_done(seeded, run_id)
+    text = seeded.get(f"/runs/{run_id}/fetch").text
+    assert "<th>狀態</th>" in text and "完成" in text and f'href="/runs/{run_id}"' in text

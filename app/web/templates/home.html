@@ -1,40 +1,23 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>首頁</h1>
-<div class="grid">
-  <section class="card">
-    <h2>Mapping 版本</h2>
-    {% if mapping %}
-    <p>{{ mapping.filename }}</p>
-    <p class="muted">匯入時間 {{ mapping.imported_at.strftime("%Y/%m/%d %H:%M") }}</p>
-    {% if mapping_errors %}<p class="error">有 {{ mapping_errors }} 項錯誤，請到 <a href="/mapping">Mapping 管理</a> 查看</p>{% endif %}
-    {% else %}
-    <p class="muted">尚未匯入，請到 <a href="/mapping">Mapping 管理</a> 上傳</p>
-    {% endif %}
-  </section>
-  <section class="card">
-    <h2>教師數資料</h2>
-    {% if teacher_import %}
-    <p>{{ teacher_import.source_filename }}</p>
-    <p class="muted">{{ teacher_years[0] }}～{{ teacher_years[-1] }} 學年度</p>
-    {% if unmatched_count %}<p class="warning">有 {{ unmatched_count }} 個單位尚未對應，請到 <a href="/teachers">教師數</a> 處理</p>{% endif %}
-    {% else %}
-    <p class="muted">尚未匯入，請到 <a href="/teachers">教師數</a> 上傳</p>
-    {% endif %}
-  </section>
+{% include "_pipeline.html" %}
+<div class="grid home-cards">
   <section class="card">
     <h2>API 連線狀態</h2>
-    <div hx-get="/status" hx-trigger="load"><p class="muted">檢查中…</p></div>
+    <div id="api-quota" hx-get="/status/panel" hx-trigger="load"><p class="muted">載入中…</p></div>
+    <p id="api-check"></p>
+    <button type="button" hx-get="/status" hx-target="#api-quota" hx-disabled-elt="this">檢查連線</button>
   </section>
-  <section class="card">
+  <section class="card recent-card">
     <h2>最近分析</h2>
     {% if runs %}
-    <ul>
-      {% for x in runs %}<li><a href="/runs/{{ x.run.id }}">#{{ x.run.id }}</a> {{ x.run.created_at.strftime("%m/%d %H:%M") }} {{ x.depts }}（{{ x.status }}{% if x.open %}，待確認 {{ x.open }}{% endif %}）</li>{% endfor %}
+    <ul class="recent-list" tabindex="0" aria-label="最近分析清單">
+      {% for x in runs %}<li><a href="/runs/{{ x.run.id }}">#{{ x.run.id }}</a> {{ x.run.created_at.strftime("%m/%d %H:%M") }} {% include "_departments.html" %}（{{ x.status }}{% if x.open %}，待確認 {{ x.open }}{% endif %}）</li>{% endfor %}
     </ul>
     <p><a href="/runs">全部版本紀錄</a></p>
     {% else %}
-    <p class="muted">尚無分析，<a href="/runs/new">新增分析</a></p>
+    <p class="muted">尚無分析，<a href="/runs/new">前往分析設定</a></p>
     {% endif %}
   </section>
 </div>

@@ -1,0 +1,11 @@
+{#- 逐格來源說明：放在 <td> 裡，evidence.js 會把所在格子變成可查的格子，點擊格子前往 data-href（明細或指定頁面）。 -#}
+{% macro ev(e, run_id, href=None) -%}
+{% if e %}<template class="ev-body" data-href="{{ href or ('/runs/%d/evidence?%s' % (run_id, e.drill.query) if e.drill else '') }}">
+<div class="ev-title">{{ e.title }}</div>
+{% if e.check_text %}<div class="{{ 'ev-warn' if e.mismatch else 'ev-ok' }}">{{ e.check_text }}</div>{% endif %}
+{% if e.formula %}<div class="ev-row"><span class="ev-k">公式</span><span>{{ e.formula }}</span></div>{% endif %}
+{% if e.substituted %}<div class="ev-row"><span class="ev-k">代入</span><span>{{ e.substituted }}</span></div>{% endif %}
+{% if e.missing_reason %}<div class="ev-row"><span class="ev-k">待確認</span><span class="pending">{{ e.missing_reason }}</span></div>{% endif %}
+{% if e.sources %}<div class="ev-sources">{% for s in e.sources %}<div class="ev-row"><span class="ev-k">{{ s.label }}</span><span>{{ s.text }}</span></div>{% endfor %}</div>{% endif %}
+</template>{% endif %}
+{%- endmacro %}

@@ -1,0 +1,61 @@
+{% if not e %}
+<p class="notice error">找不到資料。</p>
+{% else %}
+<h2>{{ e.title }}</h2>
+{% if e.check_text %}<p class="{{ 'ev-warn' if e.mismatch else 'ev-ok' }}">{{ e.check_text }}</p>{% endif %}
+<dl class="ev-dl">
+  {% if e.formula %}<dt>公式</dt><dd>{{ e.formula }}</dd>{% endif %}
+  {% if e.substituted %}<dt>代入</dt><dd>{{ e.substituted }}</dd>{% endif %}
+  {% if e.missing_reason %}<dt>待確認</dt><dd class="pending">{{ e.missing_reason }}</dd>{% endif %}
+  {% for s in e.sources %}<dt>{{ s.label }}</dt><dd>{% if s.label == "Scopus 查詢" %}<code>{{ s.text }}</code>{% else %}{{ s.text }}{% endif %}</dd>{% endfor %}
+</dl>
+
+{% if kind == "papers" %}
+{% set labels = {"q1": "Q1", "top1": "Top1%", "top10": "Top10%", "intl_collab": "國際合著", "fwci": "FWCI", "citations": "被引數"} %}
+<h3>逐篇論文（{{ papers | length }} 篇{% if hit %}，符合 {{ labels[field] }} 的 {{ papers | selectattr("metrics." ~ field) | list | length }} 篇排在前面並標亮{% endif %}）</h3>
+<div class="table-scroll" role="region" aria-label="逐篇論文" tabindex="0">
+<table>
+  <tr><th>EID</th><th class="num">年份</th>
+    {% for f, label in labels.items() %}<th class="{{ 'num ' if f in ('fwci', 'citations') }}{{ 'ev-hitcol' if f == field }}">{{ label }}</th>{% endfor %}
+    <th>SciVal 有資料</th></tr>
+  {% for p in papers %}
+  <tr class="ev-paper{{ ' ev-hitrow' if hit and p.metrics[field] }}">
+    <td><a href="https://www.scopus.com/record/display.uri?eid={{ p.eid }}&amp;origin=resultslist" target="_blank" rel="noopener">{{ p.eid }}</a></td>
+    <td class="num">{{ p.metrics.year or "" }}</td>
+    {% for f in labels %}{% set v = p.metrics[f] %}
+    <td class="{{ 'num ' if f in ('fwci', 'citations') }}{{ 'ev-hitcol' if f == field }}">{% if v is none %}<span class="muted">—</span>{% elif v is sameas true %}✓{% elif v is sameas false %}{% elif f == "fwci" %}{{ fmt(v) }}{% else %}{{ v }}{% endif %}</td>
+    {% endfor %}
+    <td>{{ "是" if p.in_scival else "否" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+
+{% elif kind == "teachers" %}
+<h3>教育部對應明細</h3>
+{% if not detail %}
+<p class="muted">本次分析建立時尚未保存教育部對應明細。</p>
+{% else %}
+{% if detail.rows %}
+<div class="table-scroll" role="region" aria-label="教育部對應明細" tabindex="0">
+<table>
+  <tr><th>學年</th><th>學校</th><th>系所代碼</th><th>系所名稱</th><th class="num">人數</th></tr>
+  {% for r in detail.rows %}<tr><td>{{ detail.academic_year }}</td><td>{{ r.school }}</td><td>{{ r.code }}</td><td>{{ r.name }}</td><td class="num">{{ r.value }}</td></tr>{% endfor %}
+</table>
+</div>
+{% else %}<p class="pending">教育部 {{ detail.academic_year }} 學年查無對應系所。</p>{% endif %}
+{% if detail.override %}
+<p>人工修改為 <strong>{{ detail.override.count }}</strong> 人：{{ detail.override.reason }}（{{ detail.override.created_at[:16] | replace("T", " ") }}）</p>
+{% endif %}
+{% endif %}
+
+{% elif kind == "group" %}
+<h3>同組各單位</h3>
+<div class="table-scroll" role="region" aria-label="同組各單位" tabindex="0">
+<table>
+  <tr><th>單位</th><th class="num">值</th><th class="num">名次</th></tr>
+  {% for g in group %}<tr class="ev-group{{ ' ev-me' if g.me }}"><td>{{ g.label }}</td><td class="num">{{ fmt(g.value) }}</td><td class="num">{{ g.rank or "" }}</td></tr>{% endfor %}
+</table>
+</div>
+{% endif %}
+{% endif %}

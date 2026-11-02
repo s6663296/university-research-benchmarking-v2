@@ -45,11 +45,11 @@ def _no_header() -> bytes:
     return buf.getvalue()
 
 
-def test_import_twice_is_noop(session):
+def test_reimport_same_file_overwrites(session):
     data = build_moe([(113, "國立臺灣大學", "01131001", "資訊管理學系", 16), (114, "國立臺灣大學", "01131001", "資訊管理學系", 17)])
-    imp, created = import_moe(session, "moe.xlsx", data)
-    assert created and json.loads(imp.years_json) == [113, 114]
-    again, created2 = import_moe(session, "moe2.xlsx", data)
-    assert created2 is False and again.id == imp.id
-    assert session.scalar(select(func.count()).select_from(TeacherCountRow)) == 2
-    assert latest_import(session).id == imp.id
+    first = import_moe(session, "moe.xlsx", data)
+    assert json.loads(first.years_json) == [113, 114]
+    again = import_moe(session, "moe2.xlsx", data)
+    assert again.id != first.id and again.imported_at >= first.imported_at
+    assert latest_import(session).id == again.id
+    assert session.scalar(select(func.count()).select_from(TeacherCountRow)) == 4

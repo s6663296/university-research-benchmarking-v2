@@ -4,6 +4,7 @@ import hashlib
 import json
 from datetime import date, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import ApiCache as ApiCacheRow
@@ -20,22 +21,25 @@ class ApiCache:
         self.cache_days = cache_days
 
     def get(self, key: str) -> dict | None:
+        return self.get_many([key]).get(key)
+
+    def get_many(self, keys: list[str]) -> dict[str, dict]:
+        """一次查多筆，只回傳仍有效的。"""
+        oldest_valid = date.today() - timedelta(days=self.cache_days)
+        out: dict[str, dict] = {}
         with self.session_factory() as s:
-            row = s.get(ApiCacheRow, key)
-            if row is None:
-                return None
-            oldest_valid = date.today() - timedelta(days=self.cache_days)
-            if row.fetched_at.date() <= oldest_valid:
-                return None
-            return json.loads(row.response_json)
+            for i in range(0, len(keys), 500):  # SQLite 的 IN 參數有上限
+                rows = s.scalars(select(ApiCacheRow).where(ApiCacheRow.key.in_(keys[i:i + 500])))
+                out.update((r.key, json.loads(r.response_json)) for r in rows if r.fetched_at.date() > oldest_valid)
+        return out
 
     def put(self, key: str, endpoint: str, data: dict) -> None:
-        text = json.dumps(data, ensure_ascii=False)
+        self.put_many(endpoint, {key: data})
+
+    def put_many(self, endpoint: str, items: dict[str, dict]) -> None:
+        now = datetime.now()
         with self.session_factory() as s:
-            row = s.get(ApiCacheRow, key)
-            if row is None:
-                s.add(ApiCacheRow(key=key, endpoint=endpoint, fetched_at=datetime.now(), response_json=text))
-            else:
-                row.fetched_at = datetime.now()
-                row.response_json = text
+            for key, data in items.items():
+                s.merge(ApiCacheRow(key=key, endpoint=endpoint, fetched_at=now,
+                                    response_json=json.dumps(data, ensure_ascii=False)))
             s.commit()

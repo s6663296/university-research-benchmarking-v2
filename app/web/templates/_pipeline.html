@@ -1,0 +1,30 @@
+<section class="card pipeline-card" id="pipeline"
+  {% if polling %}hx-get="/pipeline" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <h2>自動化流程{% if polling %}<span class="muted small">　執行中，每 2 秒更新</span>{% endif %}</h2>
+  <ol class="pipeline">
+    {% for s in stages %}
+    <li class="stage {{ s.state }}">
+      {% if s.href %}<a href="{{ s.href }}" title="{{ state_labels[s.state] }}：{{ s.summary }}{% if s.detail %}（{{ s.detail }}）{% endif %}">{% else %}<div title="{{ state_labels[s.state] }}">{% endif %}
+        <span class="stage-icon" aria-label="{{ state_labels[s.state] }}">{{ {"done": "✔", "active": "●", "error": "✖", "warn": "!", "todo": loop.index}[s.state] }}</span>
+        <span class="stage-label">{% if s.label.endswith("檢查") %}{{ s.label[:-2] }}<span class="stage-label-tail">檢查</span>{% else %}{{ s.label }}{% endif %}</span>
+        <span class="stage-summary">{{ s.summary or state_labels[s.state] }}</span>
+        {% if s.detail %}<span class="stage-detail">{{ s.detail }}</span>{% endif %}
+      {% if s.href %}</a>{% else %}</div>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  <div class="pipeline-actions">
+    {% if control == "running" %}
+    <form method="post" action="/runs/{{ control_run_id }}/pause" class="inline"><button type="submit" class="secondary">❚❚ 暫停</button></form>
+    {% elif control == "paused" %}
+    <form method="post" action="/runs/{{ control_run_id }}/resume?home=1" class="inline"><button type="submit">▶ 繼續</button></form>
+    {% else %}
+    <form method="post" action="/runs/start" class="inline"><button type="submit">▶ 開始分析</button></form>
+    {% endif %}
+    {% if control != "idle" %}
+    <form method="post" action="/runs/{{ control_run_id }}/stop" class="inline"
+      onsubmit="return confirm('停止後首頁會結束這次分析，可開始新的分析；已抓到的資料會保留，之後仍可到該分析頁面繼續補抓。確定停止？')"><button type="submit" class="danger stop-button"><span class="stop-icon" aria-hidden="true"></span>停止</button></form>
+    {% endif %}
+    <a class="icon-button" href="/runs/new?reuse=1" title="分析設定" aria-label="分析設定">⚙</a>
+  </div>
+</section>

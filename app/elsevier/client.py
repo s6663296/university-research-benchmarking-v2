@@ -2,14 +2,21 @@
 
 import asyncio
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
 from app.elsevier.cache import ApiCache, cache_key
+from app.elsevier.quota import Quota, QuotaStore, api_of, quota_from_headers
 
-RATE_HEADERS = ("X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset")
+# 檢查連線時兩支 API 各打一次；SciVal 需要一篇實際存在的論文
+CHECKS = (
+    ("Scopus", "/content/search/scopus", {"query": "AFFILCOUNTRY(Taiwan)", "count": 1, "field": "eid"}),
+    ("SciVal", "/analytics/scival/publication/metrics",
+     {"metricTypes": "Collaboration", "publicationIds": "85121829056", "yearRange": "5yrs"}),
+)
 OFFLINE_MESSAGE = "無法連線到 api.elsevier.com，請確認是否在校內網路或已連上學校 VPN"
 
 
@@ -34,7 +41,6 @@ class ElsevierError(Exception):
 class ConnectionStatus:
     ok: bool
     message: str
-    remaining: str | None = None
 
 
 class AsyncRateLimiter:
@@ -67,6 +73,7 @@ class ElsevierClient:
     def __init__(self, api_key: str, insttoken: str = "", *, base_url: str = "https://api.elsevier.com",
                  rate_per_sec: float = 3.0, max_retries: int = 3, backoff_base: float = 1.0,
                  timeout: float = 60.0, cache: ApiCache | None = None,
+                 on_quota: Callable[[str, Quota], None] | None = None,
                  transport: httpx.AsyncBaseTransport | None = None):
         headers = {"X-ELS-APIKey": api_key, "Accept": "application/json"}
         if insttoken:
@@ -76,7 +83,8 @@ class ElsevierClient:
         self.max_retries = max_retries
         self.backoff_base = backoff_base
         self.cache = cache
-        self.quota: dict[str, str] = {}
+        self.on_quota = on_quota
+        self.quota: dict[str, Quota] = {}  # "scopus" / "scival" → 最近一次回應的額度
 
     async def _request(self, path: str, params: dict, retries: int) -> dict:
         attempt = 0
@@ -87,9 +95,11 @@ class ElsevierClient:
             except (httpx.TimeoutException, httpx.TransportError) as e:
                 error = ElsevierError(None, True, f"{OFFLINE_MESSAGE}（{type(e).__name__}）")
             else:
-                for h in RATE_HEADERS:
-                    if h in resp.headers:
-                        self.quota[h] = resp.headers[h]
+                quota = quota_from_headers(resp.headers)
+                if quota is not None:
+                    self.quota[api_of(path)] = quota
+                    if self.on_quota is not None:
+                        self.on_quota(api_of(path), quota)
                 if resp.status_code == 200:
                     try:
                         return strip_links(resp.json())
@@ -103,24 +113,27 @@ class ElsevierClient:
             await asyncio.sleep(self.backoff_base * 2 ** attempt)
             attempt += 1
 
-    async def get_json(self, path: str, params: dict, *, use_cache: bool = True) -> dict:
+    async def get_json(self, path: str, params: dict, *, use_cache: bool = True, store: bool = True) -> dict:
+        """store=False：呼叫端自行快取（例如 SciVal 逐篇快取），不存整個回應。"""
         key = cache_key(path, params)
         if self.cache is not None and use_cache:
             cached = self.cache.get(key)
             if cached is not None:
                 return cached
         data = await self._request(path, params, self.max_retries)
-        if self.cache is not None:
+        if self.cache is not None and store:
             self.cache.put(key, path, data)
         return data
 
     async def check_connection(self) -> ConnectionStatus:
-        try:
-            await self._request("/content/search/scopus", {"query": "AFFILCOUNTRY(Taiwan)", "count": 1}, 0)
-        except ElsevierError as e:
-            message = e.message if e.status is not None else OFFLINE_MESSAGE
-            return ConnectionStatus(False, message, self.quota.get("X-RateLimit-Remaining"))
-        return ConnectionStatus(True, "連線正常", self.quota.get("X-RateLimit-Remaining"))
+        """Scopus 與 SciVal 的額度與權限各自獨立，兩支都檢查（各用 1 次額度）。"""
+        for name, path, params in CHECKS:
+            try:
+                await self._request(path, params, 0)
+            except ElsevierError as e:
+                message = e.message if e.status is not None else OFFLINE_MESSAGE
+                return ConnectionStatus(False, f"{name}：{message}")
+        return ConnectionStatus(True, "連線正常")
 
     async def aclose(self) -> None:
         await self._http.aclose()
@@ -141,4 +154,5 @@ def make_client(settings, session) -> ElsevierClient:
         backoff_base=float(get_setting(session, "backoff_base_sec")),
         timeout=float(get_setting(session, "timeout_sec")),
         cache=cache,
+        on_quota=QuotaStore(cache.session_factory).record,
     )

@@ -39,7 +39,7 @@ def default_config(**kw) -> RunConfig:
 
 def seed(session) -> None:
     v, _ = import_mapping(session, "m.xlsx", sample_mapping())
-    imp, _ = import_moe(session, "moe.xlsx", sample_moe())
+    imp = import_moe(session, "moe.xlsx", sample_moe())
     auto_link(session, v.id, imp.id)
 
 
@@ -56,7 +56,7 @@ class FakeElsevier:
         match = re.search(r"AFFIL\(([^)]+)\)", query)
         if match is None:  # 連線檢查
             return httpx.Response(200, json={"search-results": {"opensearch:totalResults": "1", "entry": []}})
-        name = match.group(1)
+        name = re.sub(r'"\s*W/\d+\s*"', ", ", match.group(1)).strip('"')  # 還原成「系所, 校名」
         for key, status in self.fail.items():
             if key in name:
                 return httpx.Response(status)

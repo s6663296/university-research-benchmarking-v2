@@ -3,8 +3,12 @@ from pathlib import Path
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
+from app.mapping.parser import NCU_SHEET, is_ncu
+
 WEB_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=WEB_DIR / "templates")
+templates.env.globals["is_ncu"] = is_ncu
+templates.env.globals["NCU_SHEET"] = NCU_SHEET
 
 
 def get_session(request: Request):

@@ -2,11 +2,18 @@
   {% if polling %}hx-get="/runs/{{ run.id }}/progress" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
   <h2>執行進度：{{ run_status }}（{{ done }}／{{ total }}）</h2>
   {% if run.error %}<div class="notice error">{{ run.error }}</div>{% endif %}
-  {% if not polling and (run.status in ("interrupted", "failed") or unfinished) %}
+  {% if polling %}
+  <div class="run-controls">
+    <form method="post" action="/runs/{{ run.id }}/pause?from=run" class="inline"><button type="submit" class="secondary">❚❚ 暫停</button></form>
+    <form method="post" action="/runs/{{ run.id }}/stop?from=run" class="inline"
+      onsubmit="return confirm('停止後首頁會結束這次分析，可開始新的分析；已抓到的資料會保留，之後仍可在這裡繼續補抓。確定停止？')"><button type="submit" class="danger">■ 停止</button></form></div>
+  {% endif %}
+  {% if not polling and (run.status in ("interrupted", "stopped", "failed") or unfinished) %}
   <form method="post" action="/runs/{{ run.id }}/resume">
     <button type="submit">{{ "重新抓取所有未完成單位" if run.status == "done" else "從中斷處繼續" }}</button>
     <span class="muted">只抓未完成的單位，已抓到的部分會使用快取</span></form>
   {% endif %}
+  <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>
     <tr><th>學校</th><th>中大系所</th><th>狀態</th><th class="num">篇數</th><th>說明</th><th></th></tr>
     {% for r in rows %}
@@ -21,4 +28,5 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 </section>

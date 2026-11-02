@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db.models import Anomaly, Result, Run, RunPublication, RunUnit
 from app.db.settings_store import get_setting
 from app.elsevier.client import ElsevierClient, ElsevierError
-from app.elsevier.scival import PubMetrics, fetch_metrics, scival_year_ranges
+from app.elsevier.scival import MetricsFetcher, PubMetrics, scival_year_ranges
 from app.elsevier.scopus import search_docs
 from app.elsevier.selfcite import get_strategy
 from app.mapping.service import units_of
@@ -21,6 +21,8 @@ from app.metrics.indicators import INDICATORS, importance_note
 from app.runs.anomaly import detect
 from app.runs.scope import RunConfig, build_groups
 
+# 單位抓取中的狀態：先 Scopus 取 EID，再 SciVal 取指標（"fetching" 為舊版資料庫的狀態）
+FETCHING = ("scopus", "scival", "fetching")
 PUB_FIELDS = ("year", "q1", "top1", "top10", "intl_collab", "citations")
 
 
@@ -103,15 +105,21 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
         elif only_unfinished:
             q = q.where(RunUnit.status != "done")
         by_query: dict[str, list[int]] = defaultdict(list)
+        scopus_done: set[int] = set()  # 接續時 Scopus 已完成的單位，進度直接從 SciVal 算起
         for ru in s.scalars(q.order_by(RunUnit.id)):
             by_query[ru.query].append(ru.id)
+            if only_unfinished and ru.eid_count is not None:
+                scopus_done.add(ru.id)
         strategy = get_strategy(run.self_citation_strategy)
-        batch_size = int(get_setting(s, "scival_batch_size"))
         year_range, cite_range = scival_year_ranges(run.period_from, run.period_to, run.created_at.year)
         s.commit()
     if use_cache is None:
         use_cache = only_unfinished or not cfg.force_refresh
-    data_source: dict = {}
+    # 被引數要含今年以後的引用，用 cite_range；其他指標在兩種 yearRange 下逐篇結果相同（實測 100 篇），
+    # 所以能一起抓時整批改用 cite_range，每篇只需一次請求
+    merged = strategy.scival_include_self is not None
+    fetcher = MetricsFetcher(client, year_range=cite_range if merged else year_range,
+                             include_self=strategy.scival_include_self, use_cache=use_cache)
 
     def update(ru_ids: list[int], **fields) -> None:
         with session_factory() as s:
@@ -121,28 +129,32 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
             s.commit()
 
     async def fetch(query: str, ru_ids: list[int]) -> None:
-        update(ru_ids, status="fetching", error=None)
+        if all(i in scopus_done for i in ru_ids):
+            update(ru_ids, status="scival", error=None)
+        else:
+            update(ru_ids, status="scopus", error=None, eid_count=None)
         try:
-            docs = await search_docs(client, query, use_cache=use_cache)
+            docs = await search_docs(client, query, use_cache=use_cache)  # 接續時由快取取回 EID 清單
             ids = [d.scopus_id for d in docs]
-            metrics, source = await fetch_metrics(client, ids, year_range=year_range, batch_size=batch_size,
-                                                  use_cache=use_cache) if ids else ({}, {})
-            cites = await strategy.citations(client, ids, year_range=cite_range, batch_size=batch_size,
-                                             use_cache=use_cache) if ids else {}
+            # 先記下篇數：失敗時看 eid_count 有沒有值，就知道是卡在 Scopus 還是 SciVal
+            update(ru_ids, status="scival", eid_count=len(docs))
+            metrics = await fetcher.fetch(ids)
+            cites = None if merged or not ids else await strategy.citations(client, ids, year_range=cite_range,
+                                                                            use_cache=use_cache)
         except ElsevierError as e:
             update(ru_ids, status="failed", error=e.message)
             return
         except Exception as e:  # 單一單位的非預期錯誤不影響其他單位
             update(ru_ids, status="failed", error=f"非預期錯誤：{type(e).__name__}: {e}")
             return
-        data_source.update(source)
         with session_factory() as s:
             for ru in s.scalars(select(RunUnit).where(RunUnit.id.in_(ru_ids))):
                 s.execute(delete(RunPublication).where(RunPublication.run_id == run_id,
                                                        RunPublication.unit_id == ru.unit_id))
                 for d in docs:
                     m = metrics.get(d.scopus_id) or PubMetrics(d.scopus_id)
-                    m.citations = cites.get(d.scopus_id)
+                    if cites is not None:
+                        m.citations = cites.get(d.scopus_id)
                     s.add(RunPublication(run_id=run_id, unit_id=ru.unit_id, scopus_id=d.scopus_id, eid=d.eid,
                                          metrics_json=pub_to_json(m, d.scopus_id in metrics)))
                 ru.status, ru.eid_count, ru.fetched_at, ru.error = "done", len(docs), datetime.now(), None
@@ -153,7 +165,7 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
         with session_factory() as s:
             recompute(s, run_id)
             run = s.get(Run, run_id)
-            _write_notes(s, run, data_source)
+            _write_notes(s, run, fetcher.data_source)
             run.status = "done"
             s.commit()
     except Exception as e:  # 未預期的錯誤：整個分析標為失敗，保留已抓到的資料
