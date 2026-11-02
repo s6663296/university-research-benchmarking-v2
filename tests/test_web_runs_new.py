@@ -146,3 +146,12 @@ def test_fetch_page_shows_unit_status_after_done(seeded, respx_mock):
     wait_done(seeded, run_id)
     text = seeded.get(f"/runs/{run_id}/fetch").text
     assert "<th>狀態</th>" in text and "完成" in text and f'href="/runs/{run_id}"' in text
+
+
+def test_department_picker_cards(seeded):
+    r = seeded.get("/runs/new")
+    assert r.status_code == 200
+    assert 'class="college-card' in r.text and "data-college-all" in r.text
+    # 學院勾選框只負責在頁面上勾選系所，不另外送出；送出的永遠是實際勾選的系所
+    assert 'name="colleges"' not in r.text
+    assert r.text.count('name="ncu_depts"') == 3

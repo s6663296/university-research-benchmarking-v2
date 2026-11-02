@@ -178,3 +178,17 @@ th.ev-hitcol, td.ev-hitcol { background: #eef4fb; }
 tr.ev-hitrow td { background: #fff8d6; }
 tr.ev-hitrow td.ev-hitcol { background: #ffe9a3; font-weight: 600; }
 tr.ev-me td { background: #fff3c4; font-weight: 600; }
+
+/* 分析設定：學院與系所（每個學院一張卡片） */
+.picker-head { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.picker-head h2 { margin: 0; }
+.picker-head [data-clear] { margin-left: auto; }
+.college-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: .8rem; align-items: start; }
+.college-card { margin: 0; padding: .3rem .8rem .6rem; border: 1px solid var(--line); border-radius: 4px; min-width: 0; }
+.college-card.picked { border-color: var(--primary); background: #f3f7fb; }
+.college-card legend { display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  width: 100%; padding: 0 .3rem; font-weight: 600; }
+.college-card legend label { margin: 0; }
+.college-card legend [data-count] { font-weight: normal; font-size: .9em; }
+.college-card label.dept { display: flex; align-items: flex-start; gap: .4rem; margin: .25rem 0; line-height: 1.4; }
+.college-card label.dept input, .college-card legend input { margin-top: .2em; flex: none; }

@@ -17,18 +17,61 @@
   <label><input type="checkbox" name="force_refresh" value="1" {% if cfg.force_refresh %}checked{% endif %}> 重新抓取全部資料（不使用快取）</label>
 </section>
 
-<section class="card">
-  <h2>學院與系所</h2>
-  <p class="muted">勾選學院表示該學院的全部系所。</p>
-  {% for college, depts in colleges.items() %}
-  <div class="field">
-    <label><input type="checkbox" name="colleges" value="{{ college }}"> <strong>{{ college }}</strong></label><br>
-    {% for d in depts %}<label><input type="checkbox" name="ncu_depts" value="{{ d }}" {% if d in cfg.ncu_depts %}checked{% endif %}> {{ d }}</label>{% endfor %}
+<section class="card" id="dept-picker">
+  <div class="picker-head">
+    <h2>學院與系所</h2>
+    <span class="muted" data-total>已選 0 個系所</span>
+    <button type="button" class="secondary" data-clear>全部清除</button>
   </div>
+  <p class="muted">勾選學院會一併勾選該學院的全部系所，也可以只勾部分系所。</p>
+  <div class="college-grid">
+  {% for college, depts in colleges.items() %}
+  {% set picked = depts | select("in", cfg.ncu_depts) | list %}
+  <fieldset class="college-card" data-college>
+    <legend>
+      <label><input type="checkbox" data-college-all {% if picked | length == depts | length %}checked{% endif %}> {{ college }}</label>
+      <span class="muted" data-count>{{ picked | length }}/{{ depts | length }}</span>
+    </legend>
+    {% for d in depts %}<label class="dept"><input type="checkbox" name="ncu_depts" value="{{ d }}" {% if d in cfg.ncu_depts %}checked{% endif %}> {{ d }}</label>{% endfor %}
+  </fieldset>
   {% else %}
   <p class="error">mapping 表中沒有中大系所（請確認有「{{ NCU_SHEET }}」分頁）。</p>
   {% endfor %}
+  </div>
 </section>
+<script>
+// 勾學院＝勾選該學院全部系所；系所只勾一部分時學院顯示「部分選取」，並更新已選數量
+(() => {
+  const picker = document.getElementById("dept-picker");
+  if (!picker) return;
+  const cards = [...picker.querySelectorAll("[data-college]")];
+  const depts = card => [...card.querySelectorAll('input[name="ncu_depts"]')];
+  const refresh = () => {
+    let total = 0;
+    for (const card of cards) {
+      const boxes = depts(card), n = boxes.filter(b => b.checked).length, all = card.querySelector("[data-college-all]");
+      all.checked = n === boxes.length && n > 0;
+      all.indeterminate = n > 0 && n < boxes.length;
+      card.querySelector("[data-count]").textContent = `${n}/${boxes.length}`;
+      card.classList.toggle("picked", n > 0);
+      total += n;
+    }
+    picker.querySelector("[data-total]").textContent = `已選 ${total} 個系所`;
+  };
+  for (const card of cards) {
+    card.querySelector("[data-college-all]").addEventListener("change", e => {
+      depts(card).forEach(b => { b.checked = e.target.checked; });
+      refresh();
+    });
+    depts(card).forEach(b => b.addEventListener("change", refresh));
+  }
+  picker.querySelector("[data-clear]").addEventListener("click", () => {
+    cards.forEach(card => depts(card).forEach(b => { b.checked = false; }));
+    refresh();
+  });
+  refresh();
+})();
+</script>
 
 <section class="card">
   <h2>比較範圍</h2>
