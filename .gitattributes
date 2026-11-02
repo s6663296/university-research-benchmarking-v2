@@ -1,0 +1,4 @@
+# Windows 批次檔必須是 CRLF 換行，否則 cmd 可能誤判指令或找不到 goto 標籤。
+# 以 -text 原樣保存 CRLF，不論用 git clone（任何 autocrlf 設定）或從 GitHub 下載 ZIP 都不會被轉成 LF。
+*.bat -text
+*.cmd -text
