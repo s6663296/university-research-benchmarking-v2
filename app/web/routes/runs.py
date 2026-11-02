@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Anomaly, Run, RunUnit, Unit
 from app.db.settings_store import get_setting
 from app.elsevier.client import make_client
+from app.funding.service import count_text, funding_notes, funding_table, money, run_colleges
 from app.mapping.parser import is_ncu
 from app.mapping.service import latest_version, units_of
 from app.metrics.indicators import BY_ID, INDICATORS
@@ -218,6 +219,9 @@ def result_context(session: Session, run: Run, ind: str) -> dict:
         anomalies=anomalies, open_anomalies=sum(1 for x in anomalies if x["a"].status != "confirmed"),
         notes=json.loads(run.notes_json or "{}"), fmt=fmt,
         report_depts=RunConfig.from_json(run.scope_json).ncu_depts,
+        funding=[(t, funding_notes(t)) for t in (funding_table(session, run, c) for c in run_colleges(session, run))]
+        if ind == "funding" else [],
+        money=money, count_text=count_text,
     )
 
 

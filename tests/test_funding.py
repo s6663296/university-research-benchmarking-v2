@@ -32,8 +32,9 @@ def test_parse_skips_rows_without_year():
 
 
 def test_import_is_idempotent(session):
-    a, _ = import_funding(session, "f.xlsx", sample_funding())
-    b, _ = import_funding(session, "f2.xlsx", sample_funding())
+    data = sample_funding()   # 同一份檔案（每次產生的 xlsx 內含存檔時間，內容會不同）
+    a, _ = import_funding(session, "f.xlsx", data)
+    b, _ = import_funding(session, "f2.xlsx", data)
     assert a.id == b.id and a.row_count == 6
 
 
@@ -143,3 +144,12 @@ def test_funding_template_matches_parser_columns():
     from app.funding.parser import COLUMNS
     from app.funding.template import HEADERS
     assert set(COLUMNS.values()) <= set(HEADERS)
+
+
+def test_run_detail_funding_tab(client, web_done_run):
+    r = client.get(f"/runs/{web_done_run}?ind=funding")
+    assert r.status_code == 200 and "?ind=funding" in r.text and "沒有經分表資料" in r.text
+    client.post("/funding/import", files={"file": ("經分表.xlsx", sample_funding())})
+    r = client.get(f"/runs/{web_done_run}?ind=funding")
+    assert "計算：A = 國科會計畫經費加總 ÷ 1" in r.text and "師均經費 = C ÷ D" in r.text
+    assert "1,800,000" in r.text and "計入的計畫明細" in r.text

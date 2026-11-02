@@ -18,6 +18,7 @@
 <div class="tabs">
   <a href="?ind=summary" class="{{ 'active' if ind == 'summary' }}">排名總表</a>
   {% for i in indicators %}<a href="?ind={{ i.id }}" class="{{ 'active' if ind == i.id }}">{{ i.label }}</a>{% endfor %}
+  <a href="?ind=funding" class="{{ 'active' if ind == 'funding' }}">計畫經費</a>
   <a href="?ind=anomalies" class="{{ 'active' if ind == 'anomalies' }}">待確認（{{ open_anomalies }}）</a>
   <a href="?ind=notes" class="{{ 'active' if ind == 'notes' }}">版本備註</a>
   <a href="?ind=downloads" class="{{ 'active' if ind == 'downloads' }}">下載</a>
@@ -72,6 +73,49 @@
   {% endfor %}
   </div>
   <p class="muted">* 教師數為人工修改　｜　數字格可停留查看計算方式與來源，點擊查看明細</p>
+
+{% elif ind == "funding" %}
+  {% for t, fnotes in funding %}
+  {% set n = t.years | length %}
+  <h2>{{ t.college }}國科會及產學計畫經費年平均</h2>
+  {% if not t.has_data %}
+  <p class="notice">分析期間（{{ run.period_from - 1911 }}–{{ run.period_to - 1911 }} 年度）沒有經分表資料，簡報不會有計畫經費頁。請到 <a href="/funding">計畫經費統計表</a> 匯入經分表後，重新下載簡報即可（不需重新分析）。</p>
+  {% else %}
+  <p class="muted">計算：A = 國科會計畫經費加總 ÷ {{ n }}（年度數）；B = 產學合作計畫經費加總 ÷ {{ n }}；C = A + B；師均經費 = C ÷ D（單年教師數）。
+    國科會為計畫主類「國科會計畫」、產學為「產學合作計畫」，以計畫主持人主聘單位歸屬系所；採用 {{ t.years | join("、") }} 年度。</p>
+  <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
+  <table>
+    <tr><th>系所</th><th class="num">國科會件數{% if n > 1 %}（年平均）{% endif %}</th><th class="num">國科會年平均 (A)</th><th class="num">產學年平均 (B)</th><th class="num">加總 (C=A+B)</th><th class="num">單年教師數 (D)</th><th class="num">師均經費 (C/D)</th></tr>
+    {% for r in t.rows %}
+    <tr>
+      <td>{{ r.ncu_dept }}</td>
+      <td class="num">{{ count_text(r.nstc_count_avg) }}</td>
+      <td class="num">{{ money(r.nstc_avg) }}</td>
+      <td class="num">{{ money(r.industry_avg) }}</td>
+      <td class="num">{{ money(r.total_avg) }}</td>
+      <td class="num">{% if r.teachers is none %}<span class="pending">待確認</span>{% else %}{{ r.teachers }}{% if r.teacher_manual %}*{% endif %}{% endif %}</td>
+      <td class="num">{% if r.per_faculty is none %}<span class="pending">待確認</span>{% else %}{{ money(r.per_faculty) }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  <p class="muted" style="white-space: pre-line">{{ fnotes | join("\n") }}</p>
+  <details>
+    <summary>計入的計畫明細（{{ t.rows | sum(attribute="nstc_count") + t.rows | sum(attribute="industry_count") }} 件）</summary>
+    {% for r in t.rows if r.projects %}
+    <h4>{{ r.ncu_dept }}（國科會 {{ r.nstc_count }} 件、產學 {{ r.industry_count }} 件）</h4>
+    <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
+    <table>
+      <tr><th>年度</th><th>計畫主類</th><th>計畫名稱</th><th>主持人</th><th class="num">經費總額</th><th class="num">經分表列號</th></tr>
+      {% for p in r.projects %}<tr><td>{{ p.year }}</td><td>{{ p.main_category }}</td><td>{{ p.title or "" }}</td><td>{{ p.pi or "" }}</td><td class="num">{{ money(p.amount) }}</td><td class="num">{{ p.row }}</td></tr>{% endfor %}
+    </table>
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
+  {% else %}
+  <p class="muted">這次分析沒有選到任何學院。</p>
+  {% endfor %}
 
 {% elif ind == "anomalies" %}
   {% if not anomalies %}<p class="ok">沒有待確認的項目。</p>{% endif %}
