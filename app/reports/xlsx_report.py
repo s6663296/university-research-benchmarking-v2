@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Anomaly, Run, RunPublication, RunUnit, Unit
+from app.funding.service import funding_notes, funding_table, run_colleges
 from app.metrics.indicators import INDICATORS
 from app.reports.provenance import Explainer, Explanation
 from app.reports.tables import SUMMARY_INDICATORS, indicator_table, run_groups, summary_table
@@ -83,6 +84,36 @@ def _indicator_sheet(wb, session, run, ind, groups, explainer):
         ws.append([])
 
 
+def _funding_sheets(wb, session: Session, run: Run) -> None:
+    """計畫經費（經分表）：各系所年平均，以及計入的每一筆計畫（附經分表列號，方便與人工計算核對）。"""
+    tables = [t for t in (funding_table(session, run, c) for c in run_colleges(session, run)) if t.has_data]
+    if not tables:
+        return
+    ws = wb.create_sheet("計畫經費")
+    detail = wb.create_sheet("計畫經費明細")
+    _append(detail, ["學院", "中大系所", "年度", "計畫主類", "計畫類別", "計畫流水號", "國科會計畫編號", "計畫名稱",
+                     "計畫主持人", "主聘單位一級", "主聘單位二級", "執行單位二級", "委託單位", "經費總額", "經分表列號"], BOLD)
+    for t in tables:
+        _append(ws, [f"{t.college}國科會及產學計畫經費年平均（{'、'.join(map(str, t.years))} 年度）"], BOLD)
+        _append(ws, ["系所", "國科會件數", "國科會件數年平均", "國科會經費合計", "國科會年平均", "產學件數",
+                     "產學經費合計", "產學年平均", "加總(年平均)", "單年教師數", "師均經費", "年度數"], BOLD)
+        for r in t.rows:
+            ws.append([r.ncu_dept, r.nstc_count, float(r.nstc_count_avg), float(r.nstc_amount), float(r.nstc_avg),
+                       r.industry_count, float(r.industry_amount), float(r.industry_avg), float(r.total_avg),
+                       PENDING if r.teachers is None else r.teachers,
+                       PENDING if r.per_faculty is None else float(r.per_faculty), len(t.years)])
+            for c in (4, 5, 7, 8, 9, 11):
+                ws.cell(ws.max_row, c).number_format = "#,##0"
+            ws.cell(ws.max_row, 3).number_format = "0.00"
+            for p in r.projects:
+                detail.append([t.college, r.ncu_dept, p.year, p.main_category, p.category, p.serial, p.nstc_no,
+                               p.title, p.pi, p.pi_college, p.pi_dept, p.exec_dept, p.sponsor, float(p.amount), p.row])
+                detail.cell(detail.max_row, 14).number_format = "#,##0"
+        for line in funding_notes(t):
+            ws.append([line])
+        ws.append([])
+
+
 def build_run_workbook(session: Session, run_id: int, out_path: Path) -> Path:
     run = session.get(Run, run_id)
     groups = run_groups(session, run)
@@ -103,6 +134,8 @@ def build_run_workbook(session: Session, run_id: int, out_path: Path) -> Path:
             for col, ind_id in enumerate(SUMMARY_INDICATORS, start=3):
                 _comment(ws, col, s.explain.get(ind_id))
         ws.append([])
+
+    _funding_sheets(wb, session, run)
 
     for ind in INDICATORS:
         _indicator_sheet(wb, session, run, ind, groups, explainer)

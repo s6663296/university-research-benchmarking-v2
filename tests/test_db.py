@@ -11,7 +11,8 @@ from app.db.settings_store import get_setting, set_setting
 
 EXPECTED = {"mapping_versions", "units", "mapping_issues", "teacher_imports", "teacher_counts",
             "unit_teacher_links", "teacher_overrides", "runs", "run_units", "run_publications", "api_cache", "api_quota",
-            "results", "anomalies", "exports", "app_settings", "alembic_version"}
+            "results", "anomalies", "exports", "app_settings", "alembic_version", "funding_imports",
+            "funding_projects"}
 
 
 def test_init_db_creates_tables_with_wal(tmp_path):

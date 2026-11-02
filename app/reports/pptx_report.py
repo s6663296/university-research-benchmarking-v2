@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Anomaly, Run
 from app.db.settings_store import get_setting
 from app.elsevier.selfcite import get_strategy
+from app.funding.service import count_text, funding_notes, funding_table, money
 from app.mapping.parser import NCU_SHEET, is_ncu
 from app.mapping.service import units_of
 from app.metrics.indicators import BY_ID, importance_note
@@ -193,6 +194,9 @@ class ReportBuilder:
             Anomaly.run_id == run_id, Anomaly.status != "confirmed"))
         self.prs = Presentation(TEMPLATE)
         self.layouts = {layout.name: layout for layout in self.prs.slide_layouts}
+        # 有經分表資料時，第 I 部分是計畫經費，論文指標順延為 II、III（範例報告的編號）
+        self.funding = funding_table(session, self.run, self.college)
+        self.sections = ("II", "III") if self.funding.has_data else ("I", "II")
 
     # ---- 共用 ----
     def _slide(self, title: str, layout: str = "只有標題"):
@@ -243,11 +247,34 @@ class ReportBuilder:
     def toc(self):
         slide = self.prs.slides.add_slide(self.layouts["標題及內容"])
         slide.shapes.title.text = "目錄"
-        lines = [f"I. {self.college}各系所論文指標於對標學校排名", f"II. {self.ncu_dept}各指標比較", *TOC_ITEMS]
+        summary_no, detail_no = self.sections
+        lines = [f"{summary_no}. {self.college}各系所論文指標於對標學校排名", f"{detail_no}. {self.ncu_dept}各指標比較",
+                 *TOC_ITEMS]
+        if self.funding.has_data:
+            lines.insert(0, f"I. {self.college}國科會及產學計畫經費年平均")
         frame = slide.placeholders[1].text_frame
         frame.text = lines[0]
         for line in lines[1:]:
             frame.add_paragraph().text = line
+
+    def funding_page(self):
+        """範例第 3 頁：學院各系所國科會及產學計畫經費年平均（資料來自經分表），本系所列標紅。"""
+        t = self.funding
+        slide = self._slide(f"I. {self.college}國科會及產學計畫經費年平均")
+        avg = "年平均" if len(t.years) > 1 else ""
+        rows = [["系所", f"國科會件數{'(年平均)' if avg else ''}", f"國科會{avg or '經費'}", f"產學{avg or '經費'}",
+                 "加總", "單年教師數", "師均經費"]]
+        red = []
+        for r in t.rows:
+            if r.unit_id == self.unit_id:
+                red.append(len(rows))
+            rows.append([r.ncu_dept, count_text(r.nstc_count_avg), money(r.nstc_avg), money(r.industry_avg),
+                         money(r.total_avg), _teachers(r), money(r.per_faculty)])
+        notes = funding_notes(t)
+        note_h = 220000 * len(notes) + 100000
+        table = _table(slide, rows, MARGIN, SUMMARY_Y, CONTENT_W, BOTTOM - SUMMARY_Y - note_h, red_rows=red)
+        bottom = SUMMARY_Y + sum(row.height for row in table.rows) + 100000
+        _text(slide, "\n".join(notes), MARGIN, bottom, CONTENT_W, note_h, Pt(10))
 
     def summary(self):
         highlight = int(get_setting(self.session, "rank_highlight_top"))
@@ -275,12 +302,12 @@ class ReportBuilder:
             else:
                 pages[-1] += group
         for i, page in enumerate(pages):
-            slide = self._slide(f"I、{self.college}各系所論文指標排名" + ("（續）" if i else ""))
+            slide = self._slide(f"{self.sections[0]}、{self.college}各系所論文指標排名" + ("（續）" if i else ""))
             rows, red = body(page)
             _table(slide, rows, MARGIN, SUMMARY_Y, CONTENT_W, max_height, 2, merges, red_cells=red)
 
     def pubs(self):
-        slide = self._slide(f"II. {self.period}論文發表篇數師均")
+        slide = self._slide(f"{self.sections[1]}. {self.period}論文發表篇數師均")
         self._notes(slide, f"{importance_note(BY_ID['q1'])}（Q1）　{importance_note(BY_ID['total'])}（論文發表篇數）",
                     "註3：單位排序以Q1單年師均數字高到低排序。")
 
@@ -322,6 +349,8 @@ class ReportBuilder:
     def build(self, out_path: Path) -> Path:
         self.cover()
         self.toc()
+        if self.funding.has_data:
+            self.funding_page()
         self.summary()
         self.pubs()
         self.count_page("top1", "被引數達全球前1%篇數(師均)")

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>計畫經費統計表</h1>
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+{% if warnings %}<div class="notice">已匯入，但有 {{ warnings | length }} 列略過：{{ warnings[:10] | join("；") }}{% if warnings | length > 10 %}……{% endif %}</div>{% endif %}
+
+<section class="card">
+  <h2>匯入經分表</h2>
+  <form method="post" action="/funding/import" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".xlsx" required>
+    <button type="submit">上傳</button>
+  </form>
+  <p class="muted">上傳計畫管理系統匯出的「計畫基本資料」xlsx。可以分年度上傳多個檔案，同一年度以最後匯入的檔案為準。
+    國科會 = 計畫主類「{{ nstc | join("、") }}」，產學 = 「{{ industry | join("、") }}」，以計畫主持人主聘單位歸屬系所；
+    簡報第 I 部分的年平均 = 分析期間內各年度加總 ÷ 有資料的年度數。</p>
+  {% if not imports %}<p class="muted">尚未匯入經分表，簡報不會有計畫經費頁。</p>{% endif %}
+</section>
+
+{% if imports %}
+<section class="card">
+  <h2>已匯入的檔案</h2>
+  <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
+  <table>
+    <tr><th>檔名</th><th>年度</th><th class="num">計畫數</th><th>報表產製時間</th><th>匯入時間</th><th>採用年度</th><th></th></tr>
+    {% for imp in imports %}
+    <tr>
+      <td>{{ imp.filename }}</td>
+      <td>{{ years_of(imp) | join("、") }}</td>
+      <td class="num">{{ imp.row_count }}</td>
+      <td>{{ imp.generated_at or "" }}</td>
+      <td>{{ imp.imported_at.strftime("%Y/%m/%d %H:%M") }}</td>
+      <td>{% for y, s in sources.items() if s.id == imp.id %}{{ y }} {% else %}<span class="muted">已被較新的檔案取代</span>{% endfor %}</td>
+      <td><form method="post" action="/funding/{{ imp.id }}/delete" class="inline" onsubmit="return confirm('確定刪除這個檔案的資料？')"><button type="submit" class="secondary">刪除</button></form></td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>各系所經費</h2>
+  <form method="get" action="/funding">
+    學院
+    <select name="college" onchange="this.form.submit()">
+      {% for c in colleges %}<option value="{{ c }}" {% if c == college %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    </select>
+    <span class="muted">依計畫主持人主聘單位</span>
+  </form>
+  <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
+  <table>
+    <tr><th>系所</th><th>年度</th><th class="num">國科會件數</th><th class="num">國科會經費</th><th class="num">產學件數</th><th class="num">產學經費</th><th class="num">其他（不計入）</th></tr>
+    {% for (dept, year), v in rows %}
+    <tr>
+      <td>{{ dept }}</td><td>{{ year }}</td>
+      <td class="num">{{ v.nstc[0] }}</td><td class="num">{{ money(v.nstc[1]) }}</td>
+      <td class="num">{{ v.industry[0] }}</td><td class="num">{{ money(v.industry[1]) }}</td>
+      <td class="num">{% if v.other[0] %}{{ v.other[0] }} 件 / {{ money(v.other[1]) }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

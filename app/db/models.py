@@ -203,3 +203,36 @@ class AppSetting(Base):
     __tablename__ = "app_settings"
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value_json: Mapped[str] = mapped_column(Text)
+
+
+class FundingImport(Base):
+    """計畫經費（經分表）匯入：研發處計畫管理系統匯出的「計畫基本資料」xlsx。"""
+    __tablename__ = "funding_imports"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    filename: Mapped[str] = mapped_column(String)
+    sha256: Mapped[str] = mapped_column(String)
+    imported_at: Mapped[datetime]
+    generated_at: Mapped[str | None] = mapped_column(String)   # 檔案標題列的「報表產製日期時間」
+    years_json: Mapped[str] = mapped_column(Text, default="[]")  # 檔案內的年度（民國年）
+    row_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class FundingProject(Base):
+    __tablename__ = "funding_projects"
+    __table_args__ = (Index("ix_funding_projects_import_year", "funding_import_id", "year"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    funding_import_id: Mapped[int] = mapped_column(ForeignKey("funding_imports.id"))
+    row: Mapped[int] = mapped_column(Integer)                  # Excel 列號，方便回頭核對
+    year: Mapped[int] = mapped_column(Integer)                 # 年度（民國年）
+    main_category: Mapped[str | None] = mapped_column(String)  # 計畫主類，例如 國科會計畫、產學合作計畫
+    category: Mapped[str | None] = mapped_column(String)       # 計畫類別
+    serial: Mapped[str | None] = mapped_column(String)         # 計畫流水號
+    nstc_no: Mapped[str | None] = mapped_column(String)        # 國科會計畫編號
+    title: Mapped[str | None] = mapped_column(Text)
+    pi: Mapped[str | None] = mapped_column(String)
+    pi_college: Mapped[str | None] = mapped_column(String)     # 計畫主持人主聘單位一級
+    pi_dept: Mapped[str | None] = mapped_column(String)        # 計畫主持人主聘單位二級
+    exec_college: Mapped[str | None] = mapped_column(String)   # 計畫執行單位一級名稱
+    exec_dept: Mapped[str | None] = mapped_column(String)      # 計畫執行單位二級名稱
+    sponsor: Mapped[str | None] = mapped_column(String)        # 委託單位名稱
+    amount: Mapped[Decimal] = mapped_column(DecimalText)       # 經費總額
