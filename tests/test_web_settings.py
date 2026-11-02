@@ -21,6 +21,7 @@ def form(client, **overrides):
     data = {
         "rate_per_sec": "3.0", "max_retries": "3", "backoff_base_sec": "1.0", "timeout_sec": "60",
         "cache_days": "1", "anomaly_change_threshold": "0.3",
+        "max_concurrency": "4", "rate_limit_retries": "8", "max_backoff_sec": "120",
         "teacher_column": "total", "self_citation_strategy": "scival_param", "rank_highlight_top": "2",
     }
     data.update(overrides)

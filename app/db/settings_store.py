@@ -14,6 +14,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "backoff_base_sec": 1.0,
     "timeout_sec": 60,
     "cache_days": 1,                      # 1 = 只用當天的快取
+    "max_concurrency": 4,                 # 同時送出的請求數上限（全校分析時避免被 SciVal 限速）
+    "rate_limit_retries": 8,              # 遇到 HTTP 429 時的重試次數（與一般錯誤的重試分開計算）
+    "max_backoff_sec": 120,               # 限速時單次等待的上限秒數
     "anomaly_change_threshold": 0.30,
     "teacher_column": "total",            # 或 "asst_prof_plus"
     "self_citation_strategy": "scival_param",
