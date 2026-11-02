@@ -43,11 +43,33 @@ def config_from_form(form, units: list[Unit], session: Session) -> RunConfig:
     colleges = set(form.getlist("colleges"))
     depts = dict.fromkeys([*form.getlist("ncu_depts"), *(u.ncu_dept for u in ncu if u.ncu_college in colleges)])
     y_from, y_to = default_period(date.today())
+    ncu_depts = tuple(d for d in (u.ncu_dept for u in ncu) if d in depts)
+    # 每個系所各自的對標學校（表單欄位 dept_school = "系所::學校"）；沒有這個欄位時沿用 schools 套用到全部系所
+    schools = tuple(form.getlist("schools"))
+    dept_schools: tuple = ()
+    if "dept_school_form" in form:
+        picked: dict[str, list[str]] = {d: [] for d in ncu_depts}
+        for value in form.getlist("dept_school"):
+            dept, _, school = str(value).partition("::")
+            if dept in picked and school:
+                picked[dept].append(school)
+        dept_schools = tuple((d, tuple(v)) for d, v in picked.items())
+        schools = tuple(dict.fromkeys(s for _, v in dept_schools for s in v))
+    # 院內比較納入的系所（表單欄位 college_dept = "學院::系所"）；沒有這個欄位時納入整個學院
+    college_depts: tuple = ()
+    if "college_dept_form" in form:
+        chosen: dict[str, list[str]] = {str(c): [] for c in form.getlist("college_dept_form")}
+        for value in form.getlist("college_dept"):
+            college, _, dept = str(value).partition("::")
+            if college in chosen:
+                chosen[college].append(dept)
+        college_depts = tuple((c, tuple(v)) for c, v in chosen.items())
     return RunConfig(
         year_from=_int(form.get("year_from"), y_from), year_to=_int(form.get("year_to"), y_to),
-        ncu_depts=tuple(d for d in (u.ncu_dept for u in ncu) if d in depts),
+        ncu_depts=ncu_depts,
         comparisons=frozenset(c for c in form.getlist("comparisons") if c in COMPARISON_LABELS),
-        schools=tuple(form.getlist("schools")),
+        schools=schools,
+        dept_schools=dept_schools, college_depts=college_depts,
         custom_unit_ids=tuple(_int(i, 0) for i in form.getlist("custom_unit_ids")),
         academic_year=_int(form.get("academic_year"), 0),
         teacher_column=get_setting(session, "teacher_column"),
@@ -64,6 +86,11 @@ def _form_page(request: Request, session: Session, cfg: RunConfig | None = None,
     for u in ncu:
         colleges.setdefault(u.ncu_college or "（未分學院）", []).append(u.ncu_dept)
     schools = list(dict.fromkeys(u.school for u in units if not is_ncu(u.school)))
+    # 對標學校表格：每個中大系所在各校對應的系所（mapping 上該校填 x 或空白就沒有）
+    counterparts: dict[str, dict[str, Unit]] = {u.ncu_dept: {} for u in ncu}
+    for u in units:
+        if not is_ncu(u.school) and u.ncu_dept in counterparts:
+            counterparts[u.ncu_dept].setdefault(u.school, u)
     unit_groups: dict[str, list[Unit]] = {}   # 自訂比較的單位清單：依學校分組，中大排最前
     for u in sorted(units, key=lambda u: not is_ncu(u.school)):
         unit_groups.setdefault(u.school, []).append(u)
@@ -73,7 +100,7 @@ def _form_page(request: Request, session: Session, cfg: RunConfig | None = None,
         cfg = RunConfig(y_from, y_to, (), frozenset({"benchmark", "college"}), tuple(schools), (),
                         years[-1] if years else 0, get_setting(session, "teacher_column"))
     return render(request, "run_new.html", status_code=status_code, cfg=cfg, colleges=colleges, schools=schools,
-                  units=units, unit_groups=unit_groups, years=years, labels=COMPARISON_LABELS, error=error,
+                  units=units, unit_groups=unit_groups, counterparts=counterparts, years=years, labels=COMPARISON_LABELS, error=error,
                   ready=version is not None and imp is not None)
 
 

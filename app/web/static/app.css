@@ -215,3 +215,17 @@ tr.ev-me td { background: #fff3c4; font-weight: 600; }
 .unit-group input { margin-top: .2em; flex: none; }
 [data-unit-search] { width: 16rem; }
 .unit-group[hidden], .unit-group label[hidden] { display: none; }
+
+/* 比較範圍：對標學校表格（列＝系所、欄＝學校）與院內比較系所 */
+.school-matrix { width: auto; min-width: 100%; }
+.school-matrix th, .school-matrix td { text-align: center; vertical-align: middle; padding: .25rem .4rem; }
+.school-matrix th:first-child, .school-matrix td:first-child { text-align: left; white-space: nowrap; }
+.school-matrix th label { display: flex; flex-direction: column; align-items: center; gap: .15rem; margin: 0;
+  font-weight: 600; font-size: .9em; white-space: nowrap; }
+.school-matrix td label { margin: 0; }
+.school-matrix tr[hidden] { display: none; }
+.college-members { padding: .4rem 0; border-top: 1px solid var(--line); }
+.college-members:first-of-type { border-top: 0; }
+.college-members[hidden], .compare-body [hidden] { display: none; }
+.matrix-scroll { overflow-x: auto; }   /* 不用 .table-scroll：避免被加上分頁，勾選的系所跑到其他頁 */
+.matrix-scroll[hidden] { display: none; }

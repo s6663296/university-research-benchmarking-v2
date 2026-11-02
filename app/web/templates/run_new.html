@@ -81,15 +81,24 @@
   <fieldset class="compare-card" data-compare>
     <legend><label><input type="checkbox" name="comparisons" value="benchmark" {% if "benchmark" in cfg.comparisons %}checked{% endif %}> {{ labels.benchmark }}</label>
       <span class="compare-where">簡報左邊表格</span></legend>
-    <p class="muted">中大的系所與其他學校的同一個系所比較（依對標學校資料表的對應；該校填 x 或空白的不列入）。</p>
+    <p class="muted">每個系所各自勾選要比較的學校。「—」表示對標學校資料表上該校沒有對應的系所；滑鼠停在勾選框上可看到該校的系所名稱。</p>
     <div class="compare-body">
-      <div class="picker-head">
-        <strong>對標學校</strong><span class="muted" data-school-count></span>
-        <span class="picker-actions"><button type="button" class="secondary" data-schools="all">全選</button>
-          <button type="button" class="secondary" data-schools="none">全不選</button></span>
-      </div>
-      <div class="option-grid">
-        {% for s in schools %}<label><input type="checkbox" name="schools" value="{{ s }}" {% if s in cfg.schools %}checked{% endif %}> {{ s }}</label>{% endfor %}
+      <input type="hidden" name="dept_school_form" value="1">
+      <p class="muted" data-matrix-empty>請先在上方「學院與系所」勾選系所。</p>
+      <div class="matrix-scroll" role="region" aria-label="各系所的對標學校" tabindex="0" data-matrix-wrap>
+      <table class="school-matrix">
+        <tr>
+          <th>系所</th><th class="num">已選</th>
+          {% for s in schools %}<th><label title="勾選／取消：套用到下面全部系所"><input type="checkbox" data-col="{{ loop.index0 }}"><span>{{ s | replace("國立", "") }}</span></label></th>{% endfor %}
+        </tr>
+        {% for college, depts in colleges.items() %}{% for d in depts %}
+        <tr data-dept="{{ d }}">
+          <td><label title="勾選／取消這個系所的全部學校"><input type="checkbox" data-row> {{ d }}</label></td>
+          <td class="num" data-row-count></td>
+          {% for s in schools %}<td>{% set u = counterparts[d].get(s) %}{% if u %}<input type="checkbox" name="dept_school" value="{{ d }}::{{ s }}" data-col="{{ loop.index0 }}" title="{{ s }}－{{ u.dept_zh or u.ncu_dept }}" aria-label="{{ d }} 對標 {{ s }}" {% if s in cfg.schools_for(d) %}checked{% endif %}>{% else %}<span class="muted" title="對標學校資料表上{{ s }}沒有對應的系所">—</span>{% endif %}</td>{% endfor %}
+        </tr>
+        {% endfor %}{% endfor %}
+      </table>
       </div>
     </div>
   </fieldset>
@@ -97,7 +106,22 @@
   <fieldset class="compare-card" data-compare>
     <legend><label><input type="checkbox" name="comparisons" value="college" {% if "college" in cfg.comparisons %}checked{% endif %}> {{ labels.college }}</label>
       <span class="compare-where">簡報右邊表格</span></legend>
-    <p class="muted">同一學院的全部系所互相比較（不論上面只勾了幾個系所，都會納入整個學院）。<span data-college-summary></span></p>
+    <p class="muted">勾選要放在同一張院內比較表裡互相排名的系所。這次分析的系所一定會納入（灰色勾選）。<span data-college-summary></span></p>
+    <div class="compare-body">
+      <p class="muted" data-college-empty>請先在上方「學院與系所」勾選系所。</p>
+      {% for college, depts in colleges.items() %}
+      {% set members = cfg.college_members(college) %}
+      <div class="college-members" data-college-block="{{ college }}">
+        <input type="hidden" name="college_dept_form" value="{{ college }}">
+        <div class="picker-head"><strong>{{ college }}</strong><span class="muted" data-member-count></span>
+          <span class="picker-actions"><button type="button" class="secondary" data-members="all">全選</button>
+            <button type="button" class="secondary" data-members="none">只留本次系所</button></span></div>
+        <div class="option-grid">
+          {% for d in depts %}<label><input type="checkbox" name="college_dept" value="{{ college }}::{{ d }}" data-member="{{ d }}" {% if members is none or d in members %}checked{% endif %}> {{ d }}</label>{% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
   </fieldset>
 
   <fieldset class="compare-card" data-compare>
@@ -121,31 +145,73 @@
   </fieldset>
 </section>
 <script>
-// 比較範圍：沒勾的比較收起設定；對標學校全選／全不選與計數；自訂單位搜尋；院內比較顯示本次會比較哪些學院
+// 比較範圍：沒勾的比較收起設定；對標學校表格（列＝系所、欄＝學校）只顯示上面勾選的系所；
+// 院內比較只顯示有勾系所的學院，本次分析的系所固定納入；自訂單位可搜尋
 (() => {
   const box = document.getElementById("compare-picker");
   if (!box) return;
   const cards = [...box.querySelectorAll("[data-compare]")];
-  const schools = [...box.querySelectorAll('input[name="schools"]')];
+  const rows = [...box.querySelectorAll("tr[data-dept]")];
+  const blocks = [...box.querySelectorAll("[data-college-block]")];
   const units = [...box.querySelectorAll('input[name="custom_unit_ids"]')];
+  const selected = () => new Set([...document.querySelectorAll('#dept-picker input[name="ncu_depts"]:checked')].map(b => b.value));
+  const cells = row => [...row.querySelectorAll('input[name="dept_school"]')];
+  const visibleRows = () => rows.filter(r => !r.hidden);
+  const colBoxes = i => visibleRows().flatMap(r => cells(r).filter(c => c.dataset.col === String(i)));
+  const setTri = (box, boxes) => {
+    const n = boxes.filter(b => b.checked).length;
+    box.checked = boxes.length > 0 && n === boxes.length;
+    box.indeterminate = n > 0 && n < boxes.length;
+    box.disabled = boxes.length === 0;
+  };
   const refresh = () => {
+    const depts = selected();
     for (const card of cards) {
       const body = card.querySelector(".compare-body");
       const on = card.querySelector('input[name="comparisons"]').checked;
       card.classList.toggle("off", !on);
       if (body) body.hidden = !on;
     }
-    box.querySelector("[data-school-count]").textContent = `${schools.filter(s => s.checked).length}/${schools.length}`;
+    // 對標學校表格
+    for (const row of rows) {
+      row.hidden = !depts.has(row.dataset.dept);
+      const boxes = cells(row);
+      row.querySelector("[data-row-count]").textContent = `${boxes.filter(b => b.checked).length}/${boxes.length}`;
+      setTri(row.querySelector("[data-row]"), boxes);
+    }
+    box.querySelectorAll("th input[data-col]").forEach(h => setTri(h, colBoxes(h.dataset.col)));
+    box.querySelector("[data-matrix-empty]").hidden = depts.size > 0;
+    box.querySelector("[data-matrix-wrap]").hidden = depts.size === 0;
+    // 院內比較
+    const summary = [];
+    for (const block of blocks) {
+      const members = [...block.querySelectorAll("[data-member]")];
+      const active = members.some(m => depts.has(m.dataset.member));
+      block.hidden = !active;
+      for (const m of members) {
+        const forced = depts.has(m.dataset.member);
+        if (forced) m.checked = true;
+        m.disabled = forced;   // 本次分析的系所一定納入（伺服器端也會自動加入）
+      }
+      const n = members.filter(m => m.checked).length;
+      block.querySelector("[data-member-count]").textContent = `${n}/${members.length}`;
+      if (active) summary.push(`${block.dataset.collegeBlock} ${n} 個系所`);
+    }
+    box.querySelector("[data-college-empty]").hidden = summary.length > 0;
+    box.querySelector("[data-college-summary]").textContent = summary.length ? `本次：${summary.join("、")}` : "";
     box.querySelector("[data-unit-count]").textContent = `已選 ${units.filter(u => u.checked).length} 個單位`;
-    const picked = [...document.querySelectorAll("#dept-picker [data-college]")]
-      .filter(c => c.querySelector('input[name="ncu_depts"]:checked'))
-      .map(c => `${c.querySelector("legend label").textContent.trim()} ${c.querySelectorAll('input[name="ncu_depts"]').length} 個系所`);
-    box.querySelector("[data-college-summary]").textContent = picked.length ? `本次：${picked.join("、")}` : "";
   };
-  box.addEventListener("change", refresh);
+  box.addEventListener("change", e => {
+    const t = e.target;
+    if (t.matches("th input[data-col]")) colBoxes(t.dataset.col).forEach(b => { b.checked = t.checked; });
+    if (t.matches("input[data-row]")) cells(t.closest("tr")).forEach(b => { b.checked = t.checked; });
+    refresh();
+  });
   document.getElementById("dept-picker")?.addEventListener("depts-changed", refresh);
-  box.querySelectorAll("[data-schools]").forEach(b => b.addEventListener("click", () => {
-    schools.forEach(s => { s.checked = b.dataset.schools === "all"; });
+  box.querySelectorAll("[data-members]").forEach(b => b.addEventListener("click", () => {
+    b.closest("[data-college-block]").querySelectorAll("[data-member]").forEach(m => {
+      if (!m.disabled) m.checked = b.dataset.members === "all";
+    });
     refresh();
   }));
   box.querySelector("[data-unit-search]").addEventListener("input", e => {

@@ -48,10 +48,22 @@ def wait_done(client, run_id, timeout=10):
     raise AssertionError("分析沒有在時間內完成")
 
 
+def checked(text: str, value: str) -> bool:
+    """勾選框是否預設勾選（屬性順序不固定，以該 input 標籤判斷）。"""
+    import re
+    tag = re.search(rf'<input[^>]*value="{re.escape(value)}"[^>]*>', text)
+    assert tag, value
+    return " checked" in tag.group(0)
+
+
 def test_new_run_defaults(seeded):
     text = seeded.get("/runs/new").text
     assert 'name="year_from" value="2021"' in text and 'name="year_to" value="2025"' in text
-    assert 'value="台大" checked' in text and 'value="政治" checked' in text
+    # 對標學校表格：每個系所在 mapping 有對應的學校才有勾選框，預設全部勾選
+    assert checked(text, "資訊管理學系::台大") and checked(text, "資訊管理學系::政治")
+    assert checked(text, "財務金融學系::台大") and 'value="財務金融學系::政治"' not in text
+    # 院內比較：預設納入整個學院
+    assert checked(text, "管理學院::會計研究所")
 
 
 def test_new_run_omits_connection_panel_and_reuse_link(seeded):
@@ -98,7 +110,7 @@ def test_reuse_last_config(seeded, respx_mock):
     seeded.post("/runs", data={**FORM, "schools": ["台大"]}, follow_redirects=False)
     wait_done(seeded, latest_run_id(seeded))
     text = seeded.get("/runs/new", params={"reuse": 1}).text
-    assert 'value="台大" checked' in text and 'value="政治" checked' not in text
+    assert checked(text, "資訊管理學系::台大") and not checked(text, "資訊管理學系::政治")
 
 
 def test_settings_page_renamed(seeded):
@@ -175,3 +187,49 @@ def test_custom_units_submitted_as_checkboxes(seeded, respx_mock):
     form = {**FORM, "comparisons": ["benchmark", "college", "custom"], "custom_unit_ids": ids}
     r = seeded.post("/runs/preview", data=form)
     assert r.status_code == 200
+
+
+def _groups(client):
+    from app.db.models import Unit
+    from app.reports.tables import run_groups
+    with client.app.state.session_factory() as s:
+        run = s.get(Run, latest_run_id(client))
+        return {(g.comparison, g.key): sorted((s.get(Unit, u).school, s.get(Unit, u).ncu_dept) for u in g.unit_ids)
+                for g in run_groups(s, run)}
+
+
+def test_each_department_has_its_own_schools(seeded, respx_mock):
+    FakeElsevier().install(respx_mock)
+    form = {**FORM, "ncu_depts": ["資訊管理學系", "財務金融學系"], "dept_school_form": "1",
+            "dept_school": ["資訊管理學系::政治", "財務金融學系::台大"]}
+    seeded.post("/runs", data=form, follow_redirects=False)
+    groups = _groups(seeded)
+    assert groups[("benchmark", "資訊管理學系")] == [("中央", "資訊管理學系"), ("政治", "資訊管理學系")]
+    assert groups[("benchmark", "財務金融學系")] == [("中央", "財務金融學系"), ("台大", "財務金融學系")]
+    text = seeded.get("/runs/new", params={"reuse": 1}).text
+    assert checked(text, "資訊管理學系::政治") and not checked(text, "資訊管理學系::台大")
+
+
+def test_department_with_no_schools_compares_only_itself(seeded, respx_mock):
+    FakeElsevier().install(respx_mock)
+    seeded.post("/runs", data={**FORM, "dept_school_form": "1", "dept_school": []}, follow_redirects=False)
+    assert _groups(seeded)[("benchmark", "資訊管理學系")] == [("中央", "資訊管理學系")]
+
+
+def test_college_comparison_members(seeded, respx_mock):
+    FakeElsevier().install(respx_mock)
+    form = {**FORM, "college_dept_form": "管理學院", "college_dept": ["管理學院::財務金融學系"]}
+    seeded.post("/runs", data=form, follow_redirects=False)
+    # 只勾財金，但本次分析的資管一定納入；會計所沒勾所以不在院內比較
+    assert _groups(seeded)[("college", "管理學院")] == [("中央", "財務金融學系"), ("中央", "資訊管理學系")]
+    text = seeded.get("/runs/new", params={"reuse": 1}).text
+    assert checked(text, "管理學院::財務金融學系") and not checked(text, "管理學院::會計研究所")
+
+
+def test_old_config_without_new_fields_keeps_behavior():
+    from app.runs.scope import RunConfig
+    old = '{"year_from": 2021, "year_to": 2025, "ncu_depts": ["資訊管理學系"], "comparisons": ["benchmark"],' \
+          ' "schools": ["台大"], "custom_unit_ids": [], "academic_year": 114, "teacher_column": "total"}'
+    cfg = RunConfig.from_json(old)
+    assert cfg.schools_for("資訊管理學系") == ("台大",) and cfg.college_members("管理學院") is None
+    assert RunConfig.from_json(cfg.to_json()) == cfg
