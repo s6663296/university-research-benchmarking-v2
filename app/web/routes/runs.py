@@ -150,6 +150,9 @@ async def _launch(request: Request, session: Session, cfg: RunConfig):
         await client.aclose()
     if not status.ok:
         return _form_page(request, session, cfg, f"無法開始分析：{status.message}", 400)
+    # 連線檢查期間可能已有另一次點擊開始了分析；從這裡到 start() 之間沒有 await，不會再被插隊
+    if request.app.state.run_manager.any_running():
+        return RedirectResponse("/", status_code=303)
     try:
         run = create_run(session, cfg)
     except ValueError as e:
@@ -181,8 +184,11 @@ def get_run(session: Session, run_id: int) -> Run:
 def progress(request: Request, run_id: int, session: Session = Depends(get_session)):
     ctx = progress_context(request, session, get_run(session, run_id))
     response = render(request, "_progress.html", **ctx)
-    if not ctx["polling"]:
-        response.headers["HX-Refresh"] = "true"
+    if not ctx["polling"]:  # 背景做完了：完成就直接到下載分頁，其餘（停止、失敗）重新整理顯示結果
+        if ctx["run"].status == "done":
+            response.headers["HX-Redirect"] = f"/runs/{run_id}?ind=downloads"
+        else:
+            response.headers["HX-Refresh"] = "true"
     return response
 
 

@@ -1,5 +1,5 @@
 <section class="card pipeline-card" id="pipeline"
-  {% if polling %}hx-get="/pipeline" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  {% if polling %}hx-get="/pipeline{% if watch %}?watch={{ watch }}{% endif %}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
   <h2>自動化流程{% if polling %}<span class="muted small">　執行中，每 2 秒更新</span>{% endif %}</h2>
   <ol class="pipeline">
     {% for s in stages %}
@@ -18,10 +18,12 @@
     <form method="post" action="/runs/{{ control_run_id }}/pause" class="inline"><button type="submit" class="secondary">❚❚ 暫停</button></form>
     {% elif control == "paused" %}
     <form method="post" action="/runs/{{ control_run_id }}/resume?home=1" class="inline"><button type="submit">▶ 繼續</button></form>
+    {% elif control == "done" %}
+    <a class="button" href="/runs/{{ control_run_id }}?ind=downloads">前往產出</a>
     {% else %}
-    <form method="post" action="/runs/start" class="inline"><button type="submit">▶ 開始分析</button></form>
+    <form method="post" action="/runs/start" class="inline" onsubmit="this.querySelector('button').disabled = true"><button type="submit">▶ 開始分析</button></form>
     {% endif %}
-    {% if control != "idle" %}
+    {% if control in ("running", "paused") %}
     <form method="post" action="/runs/{{ control_run_id }}/stop" class="inline"
       onsubmit="return confirm('停止後首頁會結束這次分析，可開始新的分析；已抓到的資料會保留，之後仍可到該分析頁面繼續補抓。確定停止？')"><button type="submit" class="danger stop-button"><span class="stop-icon" aria-hidden="true"></span>停止</button></form>
     {% endif %}

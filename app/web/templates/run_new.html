@@ -5,7 +5,7 @@
 {% if not ready %}
 <p class="notice">請先匯入 <a href="/mapping">對標學校資料表</a> 與 <a href="/teachers">教師人數統計表</a>。</p>
 {% else %}
-<form method="post" action="/runs" id="run-form">
+<form method="post" action="/runs" id="run-form" onsubmit="this.querySelector('button[type=submit]').disabled = true">
 <section class="card">
   <h2>期間與教師數</h2>
   <label>起 <input type="number" name="year_from" value="{{ cfg.year_from }}" style="width:6em"></label>

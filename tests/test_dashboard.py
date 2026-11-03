@@ -185,7 +185,7 @@ def test_home_shows_pipeline_and_polls_while_running(client, web_done_run):
         s.commit()
     client.app.state.run_manager.is_running = lambda run_id: True
     r = client.get("/pipeline")
-    assert r.status_code == 200 and 'hx-get="/pipeline"' in r.text
+    assert r.status_code == 200 and f'hx-get="/pipeline?watch={web_done_run}"' in r.text
 
 
 def test_mapping_and_teacher_details(session):
@@ -206,3 +206,20 @@ def test_home_has_start_button_and_settings_icon(client):
     text = client.get("/").text
     assert 'action="/runs/start"' in text and ">▶ 開始分析</button>" in text
     assert 'href="/runs/new?reuse=1"' in text and 'title="分析設定"' in text
+
+
+def test_finished_run_offers_outputs_instead_of_start(client, web_done_run):
+    """分析完成後首頁只提供「前往產出」，不再出現開始分析，避免重複按。"""
+    text = client.get("/").text.split('id="pipeline"')[1]
+    assert f'href="/runs/{web_done_run}?ind=downloads">前往產出</a>' in text
+    assert 'action="/runs/start"' not in text and "/stop" not in text
+
+
+def test_pipeline_poll_redirects_to_outputs_when_watched_run_finishes(client, web_done_run):
+    r = client.get(f"/pipeline?watch={web_done_run}")
+    assert r.headers.get("HX-Redirect") == f"/runs/{web_done_run}?ind=downloads"
+    with client.app.state.session_factory() as s:  # 停止的分析不跳轉，留在首頁
+        s.get(Run, web_done_run).status = "stopped"
+        s.commit()
+    r = client.get(f"/pipeline?watch={web_done_run}")
+    assert "HX-Redirect" not in r.headers and 'id="pipeline"' in r.text

@@ -101,7 +101,7 @@ def test_create_runs_in_background(seeded, respx_mock):
     run_id = latest_run_id(seeded)
     assert wait_done(seeded, run_id) == "done"
     frag = seeded.get(f"/runs/{run_id}/progress")
-    assert 'every 1s' not in frag.text and frag.headers.get("HX-Refresh") == "true"
+    assert 'every 1s' not in frag.text and frag.headers.get("HX-Redirect") == f"/runs/{run_id}?ind=downloads"
     assert "every 1s" not in seeded.get(f"/runs/{run_id}").text
 
 
@@ -150,6 +150,14 @@ def test_home_start_blocked_while_running(seeded):
     assert r.headers["location"] == "/" and run_count(seeded) == 1
     assert ">❚❚ 暫停</button>" in seeded.get("/").text
 
+
+
+def test_second_click_does_not_start_duplicate_run(seeded, respx_mock):
+    """連線檢查要等網路，連按兩次時第二次會在第一次開始後才通過檢查，不可再建立一次分析。"""
+    FakeElsevier().install(respx_mock)
+    seeded.app.state.run_manager.any_running = lambda: True  # 第一次點擊的分析已在背景執行
+    r = seeded.post("/runs", data=FORM, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/" and run_count(seeded) == 0
 
 def test_fetch_page_shows_unit_status_after_done(seeded, respx_mock):
     FakeElsevier().install(respx_mock)
