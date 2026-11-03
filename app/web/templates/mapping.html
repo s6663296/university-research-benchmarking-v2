@@ -9,7 +9,9 @@
   <form method="post" action="/mapping" enctype="multipart/form-data">
     <input type="file" name="file" accept=".xlsx" required>
     <button type="submit">上傳並檢查</button>
+    <a class="button secondary" href="/mapping/template.xlsx">下載空白範本</a>
   </form>
+  <p class="muted">範本只有欄位名稱，滑鼠停在欄位名稱上可看到填寫說明。第一個分頁固定為「國立中央大學」，之後每間對標學校一個分頁、分頁名稱就是校名。</p>
 </section>
 
 {% if not version %}

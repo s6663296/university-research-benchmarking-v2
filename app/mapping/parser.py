@@ -11,7 +11,7 @@ from typing import Literal
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
-from app.textnorm import clean, norm_name
+from app.textnorm import clean, is_example_row, norm_name
 
 NCU_SHEET = "國立中央大學"
 NCU_SHEETS = (NCU_SHEET, "中央")  # 舊版 mapping 的分頁用簡稱
@@ -84,7 +84,7 @@ def _parse_sheet(ws, result: ParseResult) -> list[ParsedUnit]:
             if clean(row[c_idx]) is not None:
                 ref = f"{get_column_letter(c_idx + 1)}{r_idx}"
                 result.issues.append(Issue(sheet, r_idx, "warning", f"儲存格 {ref} 在第 {MAX_COLUMNS} 欄之後，已忽略：{row[c_idx]}"))
-        if r_idx == 1:
+        if r_idx == 1 or is_example_row(row):   # 範本的示範列不匯入
             continue
         ncu_dept = cell(row, col_dept)
         if ncu_dept is None:

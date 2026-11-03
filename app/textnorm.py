@@ -3,6 +3,11 @@
 import re
 
 _SPACES = "　\xa0"
+EXAMPLE_MARK = "【範例資料】"   # 空白範本中示範列的標記；匯入時含此標記的列一律略過
+
+
+def is_example_row(row) -> bool:
+    return any(isinstance(v, str) and v.strip().startswith(EXAMPLE_MARK) for v in row)
 
 
 def clean(value: object) -> str | None:

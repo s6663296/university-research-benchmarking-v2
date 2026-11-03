@@ -43,3 +43,30 @@ def test_upload_rejects_non_xlsx(client):
 def test_home_shows_mapping_version(client):
     upload(client, sample_mapping(), "管理學院mapping.xlsx")
     assert "管理學院mapping.xlsx" in client.get("/").text
+
+
+def test_mapping_template_download_is_readable(client):
+    from app.mapping.parser import NCU_SHEET, parse_mapping
+    r = client.get("/mapping/template.xlsx")
+    assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
+    result = parse_mapping(r.content)
+    assert result.units == [] and not [i for i in result.issues if i.level == "error"]
+    from io import BytesIO
+    from openpyxl import load_workbook
+    wb = load_workbook(BytesIO(r.content))
+    assert wb.sheetnames[0] == NCU_SHEET
+    assert [c.value for c in wb[NCU_SHEET][1]] == ["學院", f"{NCU_SHEET}系所", NCU_SHEET, "系所中文名稱", "系所英文名稱", "備註"]
+    assert "/mapping/template.xlsx" in client.get("/mapping").text
+
+
+
+def test_mapping_template_has_marked_example_rows_that_are_skipped():
+    from io import BytesIO
+    from openpyxl import load_workbook
+    from app.mapping.parser import parse_mapping
+    from app.mapping.template import mapping_template
+    data = mapping_template()
+    wb = load_workbook(BytesIO(data))
+    for ws in wb.worksheets:
+        assert ws.max_row == 2 and ws["F2"].value.startswith("【範例資料】") and ws["B2"].value == "資訊管理學系"
+    assert parse_mapping(data).units == []      # 示範列不會被匯入

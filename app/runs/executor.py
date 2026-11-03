@@ -112,6 +112,8 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
                 scopus_done.add(ru.id)
         strategy = get_strategy(run.self_citation_strategy)
         year_range, cite_range = scival_year_ranges(run.period_from, run.period_to, run.created_at.year)
+        # 一次只處理幾個單位：全校分析時不會所有單位同時湧入，進度也會逐一完成而不是全部卡在半途
+        units_at_once = asyncio.Semaphore(max(int(get_setting(s, "max_concurrency")), 1))
         s.commit()
     if use_cache is None:
         use_cache = only_unfinished or not cfg.force_refresh
@@ -129,6 +131,10 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
             s.commit()
 
     async def fetch(query: str, ru_ids: list[int]) -> None:
+        async with units_at_once:
+            await _fetch(query, ru_ids)
+
+    async def _fetch(query: str, ru_ids: list[int]) -> None:
         if all(i in scopus_done for i in ru_ids):
             update(ru_ids, status="scival", error=None)
         else:

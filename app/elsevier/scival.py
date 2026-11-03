@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from app.elsevier.cache import cache_key
-from app.elsevier.client import ElsevierClient
+from app.elsevier.client import ElsevierClient, ElsevierError
 
 METRICS_PATH = "/analytics/scival/publication/metrics"
 METRIC_TYPES = "PublicationsInTopJournalPercentiles,OutputsInTopCitationPercentiles,FieldWeightedCitationImpact,Collaboration"
@@ -141,13 +141,32 @@ class MetricsFetcher:
                 self.data_source = self.data_source or entry.get("dataSource") or {}
                 self._results[sid].set_result(entry.get("result"))
         for chunk in batches(missing, MAX_IDS):
-            data = await self.client.get_json(METRICS_PATH, {**self.params, "publicationIds": ",".join(chunk)},
+            await self._get_split(chunk)
+
+    async def _get_split(self, ids: list[str]) -> None:
+        """整批失敗（逾時、5xx 等）時拆成兩半重試，直到單篇；成功的部分立即存下。
+
+        SciVal 忙碌時 100 篇的大批次容易逾時，拆小後通常就能成功，也能找出真正有問題的那一篇。
+        被限速（429）、權限錯誤與參數錯誤拆了也沒用，直接往上拋。
+        """
+        try:
+            data = await self.client.get_json(METRICS_PATH, {**self.params, "publicationIds": ",".join(ids)},
                                               use_cache=False, store=False)
-            source = data.get("dataSource") or {}
-            self.data_source = source or self.data_source
-            found = {str(r.get("publication", {}).get("id")): r for r in data.get("results", [])}
-            entries = {sid: {"result": found.get(sid), "dataSource": source} for sid in chunk}
-            if cache is not None:
-                cache.put_many(METRICS_PATH, {self._key(sid): e for sid, e in entries.items()})
-            for sid, e in entries.items():
-                self._results[sid].set_result(e["result"])
+        except ElsevierError as e:
+            if len(ids) <= 1 or e.status in (200, 400, 401, 403, 429):
+                raise
+            mid = len(ids) // 2
+            await self._get_split(ids[:mid])
+            await self._get_split(ids[mid:])
+            return
+        self._store(ids, data)
+
+    def _store(self, chunk: list[str], data: dict) -> None:
+        source = data.get("dataSource") or {}
+        self.data_source = source or self.data_source
+        found = {str(r.get("publication", {}).get("id")): r for r in data.get("results", [])}
+        entries = {sid: {"result": found.get(sid), "dataSource": source} for sid in chunk}
+        if self.client.cache is not None:
+            self.client.cache.put_many(METRICS_PATH, {self._key(sid): e for sid, e in entries.items()})
+        for sid, e in entries.items():
+            self._results[sid].set_result(e["result"])

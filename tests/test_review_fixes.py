@@ -144,8 +144,8 @@ async def test_report_headers_use_period_length(session, session_factory, respx_
     await execute_run(run.id, session_factory, fake_client())
     prs = Presentation(build_dept_report(session, run.id, "資訊管理學系", tmp_path / "r.pptx"))
     top1 = [s.table for s in prs.slides[4].shapes if s.has_table][0]
-    assert [c.text for c in top1.rows[0].cells] == ["單位", "3年篇數 (A)", "單年教師數(B)", "單年師均 (A/3/B)"]
+    assert [c.text for c in top1.rows[0].cells] == ["單位", "3年篇數\n(A)", "單年教師數\n(B)", "單年師均\n(A/3/B)"]
     pubs = [s.table for s in prs.slides[3].shapes if s.has_table][0]
-    assert pubs.cell(1, 1).text == "3年 總數"
+    assert pubs.cell(1, 1).text == "3年\n總數"
     ws = load_workbook(build_run_workbook(session, run.id, tmp_path / "r.xlsx"))["論文總篇數"]
     assert "3年篇數 (A)" in [c.value for c in ws[2]]
