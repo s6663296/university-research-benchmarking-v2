@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>簡報目錄與備註</h1>
+{% if saved %}<div class="notice ok">已儲存，下次下載簡報就會套用</div>{% endif %}
+<p>改「目錄名稱」後，簡報的目錄、章節標籤與頁面標題會一起更新；備註欄位預設為目前簡報的文字，可直接修改，清空則該頁不顯示。這裡的設定套用到所有系所的簡報。</p>
+<details class="card">
+  <summary>可用的變數（產出時自動換成各系所的內容）</summary>
+  <table>
+    <tr><th>變數</th><th>內容</th></tr>
+    {% for name, description in variables.items() %}<tr><td><code>{{ "{" ~ name ~ "}" }}</code></td><td>{{ description }}</td></tr>{% endfor %}
+  </table>
+</details>
+
+<form method="post" action="/report-text" class="report-text">
+  {% for item in pages %}
+  {% set page = item.page %}
+  <section class="card" id="{{ page.key }}" data-report-page>
+    <h2>{{ page.label }}{% if item.customized %} <span class="muted">（已修改）</span>{% endif %}</h2>
+    <div class="field"><label for="{{ page.key }}-name">目錄名稱</label>
+      <input type="text" id="{{ page.key }}-name" name="{{ page.key }}.name" value="{{ item.current.name }}" maxlength="60" required
+             data-toc-name data-default-name="{{ page.name }}" data-default-title="{{ page.title }}" data-title-prefix="{{ page.title_prefix }}"></div>
+    {% if page.title %}<p class="muted">連動的頁面標題：<strong data-title-preview></strong></p>{% endif %}
+    {% if not page.is_chapter %}
+    <div class="field"><label for="{{ page.key }}-tag">目錄括號標註（只出現在目錄）</label>
+      <input type="text" id="{{ page.key }}-tag" name="{{ page.key }}.tag" value="{{ item.current.tag }}" maxlength="60"></div>
+    {% endif %}
+    {% if page.title %}
+    <div class="field"><label for="{{ page.key }}-subtitle">備註：標題下方（※ 標示）</label>
+      <input type="text" id="{{ page.key }}-subtitle" name="{{ page.key }}.subtitle" value="{{ item.current.subtitle }}" maxlength="90"></div>
+    <div class="field"><label for="{{ page.key }}-formula">備註：計算方式</label>
+      <textarea id="{{ page.key }}-formula" name="{{ page.key }}.formula" rows="3">{{ item.current.formula }}</textarea></div>
+    <div class="field"><label for="{{ page.key }}-notes">備註：資料註腳</label>
+      <textarea id="{{ page.key }}-notes" name="{{ page.key }}.notes" rows="3">{{ item.current.notes }}</textarea></div>
+    {% endif %}
+    {% if item.customized %}<button type="submit" class="secondary" name="reset_key" value="{{ page.key }}" formnovalidate>恢復此項預設</button>{% endif %}
+  </section>
+  {% endfor %}
+  <div class="report-text-actions">
+    <button type="submit">儲存</button>
+    <button type="submit" class="secondary" name="reset_key" value="__all__" formnovalidate
+      onclick="return confirm('確定要把所有目錄名稱與備註恢復成預設文字？')">全部恢復預設</button>
+  </div>
+</form>
+<script src="/static/report-text.js?v=1" defer></script>
+{% endblock %}

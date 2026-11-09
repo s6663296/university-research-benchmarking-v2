@@ -30,10 +30,10 @@ from sqlalchemy.orm import Session
 from app.db.models import Anomaly, Run
 from app.db.settings_store import get_setting
 from app.elsevier.selfcite import get_strategy
-from app.funding.service import count_text, funding_notes, funding_table, money
+from app.funding.service import count_text, funding_files_text, funding_table, funding_warnings, money
 from app.mapping.parser import NCU_SHEET, is_ncu
 from app.mapping.service import units_of
-from app.metrics.indicators import BY_ID, importance_note
+from app.reports.report_text import INDICATOR_KEYS, ReportText
 from app.reports.tables import IndicatorTable, Row, fmt, indicator_table, summary_table
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "report_template.pptx"
@@ -75,16 +75,7 @@ PAD_X, PAD_Y = 64000, 22860
 LINE = 1.3                       # 行高 / 字級（中文字型行距較大，取保守值）
 WIDTH_SAFETY = 1.1               # 字寬估計的安全係數：實際字型略寬於估計，避免剛好放得下卻被換行
 PT = 12700                       # EMU per point
-
-TOC_ITEMS = [
-    "論文發表師均（QS / THE 看總篇數、高教深耕看 Q1）",
-    "論文被引次數達全球前 1% 論文篇數師均（THE 排名、高教深耕指標）",
-    "論文被引次數達全球前 10% 論文篇數師均（THE 排名指標）",
-    "FWCI（THE 排名、高教深耕指標）",
-    "論文平均被引次數，排除自我引用（QS 排名指標）",
-    "國際合著論文師均（QS / THE / 高教深耕指標）",
-]
-
+TEXT_INSETS = 2 * 45720          # 文字框預設的上下留白
 
 def _font(run, size=None, bold=None, color=None):
     """統一字型：中英文都用微軟正黑體。顏色要在字型之前設定（XML 元素順序）。"""
@@ -118,6 +109,18 @@ def _text(slide, text: str, left, top, width, height, size=Pt(14), color=GRAY, b
         run.text = line
         _font(run, size, bold, color)
     return box
+
+
+def _fit_size(text: str, width: int, height: int, max_pt: float, min_pt: float):
+    """使用者改長文字時由大到小試字級（每次 0.5pt），避免超出固定高度的文字框。"""
+    size = max_pt
+    while size > min_pt:
+        unit = size * PT                 # 文字框可換行，不需要表格欄寬的安全係數
+        lines = sum(max(1, math.ceil(_em(p) * unit / width)) for p in text.split("\n"))
+        if lines * size * PT * 1.2 + TEXT_INSETS <= height:
+            break
+        size -= 0.5
+    return Pt(max(size, min_pt))
 
 
 def _rect(slide, left, top, width, height, color):
@@ -289,16 +292,16 @@ class ReportBuilder:
         # 有經分表資料時，第 I 部分是計畫經費，論文指標順延為 II、III（範例報告的編號）
         self.funding = funding_table(session, self.run, self.college)
         nums = ("II", "III") if self.funding.has_data else ("I", "II")
-        self.kickers = {
-            "funding": "I. 國科會及產學計畫經費",
-            "summary": f"{nums[0]}. 論文指標排名總覽",
-            "detail": f"{nums[1]}. {self.ncu_dept}各指標比較",
-        }
-        self.sections = {
-            "funding": f"I. {self.college}國科會及產學計畫經費年平均",
-            "summary": f"{nums[0]}. {self.college}各系所論文指標於對標學校排名",
-            "detail": f"{nums[1]}. {self.ncu_dept}各指標比較",
-        }
+        self.numbers = {"funding": "I", "summary": nums[0], "detail": nums[1]}
+        strategy = get_strategy(self.run.self_citation_strategy)
+        self.text = ReportText(get_setting(session, "report_text"), {
+            "期間": self.period, "年數": self.years, "學院": self.college, "系所": self.ncu_dept,
+            "學年度": self.run.academic_year, "資料日期": self.notes.get("data_date", ""),
+            "名次門檻": get_setting(session, "rank_highlight_top"),
+            "自我引用方式": strategy.label + ("（待驗證）" if not strategy.verified else ""),
+            "經費年度": "、".join(map(str, self.funding.years)), "經費年數": len(self.funding.years),
+            "經費檔案": funding_files_text(self.funding),
+        })
 
     # ---- 共用 ----
     def _slide(self, title: str, kicker: str = "", subtitle: str = ""):
@@ -306,7 +309,8 @@ class ReportBuilder:
         slide = self.prs.slides.add_slide(self.layouts["只有標題"])
         banner_w = 4200000 if self.open_anomalies else 0
         if kicker:
-            _text(slide, kicker, MARGIN, KICKER_Y, CONTENT_W - banner_w - 100000, KICKER_H, Pt(12), BLUE, True,
+            width = CONTENT_W - banner_w - 100000
+            _text(slide, kicker, MARGIN, KICKER_Y, width, KICKER_H, _fit_size(kicker, width, KICKER_H, 12, 9), BLUE, True,
                   anchor=MSO_ANCHOR.MIDDLE)
         if self.open_anomalies:
             _text(slide, f"※本報告含 {self.open_anomalies} 項待人工確認資料", SLIDE_W - MARGIN - banner_w, KICKER_Y,
@@ -319,22 +323,29 @@ class ReportBuilder:
         frame.margin_left = frame.margin_right = 0
         frame.paragraphs[0].alignment = PP_ALIGN.LEFT
         for run in frame.paragraphs[0].runs:
-            _font(run, Pt(26), True, NAVY)
+            _font(run, _fit_size(title, CONTENT_W, TITLE_H, 26, 14), True, NAVY)
         _rect(slide, MARGIN, RULE_Y, CONTENT_W, RULE_H, BLUE)
         if subtitle:
-            _text(slide, subtitle, MARGIN, SUB_Y, CONTENT_W, SUB_H, Pt(12), GRAY, anchor=MSO_ANCHOR.MIDDLE)
+            _text(slide, subtitle, MARGIN, SUB_Y, CONTENT_W, SUB_H, _fit_size(subtitle, CONTENT_W, SUB_H, 12, 9), GRAY,
+                  anchor=MSO_ANCHOR.MIDDLE)
         return slide
 
-    def _bottom(self, slide, formula: str, *extra: str, notes: list[str] | None = None):
-        """底部：左邊是計算方式，右邊是資料註腳。"""
+    def _page(self, key: str, chapter: str, suffix: str = ""):
+        """依設定的文字建立內容頁：標題、章節標籤與副標都來自 report_text。"""
+        kicker = f"{self.numbers[chapter]}. {self.text.kicker(chapter)}"
+        return self._slide(self.text.title(key) + suffix, kicker, self.text.field(key, "subtitle"))
+
+    def _bottom(self, slide, key: str, warnings: list[str] | None = None):
+        """底部：左邊是計算方式，右邊是資料註腳；內容來自 report_text，清空的欄位不顯示。"""
+        formula = self.text.field(key, "formula")
         if formula:
-            _text(slide, "計算方式\n" + formula, LEFT_X, NOTE_Y, HALF_W, NOTE_H, Pt(10.5), GRAY)
+            text = "計算方式\n" + formula
+            _text(slide, text, LEFT_X, NOTE_Y, HALF_W, NOTE_H, _fit_size(text, HALF_W, NOTE_H, 10.5, 8), GRAY)
             for run in slide.shapes[-1].text_frame.paragraphs[0].runs:
                 _font(run, bold=True, color=NAVY)
-        if notes is None:
-            notes = [f"註1：單年教師數來自教育部公開資訊平台（{self.run.academic_year}學年度）；標 * 者為人工修改。",
-                     f"註2：資料來源 Scopus、SciVal，資料取得日期 {self.notes.get('data_date', '')}。"]
-        _text(slide, "\n".join([*notes, *extra]), RIGHT_X, NOTE_Y, HALF_W, NOTE_H, Pt(9.5), GRAY)
+        notes = "\n".join(filter(None, [self.text.field(key, "notes"), *(warnings or [])]))
+        if notes:
+            _text(slide, notes, RIGHT_X, NOTE_Y, HALF_W, NOTE_H, _fit_size(notes, HALF_W, NOTE_H, 9.5, 8), GRAY)
 
     def _label(self, slide, x, text: str):
         """表格名稱：左側藍色短條＋粗體字。"""
@@ -398,9 +409,10 @@ class ReportBuilder:
 
     def toc(self):
         slide = self._slide("目錄")
-        sections = [self.sections["summary"], self.sections["detail"]]
+        chapters = ["summary", "detail"]
         if self.funding.has_data:
-            sections.insert(0, self.sections["funding"])
+            chapters.insert(0, "funding")
+        sections = [f"{self.numbers[c]}. {self.text.field(c, 'name')}" for c in chapters]
         box = slide.shapes.add_textbox(Emu(MARGIN + 200000), Emu(SUB_Y + 100000), Emu(CONTENT_W - 400000),
                                        Emu(FOOTER_RULE_Y - SUB_Y - 250000))
         frame = box.text_frame
@@ -413,20 +425,19 @@ class ReportBuilder:
             _font(para.add_run(), Pt(20), True, NAVY)
             para.runs[0].text = section
             if i == len(sections) - 1:   # 最後一節（本系所各指標）列出各指標
-                for item in TOC_ITEMS:
+                for key in INDICATOR_KEYS:
                     sub = frame.add_paragraph()
                     sub.level = 1
                     sub.space_before = Pt(4)
                     run = sub.add_run()
-                    run.text = f"・{item}"
+                    run.text = f"・{self.text.toc_line(key)}"
                     _font(run, Pt(15), False, GRAY)
 
     def funding_page(self):
         """範例第 3 頁：學院各系所國科會及產學計畫經費年平均（資料來自經分表），本系所列標紅。"""
         t = self.funding
         n = len(t.years)
-        slide = self._slide(f"{self.college}國科會及產學計畫經費年平均", self.kickers["funding"],
-                            f"資料來源：計畫管理系統經分表（{'、'.join(map(str, t.years))} 年度）；以計畫主持人主聘單位歸屬系所")
+        slide = self._page("funding", "funding")
         # 表頭附公式代號、手動分兩行，窄欄才不會被擠成一字一行
         rows = [["系所", "國科會\n件數" + ("(年平均)" if n > 1 else ""), "國科會\n年平均 (A)", "產學\n年平均 (B)",
                  "加總\n(C=A+B)", "單年教師數\n(D)", "師均經費\n(C/D)"]]
@@ -439,9 +450,7 @@ class ReportBuilder:
         # 固定欄寬比例：自動分配會把只有數字的件數欄擠得太窄
         _table(slide, rows, MARGIN, SUMMARY_Y, CONTENT_W, BOTTOM - SUMMARY_Y, red_rows=red, max_size=FONT_SIZES[0],
                row_max=FUNDING_ROW_MAX, ratios=FUNDING_COLS)
-        self._bottom(slide, f"A = 國科會計畫經費加總 ÷ {n}（年度數）\n"
-                            f"B = 產學合作計畫經費加總 ÷ {n}（年度數）\n"
-                            "C = A + B；師均經費 = C ÷ D（單年教師數）", notes=funding_notes(t))
+        self._bottom(slide, "funding", funding_warnings(t))
 
     def summary(self):
         highlight = int(get_setting(self.session, "rank_highlight_top"))
@@ -469,18 +478,14 @@ class ReportBuilder:
             else:
                 pages[-1] += group
         for i, page in enumerate(pages):
-            slide = self._slide(f"{self.college}各系所論文指標排名" + ("（續）" if i else ""), self.kickers["summary"],
-                                f"各指標在比較群組內的名次（#1 為最高），名次 ≤ {highlight} 以紅字標示")
+            slide = self._page("summary", "summary", "（續）" if i else "")
             rows, red = body(page)
             _table(slide, rows, MARGIN, SUMMARY_Y, CONTENT_W, max_height, 2, merges, red_cells=red)
-            self._bottom(slide, "名次：在各比較群組內依指標數值由高到低排序，同值同名次\n"
-                                "對標學校: N間 = 含中央在內、該系所對標比較的單位數\n"
-                                f"{self.college}內 = 與{self.college}內系所比較")
+            self._bottom(slide, "summary")
 
     def pubs(self):
         n = self.years
-        slide = self._slide(f"{self.period} 論文發表篇數師均", self.kickers["detail"],
-                            f"{importance_note(BY_ID['q1'])}（Q1）　{importance_note(BY_ID['total'])}（論文發表篇數）")
+        slide = self._page("pubs", "detail")
 
         def render(t: IndicatorTable):
             total = {r.unit_id: r for r in indicator_table(self.session, self.run_id, t.comparison, t.key,
@@ -496,30 +501,27 @@ class ReportBuilder:
 
         merges = [((0, 0), (1, 0)), ((0, 1), (0, 2)), ((0, 3), (0, 4)), ((0, 5), (1, 5)), ((0, 6), (0, 7))]
         self._pair(slide, render, "q1", sort_by="q1", header_rows=2, merges=merges)
-        self._bottom(slide, f"A = Q1 期刊論文 {n} 年總數 ÷ {n}；B = 論文總數 ÷ {n}；C = 單年教師數\n"
-                            "Q1 師均 = A ÷ C；總計師均 = B ÷ C\n"
-                            "Q1：CiteScore 期刊排名前 25%",
-                     "註3：單位排序以 Q1 單年師均由高到低排序。")
+        self._bottom(slide, "pubs")
 
-    def count_page(self, indicator_id: str, title: str, definition: str):
+    def count_page(self, indicator_id: str):
         n = self.years
-        slide = self._slide(f"{self.period} {title}", self.kickers["detail"], importance_note(BY_ID[indicator_id]))
+        slide = self._page(indicator_id, "detail")
 
         def render(t: IndicatorTable):
             return [["單位", f"{n}年篇數\n(A)", "單年教師數\n(B)", f"單年師均\n(A/{n}/B)"],
                     *([_label(r, t.comparison), _count(r.raw), _teachers(r), fmt(r.value)] for r in t.rows)]
 
         self._pair(slide, render, indicator_id)
-        self._bottom(slide, f"A = {definition}的 {n} 年篇數；B = 單年教師數\n單年師均 = A ÷ {n} ÷ B")
+        self._bottom(slide, indicator_id)
 
-    def value_page(self, indicator_id: str, title: str, header: str, formula: str, *extra: str):
-        slide = self._slide(f"{self.period} {title}", self.kickers["detail"], importance_note(BY_ID[indicator_id]))
+    def value_page(self, indicator_id: str, header: str):
+        slide = self._page(indicator_id, "detail")
 
         def render(t: IndicatorTable):
             return [["單位", header], *([_label(r, t.comparison), fmt(r.value)] for r in t.rows)]
 
         self._pair(slide, render, indicator_id)
-        self._bottom(slide, formula, *extra)
+        self._bottom(slide, indicator_id)
 
     def build(self, out_path: Path) -> Path:
         self.cover()
@@ -528,15 +530,11 @@ class ReportBuilder:
             self.funding_page()
         self.summary()
         self.pubs()
-        self.count_page("top1", "被引數達全球前1%篇數（師均）", "被引次數達全球同領域前 1% 的論文")
-        self.count_page("top10", "被引數達全球前10%篇數（師均）", "被引次數達全球同領域前 10% 的論文")
-        self.value_page("fwci", "FWCI", "FWCI",
-                        "FWCI = 各篇論文 FWCI（領域加權引用影響係數）的平均\n1 表示與全球同領域平均相同")
-        strategy = get_strategy(self.run.self_citation_strategy)
-        extra = f"註3：排除自我引用方式：{strategy.label}" + ("（待驗證）" if not strategy.verified else "")
-        self.value_page("avg_citations", "平均論文被引次數（排除自我引用）", "平均論文被引次數(排除自我引用)",
-                        "平均論文被引次數 = 各篇被引次數加總 ÷ 論文總篇數\n被引次數排除自我引用", extra)
-        self.count_page("intl_collab", "國際合著篇數（師均）", "與國外機構合著的論文")
+        self.count_page("top1")
+        self.count_page("top10")
+        self.value_page("fwci", "FWCI")
+        self.value_page("avg_citations", "平均論文被引次數(排除自我引用)")
+        self.count_page("intl_collab")
         self._footer()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         self.prs.save(out_path)

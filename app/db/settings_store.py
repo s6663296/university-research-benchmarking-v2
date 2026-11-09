@@ -21,6 +21,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "teacher_column": "total",            # 或 "asst_prof_plus"
     "self_citation_strategy": "scival_param",
     "rank_highlight_top": 2,              # 排名總表中名次 ≤ 2 標紅（範例第 4 頁）
+    "report_text": {},                    # 簡報目錄名稱與備註的修改（只存與預設不同的欄位）
 }
 
 

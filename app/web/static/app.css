@@ -229,3 +229,7 @@ tr.ev-me td { background: #fff3c4; font-weight: 600; }
 .college-members[hidden], .compare-body [hidden] { display: none; }
 .matrix-scroll { overflow-x: auto; }   /* 不用 .table-scroll：避免被加上分頁，勾選的系所跑到其他頁 */
 .matrix-scroll[hidden] { display: none; }
+.report-text input[type=text] { width: 100%; }
+.report-text textarea { min-height: 4.5rem; }
+.report-text section { scroll-margin-top: 1rem; }
+.report-text-actions { display: flex; gap: .6rem; }

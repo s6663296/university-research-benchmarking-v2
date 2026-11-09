@@ -156,6 +156,7 @@
 
 {% elif ind == "downloads" %}
   <h3>簡報（每個系所一份）</h3>
+  <p class="muted">目錄名稱與各頁備註可到「<a href="/report-text">簡報目錄與備註</a>」修改，下載時套用。</p>
   <ul>
     {% for dept in report_depts %}<li><a href="/runs/{{ run.id }}/pptx/{{ dept }}">{{ dept }}</a></li>{% endfor %}
   </ul>

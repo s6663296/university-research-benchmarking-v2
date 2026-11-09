@@ -27,6 +27,11 @@ from app.textnorm import norm_name
 ROC_OFFSET = 1911
 NSTC_CATEGORIES = ("國科會計畫",)
 INDUSTRY_CATEGORIES = ("產學合作計畫",)
+FUNDING_NOTE_TEMPLATES = (
+    "註1：資料來源為計畫管理系統經分表 {經費檔案}，採用 {經費年度} 年度。",
+    f"註2：國科會為計畫主類「{'、'.join(NSTC_CATEGORIES)}」，產學為「{'、'.join(INDUSTRY_CATEGORIES)}」；以計畫主持人主聘單位計算。",
+    "註3：單年教師數來自教育部公開資訊平台；標 * 者為人工修改。",
+)
 
 
 def to_roc(year: int) -> int:
@@ -203,14 +208,19 @@ def run_colleges(session: Session, run: Run) -> list[str]:
 
 def funding_notes(table: FundingTable) -> list[str]:
     """報告註腳：資料來源、年度、計算方式。"""
-    files = "、".join(dict.fromkeys(
+    years = "、".join(map(str, table.years))
+    notes = [n.replace("{經費檔案}", funding_files_text(table)).replace("{經費年度}", years)
+             for n in FUNDING_NOTE_TEMPLATES]
+    return notes + funding_warnings(table)
+
+
+def funding_files_text(table: FundingTable) -> str:
+    return "、".join(dict.fromkeys(
         imp.filename + (f"（產製 {imp.generated_at}）" if imp.generated_at else "") for imp in table.sources.values()))
-    notes = [
-        f"註1：資料來源為計畫管理系統經分表 {files}，採用 {'、'.join(map(str, table.years))} 年度。",
-        f"註2：國科會為計畫主類「{'、'.join(NSTC_CATEGORIES)}」，產學為「{'、'.join(INDUSTRY_CATEGORIES)}」；"
-        "以計畫主持人主聘單位計算。",
-        "註3：單年教師數來自教育部公開資訊平台；標 * 者為人工修改。",
-    ]
-    if table.missing_years:
-        notes.append(f"※經分表缺少 {'、'.join(map(str, table.missing_years))} 年度，年平均只以有資料的年度計算。")
-    return notes
+
+
+def funding_warnings(table: FundingTable) -> list[str]:
+    """資料缺漏警示：屬於資料狀態，不是可改的說明文字，簡報上一定顯示。"""
+    if not table.missing_years:
+        return []
+    return [f"※經分表缺少 {'、'.join(map(str, table.missing_years))} 年度，年平均只以有資料的年度計算。"]

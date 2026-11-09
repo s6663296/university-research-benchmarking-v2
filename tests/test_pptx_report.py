@@ -121,3 +121,94 @@ def test_download_route(client, web_done_run):
 def test_zip_route(client, web_done_run):
     r = client.get(f"/runs/{web_done_run}/pptx.zip")
     assert r.status_code == 200 and r.content[:2] == b"PK"
+
+
+def save_text(session, overrides):
+    from app.db.settings_store import set_setting
+
+    set_setting(session, "report_text", overrides)
+
+
+def toc_text(p):
+    return texts_on(p.slides[1])
+
+
+async def test_default_text_matches_sample_wording(session, done_run, tmp_path):
+    p = build(session, done_run, tmp_path)
+    assert "管理學院各系所論文指標於對標學校排名" in toc_text(p)
+    assert "論文發表師均（QS / THE 看總篇數、高教深耕看 Q1）" in toc_text(p)
+    assert p.slides[3].shapes.title.text == "2021-2025 論文發表篇數師均"
+    assert p.slides[2].shapes.title.text == "管理學院各系所論文指標排名"
+
+
+async def test_renaming_toc_updates_toc_title_and_kicker(session, done_run, tmp_path):
+    save_text(session, {"pubs": {"name": "期刊論文產出"}, "fwci": {"name": "引用影響力", "tag": ""},
+                        "summary": {"name": "{學院}排名一覽"}, "detail": {"name": "{系所}指標細項"}})
+    p = build(session, done_run, tmp_path)
+    assert "・期刊論文產出（QS / THE 看總篇數、高教深耕看 Q1）" in toc_text(p)
+    assert "・引用影響力\n" in toc_text(p) + "\n"
+    assert p.slides[3].shapes.title.text == "2021-2025 期刊論文產出"
+    assert p.slides[6].shapes.title.text == "2021-2025 引用影響力"
+    assert p.slides[2].shapes.title.text == "管理學院排名一覽"
+    assert "I. 管理學院排名一覽" in texts_on(p.slides[2])
+    assert "II. 資訊管理學系指標細項" in toc_text(p) and "II. 資訊管理學系指標細項" in texts_on(p.slides[3])
+    assert p.slides[4].shapes.title.text == "2021-2025 被引數達全球前1%篇數（師均）"     # 沒改的頁面維持預設
+
+
+async def test_notes_default_edit_and_clear(session, done_run, tmp_path):
+    p = build(session, done_run, tmp_path)
+    assert "※教育部高教深耕指標" in texts_on(p.slides[3]) and "計算方式" in texts_on(p.slides[6])
+    assert "註3：單位排序以 Q1 單年師均由高到低排序。" in texts_on(p.slides[3])
+    save_text(session, {"pubs": {"subtitle": "※自訂標示", "notes": "註：{系所}{期間}自訂"},
+                        "fwci": {"formula": "", "notes": ""}})
+    p = build(session, done_run, tmp_path)
+    assert "※自訂標示" in texts_on(p.slides[3]) and "註：資訊管理學系2021-2025自訂" in texts_on(p.slides[3])
+    assert "註3：單位排序" not in texts_on(p.slides[3])
+    assert "計算方式" not in texts_on(p.slides[6]) and "註1" not in texts_on(p.slides[6])
+    assert "註1" in texts_on(p.slides[5])
+
+
+async def test_long_custom_text_stays_in_box_and_unknown_braces_kept(session, done_run, tmp_path):
+    long = "很長的名稱" * 12
+    save_text(session, {"top1": {"name": long, "notes": "\n".join(["註：{未知}" + "說明" * 40] * 4)}})
+    p = build(session, done_run, tmp_path)
+    slide = p.slides[4]
+    assert slide.shapes.title.text.endswith(long)
+    assert slide.shapes.title.text_frame.paragraphs[0].runs[0].font.size.pt < 26
+    note = next(s for s in slide.shapes if s.has_text_frame and "{未知}" in s.text_frame.text)
+    assert note.text_frame.paragraphs[0].runs[0].font.size.pt == 8
+
+
+def test_report_text_page_saves_only_changes_and_resets(client):
+    from app.reports.report_text import BY_KEY
+
+    r = client.get("/report-text")
+    assert r.status_code == 200 and "論文發表師均" in r.text and "{系所}各指標比較" in r.text
+    data = {"pubs.name": "新名稱", "pubs.tag": BY_KEY["pubs"].tag, "pubs.notes": "第一行\r\n第二行",
+            "top1.name": "  ", "fwci.name": BY_KEY["fwci"].name}
+    r = client.post("/report-text", data=data)
+    assert r.status_code == 200
+    assert "已儲存" in r.text
+    assert "新名稱" in r.text
+    assert "第一行\n第二行" in r.text, repr(r.text[r.text.find("pubs-notes"):][:160])
+
+    from app.db.settings_store import get_setting
+
+    def saved():
+        with client.app.state.session_factory() as s:
+            return get_setting(s, "report_text")
+
+    assert saved() == {"pubs": {"name": "新名稱", "notes": "第一行\n第二行"}}
+    client.post("/report-text", data={**data, "reset_key": "pubs", "fwci.notes": "只留這個"})
+    assert saved() == {"fwci": {"notes": "只留這個"}}
+    client.post("/report-text", data={"reset_key": "__all__"})
+    assert saved() == {}
+
+
+def test_custom_text_reaches_download(client, web_done_run):
+    client.post("/report-text", data={"pubs.name": "下載驗證名稱"})
+    r = client.get(f"/runs/{web_done_run}/pptx/資訊管理學系")
+    from io import BytesIO
+
+    p = Presentation(BytesIO(r.content))
+    assert "下載驗證名稱" in toc_text(p) and p.slides[3].shapes.title.text == "2021-2025 下載驗證名稱"
