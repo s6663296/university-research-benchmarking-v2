@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Anomaly, Run, RunUnit, Unit
 from app.db.settings_store import get_setting
 from app.elsevier.client import make_client
-from app.funding.service import count_text, funding_notes, funding_table, money, run_colleges
+from app.funding.service import count_text, funding_notes, funding_table, imports as funding_imports, money, run_colleges
 from app.mapping.parser import is_ncu
 from app.mapping.service import latest_version, units_of
 from app.metrics.indicators import BY_ID, INDICATORS
@@ -78,6 +78,13 @@ def config_from_form(form, units: list[Unit], session: Session) -> RunConfig:
     )
 
 
+def _missing_imports(session: Session) -> list[str]:
+    """三份資料每次啟動程式都要重新匯入，缺任何一份都不能開始分析。"""
+    return [label for label, imported in (("對標學校資料表", latest_version(session)),
+                                          ("教師人數統計表", latest_import(session)),
+                                          ("計畫經費統計表", funding_imports(session))) if not imported]
+
+
 def _form_page(request: Request, session: Session, cfg: RunConfig | None = None, error: str | None = None,
                status_code: int = 200):
     version, imp = latest_version(session), latest_import(session)
@@ -102,7 +109,7 @@ def _form_page(request: Request, session: Session, cfg: RunConfig | None = None,
                         years[-1] if years else 0, get_setting(session, "teacher_column"))
     return render(request, "run_new.html", status_code=status_code, cfg=cfg, colleges=colleges, schools=schools,
                   units=units, unit_groups=unit_groups, counterparts=counterparts, years=years, labels=COMPARISON_LABELS, error=error,
-                  ready=version is not None and imp is not None)
+                  ready=not _missing_imports(session))
 
 
 @router.get("/runs/new")
@@ -140,6 +147,8 @@ async def start_from_home(request: Request, session: Session = Depends(get_sessi
 
 async def _launch(request: Request, session: Session, cfg: RunConfig):
     """確認 API 可用後建立分析並在背景執行，成功就回首頁看儀表板；失敗則回分析設定頁顯示原因。"""
+    if missing := _missing_imports(session):
+        return _form_page(request, session, cfg, f"尚未匯入：{'、'.join(missing)}", 400)
     settings = request.app.state.settings
     if not settings.elsevier_api_key:
         return _form_page(request, session, cfg, "尚未設定 API Key，請到「設定」頁填寫", 400)

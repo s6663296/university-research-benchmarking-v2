@@ -51,7 +51,7 @@ def test_running_run_shows_fetch_progress(session):
     s = stages(session)
     assert s["mapping"].state == "done"
     assert s["run"].state == "done" and s["run"].href == f"/runs/{run.id}"
-    assert s["fetch"].state == "active" and s["fetch"].summary == "1 個單位完成"
+    assert s["fetch"].state == "active" and s["fetch"].summary == ""
     assert s["fetch"].progress == (f"Scopus 2／{len(rus)}", f"SciVal 1／{len(rus)}")
     assert s["fetch"].href == f"/runs/{run.id}/fetch"
     assert s["review"].state == "todo"
@@ -65,7 +65,7 @@ def test_paused_units_past_scopus_still_count(session):
     rus[0].status = "pending"  # Scopus 已完成、SciVal 未完成
     session.commit()
     s = stages(session)
-    assert s["fetch"].state == "warn" and s["fetch"].summary == f"已中斷，{len(rus) - 1} 個單位完成"
+    assert s["fetch"].state == "warn" and s["fetch"].summary == "已中斷"
     assert s["fetch"].progress == (f"Scopus {len(rus)}／{len(rus)}", f"SciVal {len(rus) - 1}／{len(rus)}")
 
 
@@ -96,7 +96,7 @@ def test_failures_from_scopus_and_scival_are_added_up(session):
     session.commit()
     s = stages(session)
     n = len(rus)
-    assert s["fetch"].state == "error" and s["fetch"].summary == f"{n - 2} 個單位完成，2 個失敗"
+    assert s["fetch"].state == "error" and s["fetch"].summary == "2 個失敗"
     assert s["fetch"].progress == (f"Scopus {n - 1}／{n}", f"SciVal {n - 2}／{n}")
     assert s["review"].state == "active" and s["review"].summary == "計算中"  # 全部抓完、分析仍在執行
 
@@ -107,7 +107,6 @@ def test_interrupted_run_is_warning(session):
     rus = set_units(session, run.id, "done")
     s = stages(session)
     assert s["fetch"].state == "warn" and "中斷" in s["fetch"].summary
-    assert s["fetch"].summary.endswith("1 個單位完成")
     assert s["fetch"].progress == (f"Scopus 1／{len(rus)}", f"SciVal 1／{len(rus)}")
 
 
@@ -129,7 +128,7 @@ def test_done_run_review_and_output(session, tmp_path):
     session.add(Anomaly(run_id=run.id, kind="zero_results", detail="y", status="confirmed"))
     session.commit()
     s = stages(session)
-    assert s["fetch"].state == "done" and s["fetch"].summary == f"{n} 個單位完成"
+    assert s["fetch"].state == "done" and s["fetch"].summary == ""
     assert s["fetch"].progress == (f"Scopus {n}／{n}", f"SciVal {n}／{n}")
     assert s["review"].label == "計算與異常確認"
     assert s["review"].state == "warn" and s["review"].summary == "1 項待確認"
@@ -202,11 +201,21 @@ def test_home_shows_pipeline_and_polls_while_running(client, web_done_run):
     assert r.status_code == 200 and 'hx-get="/pipeline"' in r.text
 
 
-def test_fetch_stage_lists_scopus_then_scival_then_completed(client, web_done_run):
+def test_fetch_stage_shows_only_scopus_and_scival_lines_when_done(client, web_done_run):
     with client.app.state.session_factory() as s:
         n = len(s.scalars(select(RunUnit).where(RunUnit.run_id == web_done_run)).all())
     text = client.get("/pipeline").text
-    assert text.index(f"Scopus {n}／{n}") < text.index(f"SciVal {n}／{n}") < text.index(f">{n} 個單位完成<")  # 排除 title 提示文字
+    assert text.index(f"Scopus {n}／{n}") < text.index(f"SciVal {n}／{n}")
+    fetch_stage = text.split("取指標</span>")[1].split("</li>")[0]
+    assert "stage-summary" not in fetch_stage and "個單位完成" not in text
+
+
+def test_stage_labels_break_at_meaningful_points(client):
+    text = client.get("/pipeline").text
+    assert 'Scopus／SciVal <span class="stage-label-tail">取指標</span>' in text
+    assert '計算與異常<span class="stage-label-tail">確認</span>' in text
+    assert '計畫經費統計表<span class="stage-label-tail">檢查</span>' in text
+    assert '<span class="stage-label">建立分析</span>' in text
 
 
 def test_mapping_and_teacher_details(session):

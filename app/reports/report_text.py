@@ -5,26 +5,44 @@
 文字可用 {系所}、{期間} 等變數，同一份設定才能套用到每個系所的簡報。
 """
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Any
 
-from app.funding.service import FUNDING_NOTE_TEMPLATES
-from app.metrics.indicators import BY_ID, importance_note
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-# 變數名稱 → 說明（顯示在編輯頁）
+from app.db.models import Run
+from app.db.settings_store import get_setting
+from app.elsevier.selfcite import get_strategy
+from app.funding.service import FUNDING_NOTE_TEMPLATES, FundingTable, funding_files_text, funding_table
+from app.mapping.parser import is_ncu
+from app.mapping.service import units_of
+from app.metrics.indicators import BY_ID, importance_note
+from app.runs.scope import RunConfig
+
+# 變數名稱 → 給使用者看的白話名稱（編輯頁的標籤提示與插入選單）
 VARIABLES = {
-    "期間": "分析期間，例如 2021-2025",
-    "年數": "分析年數，例如 5",
+    "期間": "分析期間",
+    "年數": "分析年數",
     "學院": "系所所屬學院",
     "系所": "系所名稱",
     "學年度": "教師數的學年度",
     "資料日期": "資料取得日期",
     "名次門檻": "排名總表標紅的名次",
-    "自我引用方式": "目前採用的排除自我引用方式",
+    "自我引用方式": "排除自我引用的方式",
     "經費年度": "經分表採用的年度",
     "經費年數": "經分表的年度數",
     "經費檔案": "經分表檔名",
+}
+# 每一頁都用得到的變數；其餘只在預設文字用到它的頁面提供
+GENERAL_VARIABLES = ("期間", "年數", "學院", "系所", "學年度", "資料日期")
+# 還沒有完成的分析可取值時，編輯頁標籤顯示的範例
+FALLBACK_SAMPLES = {
+    "期間": "2021-2025", "年數": "5", "學院": "管理學院", "系所": "資訊管理學系", "學年度": "114",
+    "資料日期": "2026-01-01", "名次門檻": "3", "自我引用方式": "排除自我引用", "經費年度": "114",
+    "經費年數": "1", "經費檔案": "經分表.xlsx",
 }
 
 BASE_NOTES = ("註1：單年教師數來自教育部公開資訊平台（{學年度}學年度）；標 * 者為人工修改。\n"
@@ -99,6 +117,40 @@ BY_KEY = {page.key: page for page in PAGES}
 INDICATOR_KEYS = tuple(page.key for page in PAGES if not page.is_chapter)
 FIELDS = ("name", "tag", "subtitle", "formula", "notes")
 _VARIABLE = re.compile(r"\{(" + "|".join(VARIABLES) + r")\}")
+
+
+def page_variables(page: PageText) -> list[str]:
+    """編輯這一頁時可插入的變數，依 VARIABLES 的順序。"""
+    used = set(_VARIABLE.findall(" ".join((page.title, page.title_prefix, *(getattr(page, f) for f in FIELDS)))))
+    return [name for name in VARIABLES if name in GENERAL_VARIABLES or name in used]
+
+
+def report_values(session: Session, run: Run, ncu_dept: str, college: str, funding: FundingTable) -> dict[str, Any]:
+    """單一系所的簡報中，各變數實際代入的值。"""
+    strategy = get_strategy(run.self_citation_strategy)
+    return {
+        "期間": f"{run.period_from}-{run.period_to}", "年數": run.period_to - run.period_from + 1,
+        "學院": college, "系所": ncu_dept, "學年度": run.academic_year,
+        "資料日期": json.loads(run.notes_json or "{}").get("data_date", ""),
+        "名次門檻": get_setting(session, "rank_highlight_top"),
+        "自我引用方式": strategy.label + ("（待驗證）" if not strategy.verified else ""),
+        "經費年度": "、".join(map(str, funding.years)), "經費年數": len(funding.years),
+        "經費檔案": funding_files_text(funding),
+    }
+
+
+def sample_values(session: Session) -> dict[str, str]:
+    """編輯頁標籤顯示的範例值：取最近一次完成的分析中第一個系所，取不到的項目用固定範例。"""
+    run = session.scalars(select(Run).where(Run.status == "done").order_by(Run.id.desc()).limit(1)).first()
+    if run is None:
+        return dict(FALLBACK_SAMPLES)
+    depts = RunConfig.from_json(run.scope_json).ncu_depts
+    unit = next((u for u in units_of(session, run.mapping_version_id) if is_ncu(u.school) and u.ncu_dept in depts), None)
+    if unit is None:
+        return dict(FALLBACK_SAMPLES)
+    college = unit.ncu_college or ""
+    values = report_values(session, run, unit.ncu_dept, college, funding_table(session, run, college))
+    return {name: str(values[name] or "") or FALLBACK_SAMPLES[name] for name in VARIABLES}
 
 
 def fill(text: str, values: dict[str, Any]) -> str:

@@ -15,6 +15,7 @@ from app.teachers.service import check_links
 STATE_LABELS = {"done": "完成", "active": "進行中", "error": "錯誤", "warn": "需處理", "todo": "尚未開始"}
 FETCH_LABEL = "Scopus／SciVal 取指標"
 REVIEW_LABEL = "計算與異常確認"
+LABEL_TAILS = ("檢查", "取指標", "確認")  # 這些結尾固定放第二行
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,14 @@ class Stage:
     href: str | None = None
     detail: str = ""  # 第二行補充資訊，例如檔名、匯入時間
     progress: tuple[str, ...] = ()  # 列在摘要上方的逐行進度
+
+    @property
+    def label_parts(self) -> tuple[str, str]:
+        """名稱拆成兩行：固定在語意處斷行，不讓瀏覽器斷在詞中間。"""
+        for tail in LABEL_TAILS:
+            if self.label.endswith(tail):
+                return self.label[:-len(tail)], tail
+        return self.label, ""
 
 
 def _mapping(session: Session) -> Stage:
@@ -78,18 +87,17 @@ def _fetch_stage(run: Run, rus: list[RunUnit], running: bool) -> Stage:
     # eid_count 在 Scopus 完成時寫入（暫停退回 pending 也保留），以它判斷單位是否已過 Scopus 這一步
     past_scopus = sum(1 for ru in rus if ru.eid_count is not None)
     progress = (f"Scopus {past_scopus}／{total}", f"SciVal {finished}／{total}")
-    completed = f"{finished} 個單位完成"
 
-    def stage(state: str, summary: str) -> Stage:
+    def stage(state: str, summary: str = "") -> Stage:
         return Stage("fetch", FETCH_LABEL, state, summary, href, progress=progress)
 
     if failed:
-        return stage("error", f"{completed}，{failed} 個失敗")
+        return stage("error", f"{failed} 個失敗")
     if not waiting:
-        return stage("done", completed)
+        return stage("done")
     if running:
-        return stage("active", completed)
-    return stage("warn", f"{HALTED.get(run.status, '已中斷')}，{completed}")
+        return stage("active")
+    return stage("warn", HALTED.get(run.status, "已中斷"))
 
 
 def _review_stage(session: Session, run: Run, rus: list[RunUnit], running: bool) -> Stage:

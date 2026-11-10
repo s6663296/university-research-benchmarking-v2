@@ -29,7 +29,9 @@ class MappingDiff:
 
 
 def latest_version(session: Session) -> MappingVersion | None:
-    return session.scalars(select(MappingVersion).order_by(MappingVersion.id.desc()).limit(1)).first()
+    """目前使用的版本；啟動程式後尚未重新匯入時為 None。"""
+    return session.scalars(select(MappingVersion).where(MappingVersion.retired_at.is_(None))
+                           .order_by(MappingVersion.id.desc()).limit(1)).first()
 
 
 def previous_version(session: Session, version_id: int) -> MappingVersion | None:
@@ -48,15 +50,19 @@ def issues_of(session: Session, version_id: int) -> list[MappingIssue]:
 
 def import_mapping(session: Session, filename: str, data: bytes) -> tuple[MappingVersion, bool]:
     """匯入 mapping；檔案與最新版相同且解析出的單位也相同時不建立新版本，只依目前的規則重新檢查。
+    啟動程式後重新匯入同一份檔案時沿用舊版本，讓它再次成為目前資料（第二個回傳值同樣為 True，表示匯入成功）。
     解析失敗時拋出例外，不寫入資料庫。"""
     sha = hashlib.sha256(data).hexdigest()
-    latest = latest_version(session)
+    latest = session.scalars(select(MappingVersion).order_by(MappingVersion.id.desc()).limit(1)).first()
     parsed = parse_mapping(data)
     if latest is not None and latest.sha256 == sha and _same_units(session, latest.id, parsed):
         _replace_issues(session, latest.id, parsed.issues)
         latest.content, latest.rules_hash = data, RULES_HASH
+        reactivated = latest.retired_at is not None
+        if reactivated:
+            latest.retired_at, latest.imported_at, latest.filename = None, datetime.now(), filename
         session.commit()
-        return latest, False
+        return latest, reactivated
     version = MappingVersion(filename=filename, sha256=sha, imported_at=datetime.now(), content=data,
                              rules_hash=RULES_HASH)
     session.add(version)

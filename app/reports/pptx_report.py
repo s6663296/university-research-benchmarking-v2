@@ -29,11 +29,10 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Anomaly, Run
 from app.db.settings_store import get_setting
-from app.elsevier.selfcite import get_strategy
-from app.funding.service import count_text, funding_files_text, funding_table, funding_warnings, money
+from app.funding.service import count_text, funding_table, funding_warnings, money
 from app.mapping.parser import NCU_SHEET, is_ncu
 from app.mapping.service import units_of
-from app.reports.report_text import INDICATOR_KEYS, ReportText
+from app.reports.report_text import INDICATOR_KEYS, ReportText, report_values
 from app.reports.tables import IndicatorTable, Row, fmt, indicator_table, summary_table
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "report_template.pptx"
@@ -293,15 +292,8 @@ class ReportBuilder:
         self.funding = funding_table(session, self.run, self.college)
         nums = ("II", "III") if self.funding.has_data else ("I", "II")
         self.numbers = {"funding": "I", "summary": nums[0], "detail": nums[1]}
-        strategy = get_strategy(self.run.self_citation_strategy)
-        self.text = ReportText(get_setting(session, "report_text"), {
-            "期間": self.period, "年數": self.years, "學院": self.college, "系所": self.ncu_dept,
-            "學年度": self.run.academic_year, "資料日期": self.notes.get("data_date", ""),
-            "名次門檻": get_setting(session, "rank_highlight_top"),
-            "自我引用方式": strategy.label + ("（待驗證）" if not strategy.verified else ""),
-            "經費年度": "、".join(map(str, self.funding.years)), "經費年數": len(self.funding.years),
-            "經費檔案": funding_files_text(self.funding),
-        })
+        self.text = ReportText(get_setting(session, "report_text"),
+                               report_values(session, self.run, ncu_dept, self.college, self.funding))
 
     # ---- 共用 ----
     def _slide(self, title: str, kicker: str = "", subtitle: str = ""):

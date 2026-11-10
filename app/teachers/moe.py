@@ -65,7 +65,9 @@ def parse_moe(data: bytes) -> list[MoeRow]:
 
 
 def latest_import(session: Session) -> TeacherImport | None:
-    return session.scalars(select(TeacherImport).order_by(TeacherImport.id.desc()).limit(1)).first()
+    """目前使用的匯入；啟動程式後尚未重新匯入時為 None。"""
+    return session.scalars(select(TeacherImport).where(TeacherImport.retired_at.is_(None))
+                           .order_by(TeacherImport.id.desc()).limit(1)).first()
 
 
 def import_years(imp: TeacherImport) -> list[int]:
@@ -74,8 +76,14 @@ def import_years(imp: TeacherImport) -> list[int]:
 
 def import_moe(session: Session, filename: str, data: bytes) -> TeacherImport:
     """每次上傳都建立新的匯入並成為目前資料（即使內容相同）；舊的匯入保留，供過去的 run 引用。
-    人工修改一併清除，以新匯入的教育部數字為準（過去的 run 已存下當時的教師數，不受影響）。"""
+    人工修改一併清除，以新匯入的教育部數字為準（過去的 run 已存下當時的教師數，不受影響）。
+    例外：啟動程式後重新匯入同一份檔案只是恢復使用，資料沒有變，不重複寫入也保留人工修改。"""
     sha = hashlib.sha256(data).hexdigest()
+    newest = session.scalars(select(TeacherImport).order_by(TeacherImport.id.desc()).limit(1)).first()
+    if newest is not None and newest.retired_at is not None and newest.sha256 == sha:
+        newest.retired_at, newest.imported_at, newest.source_filename = None, datetime.now(), filename
+        session.commit()
+        return newest
     rows = parse_moe(data)
     imp = TeacherImport(source_filename=filename, sha256=sha, imported_at=datetime.now(),
                         years_json=json.dumps(sorted({r.academic_year for r in rows})))
