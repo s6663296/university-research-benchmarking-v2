@@ -28,7 +28,8 @@ NUMERIC_FIELDS = [
 ]
 TEACHER_COLUMN_CHOICES = {"total": "專任教師數-教師總數總計", "asst_prof_plus": "專任助理教授以上人數-總計"}
 SELF_CITATION_CHOICES = {
-    "scival_param": "SciVal includeSelfCitations=false（待驗證）",
+    "scival_pubset": "組內互引（與 SciVal 網頁 Publication Set 相同；第一次會用 Abstract Retrieval 額度，每篇 1 次）",
+    "scival_param": "SciVal includeSelfCitations=false（已驗證無效，數字含自我引用）",
     "scopus_citation_overview": "Scopus Citation Overview（需另外申請授權）",
     "none": "不排除自我引用",
 }

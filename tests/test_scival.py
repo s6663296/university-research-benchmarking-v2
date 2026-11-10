@@ -136,7 +136,8 @@ async def test_empty_ids_no_request(respx_mock):
 
 def test_scival_strategies_merge_citations_into_metrics_request():
     assert get_strategy("scival_param").scival_include_self == "false"
-    assert get_strategy("scival_param").verified is False
+    assert get_strategy("scival_pubset").scival_include_self == "true" and get_strategy("scival_pubset").in_set
+    assert not any(get_strategy(s).in_set for s in ("scival_param", "none", "scopus_citation_overview"))
     assert get_strategy("none").scival_include_self == "true"
     assert get_strategy("scopus_citation_overview").scival_include_self is None
 
@@ -148,6 +149,6 @@ async def test_citation_overview_strategy_unavailable():
 
 
 def test_strategy_ids():
-    assert set(STRATEGIES) == {"scival_param", "scopus_citation_overview", "none"}
+    assert set(STRATEGIES) == {"scival_pubset", "scival_param", "scopus_citation_overview", "none"}
     with pytest.raises(KeyError):
         get_strategy("unknown")

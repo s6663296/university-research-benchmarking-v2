@@ -22,6 +22,7 @@ class PubMetrics:
     fwci: Decimal | None = None
     intl_collab: bool | None = None
     citations: int | None = None
+    self_citations: int | None = None   # 已從 citations 扣除的自我引用；策略不排除時為 None
     raw: dict = field(default_factory=dict)
 
 

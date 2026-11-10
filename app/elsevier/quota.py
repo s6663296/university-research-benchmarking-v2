@@ -1,4 +1,4 @@
-"""API 額度：Scopus Search 與 SciVal 各自計算，從每次回應的 X-RateLimit-* 標頭取得並存檔。"""
+"""API 額度：Scopus Search、Abstract Retrieval 與 SciVal 各自計算，從每次回應的 X-RateLimit-* 標頭取得並存檔。"""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,6 +11,7 @@ from app.db.models import ApiQuota
 # 顯示順序與名稱
 API_LABELS = {
     "scopus": "Scopus Search API",
+    "abstract": "Scopus Abstract Retrieval API",
     "scival": "SciVal API",
 }
 
@@ -27,6 +28,8 @@ def api_of(path: str) -> str:
         return "scival"
     if path.startswith("/content/search/scopus"):
         return "scopus"
+    if path.startswith("/content/abstract"):
+        return "abstract"
     return path
 
 

@@ -45,7 +45,8 @@ async def test_full_run_writes_results(session, session_factory, respx_mock):
     # 每組每指標都有結果：benchmark 3 單位 + college 3 單位，7 個指標
     assert session.scalar(select(func.count()).select_from(Result).where(Result.run_id == run.id)) == 6 * 7
     notes = json.loads(session.get(Run, run.id).notes_json)
-    assert notes["data_date"] and "2026-10-25" in notes["source"] and "待驗證" in notes["self_citation"]
+    assert notes["data_date"] and "2026-10-25" in notes["source"] and "Abstract Retrieval" in notes["source"]
+    assert notes["self_citation"].startswith("排除單位論文之間的互相引用")
     assert notes["importance"]["intl_collab"].startswith("※QS")
     pub = session.scalars(select(RunPublication).where(RunPublication.run_id == run.id)).first()
     assert "apiKey" not in pub.metrics_json

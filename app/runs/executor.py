@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db.models import Anomaly, Result, Run, RunPublication, RunUnit
 from app.db.settings_store import get_setting
 from app.elsevier.client import ElsevierClient, ElsevierError
+from app.elsevier.inset_selfcite import InSetSelfCitations
 from app.elsevier.scival import MetricsFetcher, PubMetrics, scival_year_ranges
 from app.elsevier.scopus import search_docs
 from app.elsevier.selfcite import get_strategy
@@ -23,7 +24,7 @@ from app.runs.scope import RunConfig, build_groups
 
 # 單位抓取中的狀態：先 Scopus 取 EID，再 SciVal 取指標（"fetching" 為舊版資料庫的狀態）
 FETCHING = ("scopus", "scival", "fetching")
-PUB_FIELDS = ("year", "q1", "top1", "top10", "intl_collab", "citations")
+PUB_FIELDS = ("year", "q1", "top1", "top10", "intl_collab", "citations", "self_citations")
 
 
 def pub_to_json(m: PubMetrics, in_scival: bool) -> str:
@@ -83,7 +84,9 @@ def _write_notes(session: Session, run: Run, data_source: dict) -> None:
     notes.update(
         data_date=date.today().isoformat(),
         scival_updated=updated,
-        source="Scopus Search API、SciVal Publication Metrics API" + (f"；SciVal 資料更新日 {updated}" if updated else ""),
+        source="Scopus Search API、SciVal Publication Metrics API"
+               + ("、Scopus Abstract Retrieval API（參考文獻）" if strategy.in_set else "")
+               + (f"；SciVal 資料更新日 {updated}" if updated else ""),
         importance={i.id: importance_note(i) for i in INDICATORS},
         self_citation=strategy.label + ("（待驗證）" if not strategy.verified else ""),
     )
@@ -122,6 +125,7 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
     merged = strategy.scival_include_self is not None
     fetcher = MetricsFetcher(client, year_range=cite_range if merged else year_range,
                              include_self=strategy.scival_include_self, use_cache=use_cache)
+    in_set = InSetSelfCitations(client) if strategy.in_set else None
 
     def update(ru_ids: list[int], **fields) -> None:
         with session_factory() as s:
@@ -147,6 +151,14 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
             metrics = await fetcher.fetch(ids)
             cites = None if merged or not ids else await strategy.citations(client, ids, year_range=cite_range,
                                                                             use_cache=use_cache)
+            if in_set is not None:
+                # SciVal Publication Set 只含 SciVal 有收錄的論文，組內互引也只算這些論文之間的引用
+                selfs = await in_set.count([i for i in ids if i in metrics],
+                                           {i: m.citations for i, m in metrics.items()})
+                for i, m in metrics.items():
+                    if m.citations is not None:
+                        m.self_citations = selfs.get(i, 0)
+                        m.citations = max(m.citations - m.self_citations, 0)
         except ElsevierError as e:
             update(ru_ids, status="failed", error=e.message)
             return
