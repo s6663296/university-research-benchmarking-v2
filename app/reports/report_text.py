@@ -133,7 +133,7 @@ def report_values(session: Session, run: Run, ncu_dept: str, college: str, fundi
         "學院": college, "系所": ncu_dept, "學年度": run.academic_year,
         "資料日期": json.loads(run.notes_json or "{}").get("data_date", ""),
         "名次門檻": get_setting(session, "rank_highlight_top"),
-        "自我引用方式": strategy.label + ("（待驗證）" if not strategy.verified else ""),
+        "自我引用方式": strategy.label,
         "經費年度": "、".join(map(str, funding.years)), "經費年數": len(funding.years),
         "經費檔案": funding_files_text(funding),
     }

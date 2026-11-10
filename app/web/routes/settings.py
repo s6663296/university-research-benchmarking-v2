@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.config import save_env
 from app.db.session import clear_all_data
 from app.db.settings_store import get_setting, set_setting
+from app.elsevier.selfcite import usable_strategy_id
 from app.elsevier.client import ConnectionStatus, make_client
 from app.elsevier.quota import quota_rows
 from app.web.deps import get_session, render
@@ -29,8 +30,6 @@ NUMERIC_FIELDS = [
 TEACHER_COLUMN_CHOICES = {"total": "專任教師數-教師總數總計", "asst_prof_plus": "專任助理教授以上人數-總計"}
 SELF_CITATION_CHOICES = {
     "scival_pubset": "組內互引（與 SciVal 網頁 Publication Set 相同；第一次會用 Abstract Retrieval 額度，每篇 1 次）",
-    "scival_param": "SciVal includeSelfCitations=false（已驗證無效，數字含自我引用）",
-    "scopus_citation_overview": "Scopus Citation Overview（需另外申請授權）",
     "none": "不排除自我引用",
 }
 
@@ -44,7 +43,7 @@ def _context(session: Session, request: Request, **extra) -> dict:
     ctx = dict(
         numeric_fields=NUMERIC_FIELDS, values=values,
         teacher_column=get_setting(session, "teacher_column"), teacher_choices=TEACHER_COLUMN_CHOICES,
-        strategy=get_setting(session, "self_citation_strategy"), strategy_choices=SELF_CITATION_CHOICES,
+        strategy=usable_strategy_id(get_setting(session, "self_citation_strategy")), strategy_choices=SELF_CITATION_CHOICES,
         key_status=mask_key(request.app.state.settings.elsevier_api_key),
         insttoken_status=mask_key(request.app.state.settings.elsevier_insttoken),
         errors=[], saved=False, reset=request.query_params.get("reset") == "1",

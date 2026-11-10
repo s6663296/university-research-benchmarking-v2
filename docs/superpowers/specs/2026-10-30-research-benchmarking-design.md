@@ -237,7 +237,7 @@ FastAPI
 
 **現行作法（策略 `scival_pubset`，預設）**：SciVal 取含自我引用的被引數，再減去單位論文（SciVal 有收錄者）之間的互相引用；參考文獻以 Abstract Retrieval `view=FULL` 逐篇取得、永久快取（`app/elsevier/inset_selfcite.py`）。
 
-**設計**：做成策略介面 `SelfCitationStrategy`，可以選用「SciVal 參數」、「Scopus Citation Overview」或「不排除」三種策略。結果頁與報告註腳會標示目前使用的策略。驗證結果出來後只需要切換策略，其他模組不受影響。
+**設計**：策略 `SelfCitationStrategy` 只保留「組內互引」（預設）與「不排除」兩種，在設定頁切換；結果頁與報告註腳標示使用的策略。「SciVal 參數」（驗證無效）與「Scopus Citation Overview」（沒有授權）已移除，舊分析仍顯示原本的策略名稱，設定中存著舊策略時改用預設策略。
 
 ## 8. 異常處理
 

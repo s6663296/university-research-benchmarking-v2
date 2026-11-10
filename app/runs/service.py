@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Run, RunUnit, Unit
 from app.db.settings_store import get_setting
+from app.elsevier.selfcite import usable_strategy_id
 from app.elsevier.scival import scival_year_ranges
 from app.elsevier.scopus import build_query, school_names
 from app.mapping.parser import NCU_SHEET, is_ncu
@@ -75,7 +76,7 @@ def create_run(session: Session, cfg: RunConfig, today: date | None = None) -> R
     run = Run(created_at=datetime.now(), period_from=cfg.year_from, period_to=cfg.year_to,
               scope_json=cfg.to_json(), mapping_version_id=version.id, teacher_import_id=imp.id,
               academic_year=cfg.academic_year, teacher_column=cfg.teacher_column,
-              self_citation_strategy=get_setting(session, "self_citation_strategy"), status="pending",
+              self_citation_strategy=usable_strategy_id(get_setting(session, "self_citation_strategy")), status="pending",
               notes_json="{}")
     session.add(run)
     session.flush()
