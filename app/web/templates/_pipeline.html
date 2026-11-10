@@ -7,6 +7,7 @@
       {% if s.href %}<a href="{{ s.href }}" title="{{ state_labels[s.state] }}：{{ s.summary }}{% if s.detail %}（{{ s.detail }}）{% endif %}">{% else %}<div title="{{ state_labels[s.state] }}">{% endif %}
         <span class="stage-icon" aria-label="{{ state_labels[s.state] }}">{{ {"done": "✔", "active": "●", "error": "✖", "warn": "!", "todo": loop.index}[s.state] }}</span>
         <span class="stage-label">{% if s.label.endswith("檢查") %}{{ s.label[:-2] }}<span class="stage-label-tail">檢查</span>{% else %}{{ s.label }}{% endif %}</span>
+        {% if s.progress %}<span class="stage-progress">{% for line in s.progress %}<span>{{ line }}</span>{% endfor %}</span>{% endif %}
         <span class="stage-summary">{{ s.summary or state_labels[s.state] }}</span>
         {% if s.detail %}<span class="stage-detail">{{ s.detail }}</span>{% endif %}
       {% if s.href %}</a>{% else %}</div>{% endif %}

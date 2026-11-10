@@ -113,6 +113,8 @@ button.danger { border-color: var(--danger); background: var(--danger); }
 .stage-label-tail { display: block; }  /* 「…檢查」的「檢查」固定放第二行 */
 .stage-summary { font-size: 12px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stage-detail { font-size: 11px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-progress { font-size: 12px; color: var(--muted); }
+.stage-progress > span { display: block; white-space: nowrap; }
 .stage.done .stage-icon { border-color: var(--ok); background: var(--ok); color: #fff; }
 .stage.active .stage-icon { border-color: var(--primary); color: var(--primary); animation: pulse 1.2s ease-in-out infinite; }
 .stage.active .stage-summary { color: var(--primary); }
