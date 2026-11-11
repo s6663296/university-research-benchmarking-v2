@@ -141,11 +141,14 @@ async def run(args) -> int:
           f"排除後 {total - inset}（Abstract Retrieval 實際請求 {counter.fetched} 次）")
 
     if web is None and sys.stdin.isatty():
-        print("\n請把 EID 清單匯入 SciVal 建立 Publication Set，Citation Count 看 Overall")
-        web = parse_web(input("輸入網頁的「含自我引用」與「excl. self-citations」兩個數字（空白分隔，直接 Enter 略過）："))
+        print("\n請把 EID 清單匯入 SciVal 建立 Publication Set，看 Overall 欄的兩個指標（不是 Scholarly Output 篇數）：\n"
+              "  Citation Count（含自我引用）、Citation Count (excl. self-citations)")
+        web = parse_web(input("依序輸入這兩個被引數（空白分隔，直接 Enter 略過）："))
     if web is None:
         print("沒有網頁數字可比；之後可用 --file <EID 清單> --web <含自我引用> <排除後> 再比對")
         return 2
+    if web[0] == len(rows) and web[0] != total:
+        print(f"注意：第一個數字 {web[0]} 等於篇數，可能輸入成 Scholarly Output；應輸入 Citation Count（含自我引用）")
     ok = (total, total - inset) == web
     print(f"SciVal 網頁：含 {web[0]}，排除後 {web[1]} → {'相同' if ok else '不同'}")
     if not ok:

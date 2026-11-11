@@ -64,3 +64,9 @@ async def test_dept_saves_eids_and_uses_same_query_as_system(respx_mock, monkeyp
     out = capsys.readouterr().out
     assert build_query("Department of Information Management, National Central University", 2021, 2025) in out
     assert f"20 篇（SciVal 網頁的 Scholarly Output 應相同），含自我引用 {total}，組內互引 3" in out
+
+
+async def test_warns_when_paper_count_entered_as_citations(respx_mock, monkeypatch, capsys):
+    install(respx_mock, monkeypatch)
+    assert await check.run(args(web=[7, 40])) == 1
+    assert "可能輸入成 Scholarly Output" in capsys.readouterr().out
