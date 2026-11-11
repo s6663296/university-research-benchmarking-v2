@@ -19,7 +19,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "max_backoff_sec": 120,               # 限速時單次等待的上限秒數
     "anomaly_change_threshold": 0.30,
     "teacher_column": "total",            # 或 "asst_prof_plus"
-    "self_citation_strategy": "scival_param",
+    "self_citation_strategy": "scival_pubset",
     "rank_highlight_top": 2,              # 排名總表中名次 ≤ 2 標紅（範例第 4 頁）
     "report_text": {},                    # 簡報目錄名稱與備註的修改（只存與預設不同的欄位）
 }

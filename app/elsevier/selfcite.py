@@ -1,50 +1,41 @@
-"""排除自我引用的策略（設計 §7.3）。驗證結果出來後只需在設定頁切換。"""
+"""排除自我引用的策略（設計 §7.3），在設定頁切換。
 
-from typing import Protocol
+被引數一律由 SciVal 取得含自我引用的數字（includeSelfCitations=true，與其他指標同一次請求），
+需要排除時再由 inset_selfcite 減去組內互引。
+"""
 
-from app.elsevier.client import ElsevierClient, ElsevierError
+from dataclasses import dataclass
 
 
-class SelfCitationStrategy(Protocol):
+@dataclass(frozen=True)
+class SelfCitationStrategy:
     id: str
     label: str
-    verified: bool
-    # 不為 None 時，被引數以此 includeSelfCitations 值與其他 SciVal 指標同一次請求取得，不另外呼叫 citations()
-    scival_include_self: str | None
-
-    async def citations(self, client: ElsevierClient, ids: list[str], *, year_range: str,
-                        use_cache: bool) -> dict[str, int]: ...
+    # True 時，被引數減去單位論文之間的互相引用（SciVal Publication Set 的定義，見 inset_selfcite）
+    in_set: bool
 
 
-class SciValParamStrategy:
-    id = "scival_param"
-    label = "SciVal includeSelfCitations=false"
-    verified = False  # 實測 true/false 結果相同，待使用者依設計 §7.3 驗證
-    scival_include_self = "false"
+STRATEGIES: dict[str, SelfCitationStrategy] = {s.id: s for s in (
+    # 2026-11-10 以 7 篇論文的 SciVal Publication Set 驗證：網頁含／排除自我引用 44／40，差額恰為組內互引 4 次
+    SelfCitationStrategy("scival_pubset", "排除單位論文之間的互相引用（與 SciVal 網頁 Publication Set 相同）",
+                         in_set=True),
+    SelfCitationStrategy("none", "不排除自我引用", in_set=False),
+)}
 
+DEFAULT_STRATEGY = "scival_pubset"
 
-class NoExclusionStrategy:
-    id = "none"
-    label = "不排除自我引用"
-    verified = True
-    scival_include_self = "true"
-
-
-class ScopusCitationOverviewStrategy:
-    id = "scopus_citation_overview"
-    label = "Scopus Citation Overview（exclude-self）"
-    verified = False
-    scival_include_self = None
-
-    async def citations(self, client, ids, *, year_range, use_cache):
-        # 這支 API 需要另外申請授權；取得授權後再依實際回應格式實作
-        raise ElsevierError(None, False, "Scopus Citation Overview API 尚未取得授權，請改用其他策略")
-
-
-STRATEGIES: dict[str, SelfCitationStrategy] = {
-    s.id: s for s in (SciValParamStrategy(), ScopusCitationOverviewStrategy(), NoExclusionStrategy())
-}
+# 已移除的策略，只為了舊分析還能顯示名稱；這些分析的被引數都含自我引用
+REMOVED: dict[str, SelfCitationStrategy] = {s.id: s for s in (
+    SelfCitationStrategy("scival_param", "SciVal includeSelfCitations=false（已移除：參數無效，數字含自我引用）",
+                         in_set=False),
+    SelfCitationStrategy("scopus_citation_overview", "Scopus Citation Overview（已移除）", in_set=False),
+)}
 
 
 def get_strategy(strategy_id: str) -> SelfCitationStrategy:
-    return STRATEGIES[strategy_id]
+    return STRATEGIES.get(strategy_id) or REMOVED[strategy_id]
+
+
+def usable_strategy_id(strategy_id: str) -> str:
+    """設定中存的是已移除的策略時（舊版存下的），改用預設策略。"""
+    return strategy_id if strategy_id in STRATEGIES else DEFAULT_STRATEGY

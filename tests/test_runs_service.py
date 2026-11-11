@@ -73,7 +73,7 @@ def test_create_run_snapshots_teacher_counts(seeded):
     run2 = create_run(seeded, cfg(), today=TODAY)
     again = next(ru for ru in run_units(seeded, run2.id) if ru.unit_id == ncu_im.unit_id)
     assert (again.teacher_count, again.teacher_source) == (23, "manual:依 SciVal")
-    assert run.status == "pending" and run.self_citation_strategy == "scival_param"
+    assert run.status == "pending" and run.self_citation_strategy == "scival_pubset"
 
 
 def test_unit_shared_by_groups_created_once(seeded):
@@ -125,3 +125,9 @@ def test_teacher_detail_records_override_and_moe_rows(seeded):
     assert d["source"] == "manual" and d["override"]["count"] == 23 and d["override"]["reason"] == "依 SciVal"
     assert d["override"]["created_at"]
     assert sum(r["value"] for r in d["rows"]) == 24  # 教育部原本的人數仍記錄
+
+
+def test_removed_strategy_in_settings_falls_back_to_default(seeded):
+    from app.db.settings_store import set_setting
+    set_setting(seeded, "self_citation_strategy", "scival_param")   # 舊版存下、已移除的策略
+    assert create_run(seeded, cfg(), today=TODAY).self_citation_strategy == "scival_pubset"

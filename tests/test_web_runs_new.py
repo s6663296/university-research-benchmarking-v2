@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 
 from app.config import Settings
 from app.db.models import Run
+from app.db.settings_store import set_setting
 from app.main import create_app
 from tests.elsevier_fixtures import SCOPUS_URL
 from tests.funding_builder import sample_funding
@@ -24,6 +25,8 @@ FORM = {"year_from": "2021", "year_to": "2025", "ncu_depts": ["資訊管理學�
 def seeded(tmp_path):
     s = Settings(_env_file=None, elsevier_api_key="testkey", data_dir=tmp_path, env_path=tmp_path / ".env")
     with TestClient(create_app(s)) as c:
+        with c.app.state.session_factory() as session:   # 模擬伺服器不限速；預設每秒 3 次會讓逐篇查參考文獻超過等待時間
+            set_setting(session, "rate_per_sec", 1000.0)
         c.post("/mapping", files={"file": ("m.xlsx", sample_mapping(), XLSX)})
         c.post("/teachers/import", files={"file": ("moe.xlsx", sample_moe(), XLSX)})
         c.post("/funding/import", files={"file": ("f.xlsx", sample_funding(), XLSX)})

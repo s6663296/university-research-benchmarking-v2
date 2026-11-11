@@ -325,6 +325,9 @@ class Explainer:
                 skipped = n - len(vals)
                 e.substituted = (f"{sum(vals):,} ÷ {n} = {_num(v)}"
                                  + (f"（其中 {skipped} 篇無被引數資料，不加總但計入篇數）" if skipped else ""))
+                excluded = sum(p.self_citations or 0 for p in d.pubs)
+                if excluded:
+                    e.substituted += f"（已扣除組內互引 {excluded:,} 次）"
             strategy = get_strategy(self.run.self_citation_strategy)
             e.sources = [rule, Source("自我引用", self.notes.get("self_citation") or strategy.label),
                          *self._common_sources(d)]
