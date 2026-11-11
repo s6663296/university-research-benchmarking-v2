@@ -109,10 +109,14 @@ button.danger { border-color: var(--danger); background: var(--danger); }
 .pipeline .stage > a, .pipeline .stage > div { display: flex; flex-direction: column; align-items: center; text-align: center; gap: .2rem; padding: .5rem .3rem; border-radius: 4px; color: var(--fg); text-decoration: none; height: 100%; }
 .pipeline .stage > a:hover { background: #eef3f8; }
 .stage-icon { width: 2rem; height: 2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid var(--line); background: #fff; color: var(--muted); }
-.stage-label { font-weight: 600; font-size: 14px; line-height: 1.4; min-height: 2.8em; }
-.stage-label-tail { display: block; }  /* 「…檢查」的「檢查」固定放第二行 */
-.stage-summary { font-size: 12px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stage-detail { font-size: 11px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 名稱區固定兩行高：兩行的項目斷在語意處，各欄第一行對齊 */
+.stage-label { font-weight: 600; font-size: 14px; line-height: 1.4; min-height: 2.8em; margin-top: .2rem; }
+.stage-label-tail { display: block; }
+/* 名稱下方的小字：各欄的第一行、第二行對齊同一條線 */
+.stage-summary, .stage-detail, .stage-progress { font-size: 12px; line-height: 1.5; color: var(--muted); max-width: 100%; }
+.stage-summary, .stage-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-progress { display: flex; flex-direction: column; gap: .2rem; }
+.stage-progress > span { white-space: nowrap; }
 .stage.done .stage-icon { border-color: var(--ok); background: var(--ok); color: #fff; }
 .stage.active .stage-icon { border-color: var(--primary); color: var(--primary); animation: pulse 1.2s ease-in-out infinite; }
 .stage.active .stage-summary { color: var(--primary); }
@@ -130,7 +134,7 @@ button.danger { border-color: var(--danger); background: var(--danger); }
   .pipeline { flex-direction: column; gap: .2rem; }
   .pipeline .stage + .stage::before { content: "↓"; position: static; display: block; text-align: center; }
   .pipeline .stage > a, .pipeline .stage > div { flex-direction: row; text-align: left; gap: .6rem; }
-  .stage-label { min-height: 0; }
+  .stage-label { min-height: 0; margin-top: 0; }
   .stage-label-tail { display: inline; }
 }
 /* 版本紀錄：短欄依內容縮小，系所保留可閱讀的換行寬度。 */
@@ -231,5 +235,33 @@ tr.ev-me td { background: #fff3c4; font-weight: 600; }
 .matrix-scroll[hidden] { display: none; }
 .report-text input[type=text] { width: 100%; }
 .report-text textarea { min-height: 4.5rem; }
-.report-text section { scroll-margin-top: 1rem; }
-.report-text-actions { display: flex; gap: .6rem; }
+.report-text section { scroll-margin-top: 1rem; margin-top: 0; }
+.report-text section[hidden] { display: none; }
+.report-text section + section { margin-top: 1rem; }
+.report-text h3 { font-size: 13px; color: var(--muted); margin: 1.1rem 0 .3rem; padding-bottom: .2rem; border-bottom: 1px solid var(--line); }
+.report-text-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 1rem; align-items: start; }
+.report-nav { position: sticky; top: 1rem; font-size: 14px; }
+.report-nav ol { list-style: none; margin: 0; padding: 0; }
+.report-nav a { display: flex; justify-content: space-between; gap: .4rem; padding: .35rem .6rem; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; color: var(--fg); text-decoration: none; }
+.report-nav a:hover { background: #eef3f8; }
+.report-nav a[aria-current] { background: #eef3f8; border-left-color: var(--primary); color: var(--primary); font-weight: 600; }
+.report-nav .is-indicator a { padding-left: 1.5rem; }
+.report-nav .modified-dot, .report-nav-legend span { color: var(--primary); font-size: 10px; }
+.report-nav-legend { margin: .6rem 0 0 .6rem; font-size: 12px; color: var(--muted); }
+.report-page-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.report-page-head h2 { margin: 0; }
+.report-text .field-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; min-height: 1.8rem; }
+.report-text .field-head label { font-weight: 600; }
+.variable-insert { font-size: 12px; padding: .1rem .3rem; max-width: 55%; visibility: hidden; }
+.report-text .field:hover .variable-insert, .report-text .field:focus-within .variable-insert { visibility: visible; }
+.variable-editor { font: inherit; line-height: 1.7; padding: .25rem .4rem; border: 1px solid #b9b9b9; border-radius: 3px; background: #fff; white-space: pre-wrap; overflow-wrap: anywhere; }
+.variable-editor.multiline { min-height: 4.5rem; }
+.variable-editor:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
+.var-token { display: inline-block; padding: 0 .35em; line-height: 1.4; border-radius: 3px; background: #dbe9f6; color: var(--primary); white-space: nowrap; cursor: default; }
+.field-error { margin: .2rem 0 0; font-size: 12px; color: var(--danger); }
+.report-text-actions { position: sticky; bottom: 0; display: flex; gap: .6rem; margin-top: 1rem; padding: .7rem 0; background: var(--bg, #fff); border-top: 1px solid var(--line); }
+@media (max-width: 900px) {
+  .report-text-layout { grid-template-columns: minmax(0, 1fr); }
+  .report-nav { position: static; }
+  .variable-insert { visibility: visible; }
+}

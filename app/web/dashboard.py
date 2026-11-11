@@ -6,12 +6,16 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Anomaly, Export, Run, RunUnit
+from app.funding.service import effective_imports, imports as funding_imports
 from app.mapping.service import error_count, latest_version, recheck_mapping
 from app.runs.scope import RunConfig
 from app.teachers.moe import import_years, latest_import
 from app.teachers.service import check_links
 
 STATE_LABELS = {"done": "完成", "active": "進行中", "error": "錯誤", "warn": "需處理", "todo": "尚未開始"}
+FETCH_LABEL = "Scopus／SciVal 取指標"
+REVIEW_LABEL = "計算與異常確認"
+LABEL_TAILS = ("檢查", "取指標", "確認")  # 這些結尾固定放第二行
 
 
 @dataclass(frozen=True)
@@ -22,6 +26,15 @@ class Stage:
     summary: str = ""
     href: str | None = None
     detail: str = ""  # 第二行補充資訊，例如檔名、匯入時間
+    progress: tuple[str, ...] = ()  # 列在摘要上方的逐行進度
+
+    @property
+    def label_parts(self) -> tuple[str, str]:
+        """名稱拆成兩行：固定在語意處斷行，不讓瀏覽器斷在詞中間。"""
+        for tail in LABEL_TAILS:
+            if self.label.endswith(tail):
+                return self.label[:-len(tail)], tail
+        return self.label, ""
 
 
 def _mapping(session: Session) -> Stage:
@@ -52,74 +65,79 @@ def _teachers(session: Session, moe_running: bool = False) -> Stage:
     return Stage("teachers", "教師人數統計表檢查", "done", span, "/teachers", imp.source_filename)
 
 
+def _funding(session: Session) -> Stage:
+    label = "計畫經費統計表檢查"
+    files = funding_imports(session)  # 新的在前
+    if not files:
+        return Stage("funding", label, "todo", "尚未匯入", "/funding")
+    years = list(effective_imports(session))
+    return Stage("funding", label, "done", f"{years[0]}～{years[-1]} 年度" if years else "", "/funding", files[0].filename)
+
+
 HALTED = {"stopped": "已停止", "failed": "分析失敗"}  # 其餘未在背景執行的狀態都視為中斷
 
 
-def _fetch_stage(key: str, label: str, run: Run, running: bool, done: int, failed: int, waiting: int, total: int,
-                 started: bool) -> Stage:
-    """running：背景程式是否正在執行這次分析；done／failed：做完／卡在這一步的單位數；
-    waiting：還沒做完的單位數；started：已有單位進到這一步。"""
+def _fetch_stage(run: Run, rus: list[RunUnit], running: bool) -> Stage:
+    """Scopus 取 EID 與 SciVal 取指標合併成一步；running：背景程式是否正在執行這次分析。"""
     href = f"/runs/{run.id}/fetch"
-    progress = f"{done}／{total}"
+    total = len(rus)
+    finished = sum(1 for ru in rus if ru.status == "done")
+    failed = sum(1 for ru in rus if ru.status == "failed")
+    waiting = total - finished - failed
+    # eid_count 在 Scopus 完成時寫入（暫停退回 pending 也保留），以它判斷單位是否已過 Scopus 這一步
+    past_scopus = sum(1 for ru in rus if ru.eid_count is not None)
+    progress = (f"Scopus {past_scopus}／{total}", f"SciVal {finished}／{total}")
+
+    def stage(state: str, summary: str = "") -> Stage:
+        return Stage("fetch", FETCH_LABEL, state, summary, href, progress=progress)
+
     if failed:
-        return Stage(key, label, "error", f"{failed} 個單位失敗" + (f"，{progress}" if waiting else ""), href)
+        return stage("error", f"{failed} 個失敗")
     if not waiting:
-        return Stage(key, label, "done", f"{done} 個單位完成", href)
+        return stage("done")
     if running:
-        return Stage(key, label, "active" if started else "todo", progress, href)
-    return Stage(key, label, "warn", f"{HALTED.get(run.status, '已中斷')} {progress}", href)
+        return stage("active")
+    return stage("warn", HALTED.get(run.status, "已中斷"))
+
+
+def _review_stage(session: Session, run: Run, rus: list[RunUnit], running: bool) -> Stage:
+    """計算與異常、人工確認合併成一步。"""
+    detail = f"/runs/{run.id}"
+    if running:  # 重抓單位時舊結果會被重算，等背景做完再顯示
+        if all(ru.status in ("done", "failed") for ru in rus):
+            return Stage("review", REVIEW_LABEL, "active", "計算中", detail)
+        return Stage("review", REVIEW_LABEL, "todo")
+    if run.status == "failed":
+        return Stage("review", REVIEW_LABEL, "error", run.error or "分析失敗", detail)
+    if run.status != "done":
+        return Stage("review", REVIEW_LABEL, "todo")
+    open_count = session.scalar(select(func.count()).select_from(Anomaly).where(
+        Anomaly.run_id == run.id, Anomaly.status != "confirmed"))
+    return Stage("review", REVIEW_LABEL, "warn" if open_count else "done",
+                 f"{open_count} 項待確認" if open_count else "無待確認", f"{detail}?ind=anomalies")
 
 
 def _run_stages(session: Session, run: Run, running: bool) -> list[Stage]:
-    rus = session.scalars(select(RunUnit).where(RunUnit.run_id == run.id)).all()
-    total = len(rus)
-    # eid_count 在 Scopus 完成時寫入（暫停退回 pending 也保留），以它判斷單位是否已過 Scopus 這一步
-    scopus_failed = sum(1 for ru in rus if ru.status == "failed" and ru.eid_count is None)
-    scival_failed = sum(1 for ru in rus if ru.status == "failed" and ru.eid_count is not None)
-    past_scopus = sum(1 for ru in rus if ru.eid_count is not None)
-    finished = sum(1 for ru in rus if ru.status == "done")
-    scival_total = total - scopus_failed
-    out = [
-        _fetch_stage("scopus", "Scopus 取 EID", run, running, past_scopus, scopus_failed,
-                     total - past_scopus - scopus_failed, total, started=True),
-        _fetch_stage("scival", "SciVal 取指標", run, running, finished, scival_failed,
-                     scival_total - finished - scival_failed, scival_total, started=past_scopus > 0),
-    ]
-    fetched = all(ru.status in ("done", "failed") for ru in rus)
-    detail = f"/runs/{run.id}"
-    if running:
-        out.append(Stage("compute", "計算與異常", "active", "計算中", detail) if fetched
-                   else Stage("compute", "計算與異常", "todo"))
-    elif run.status == "done":
-        out.append(Stage("compute", "計算與異常", "done", "完成", detail))
-    elif run.status == "failed":
-        out.append(Stage("compute", "計算與異常", "error", run.error or "分析失敗", detail))
-    else:
-        out.append(Stage("compute", "計算與異常", "todo"))
-
-    if running or run.status != "done":  # 重抓單位時舊結果會被重算，等背景做完再顯示
-        return out + [Stage("review", "人工確認", "todo"), Stage("output", "產出", "todo")]
-    open_count = session.scalar(select(func.count()).select_from(Anomaly).where(
-        Anomaly.run_id == run.id, Anomaly.status != "confirmed"))
-    out.append(Stage("review", "人工確認", "warn" if open_count else "done",
-                     f"{open_count} 項待確認" if open_count else "無待確認", f"{detail}?ind=anomalies"))
+    rus = list(session.scalars(select(RunUnit).where(RunUnit.run_id == run.id)))
+    out = [_fetch_stage(run, rus, running), _review_stage(session, run, rus, running)]
+    if running or run.status != "done":
+        return out + [Stage("output", "產出", "todo")]
     exports = session.scalar(select(func.count()).select_from(Export).where(Export.run_id == run.id))
     out.append(Stage("output", "產出", "done" if exports else "todo",
-                     f"已產出 {exports} 份" if exports else "尚未下載", f"{detail}?ind=downloads"))
+                     f"已產出 {exports} 份" if exports else "尚未下載", f"/runs/{run.id}?ind=downloads"))
     return out
 
 
 def pipeline(session: Session, run_id: int | None = None, running: bool = False,
              moe_running: bool = False) -> list[Stage]:
-    """流程的 8 個步驟，進度一律以背景程式的狀態為準：
+    """流程的 7 個步驟，進度一律以背景程式的狀態為準：
     run_id 是背景程式最後啟動的分析、running 是它是否仍在執行、moe_running 是否正從教育部下載教師資料
     （服務重啟後背景沒有任何分析，儀表板就回到尚未執行，舊分析仍可在歷史頁查看）。"""
-    stages = [_mapping(session), _teachers(session, moe_running)]
+    stages = [_mapping(session), _teachers(session, moe_running), _funding(session)]
     run = session.get(Run, run_id) if run_id is not None else None
     if run is None:
         return stages + [Stage("run", "建立分析", "todo", "前往分析設定", "/runs/new")] + [
-            Stage(k, label, "todo") for k, label in (("scopus", "Scopus 取 EID"), ("scival", "SciVal 取指標"),
-                                                     ("compute", "計算與異常"), ("review", "人工確認"),
+            Stage(k, label, "todo") for k, label in (("fetch", FETCH_LABEL), ("review", REVIEW_LABEL),
                                                      ("output", "產出"))]
     depts = "、".join(RunConfig.from_json(run.scope_json).ncu_depts)
     stages.append(Stage("run", "建立分析", "done", f"#{run.id} {depts}", f"/runs/{run.id}"))

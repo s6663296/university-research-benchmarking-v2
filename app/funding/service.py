@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import FundingImport, FundingProject, Run, RunUnit, Unit
@@ -43,6 +43,9 @@ def import_funding(session: Session, filename: str, data: bytes) -> tuple[Fundin
     sha = hashlib.sha256(data).hexdigest()
     same = session.scalars(select(FundingImport).where(FundingImport.sha256 == sha)).first()
     if same is not None:
+        if same.retired_at is not None:  # 啟動程式後重新匯入同一份檔案：恢復使用
+            same.retired_at, same.imported_at, same.filename = None, datetime.now(), filename
+            session.commit()
         return same, []
     parsed = parse_funding(data)
     imp = FundingImport(filename=filename, sha256=sha, imported_at=datetime.now(), generated_at=parsed.generated_at,
@@ -65,17 +68,24 @@ def delete_import(session: Session, import_id: int) -> None:
 
 
 def imports(session: Session) -> list[FundingImport]:
-    return list(session.scalars(select(FundingImport).order_by(FundingImport.id.desc())))
+    """目前使用的匯入（新的在前）；啟動程式後尚未重新匯入時為空。"""
+    return list(session.scalars(select(FundingImport).where(FundingImport.retired_at.is_(None))
+                                .order_by(FundingImport.id.desc())))
 
 
 def import_years(imp: FundingImport) -> list[int]:
     return json.loads(imp.years_json or "[]")
 
 
-def effective_imports(session: Session, roc_years: list[int] | None = None) -> dict[int, FundingImport]:
-    """每個年度採用最後匯入、且含有該年度的檔案（新檔取代舊檔）。roc_years 為 None 時取全部年度。"""
+def effective_imports(session: Session, roc_years: list[int] | None = None,
+                      run: Run | None = None) -> dict[int, FundingImport]:
+    """每個年度採用最後匯入、且含有該年度的檔案（新檔取代舊檔）。roc_years 為 None 時取全部年度。
+    指定 run 時，還包含該分析建立時仍在使用的舊檔，過去的分析才能維持原本的經費資料。"""
+    candidates = imports(session) if run is None else session.scalars(
+        select(FundingImport).where(or_(FundingImport.retired_at.is_(None), FundingImport.retired_at > run.created_at))
+        .order_by(FundingImport.id.desc()))
     chosen: dict[int, FundingImport] = {}
-    for imp in imports(session):  # 新的在前
+    for imp in candidates:  # 新的在前
         for y in import_years(imp):
             if (roc_years is None or y in roc_years) and y not in chosen:
                 chosen[y] = imp
@@ -172,7 +182,7 @@ def _teachers(session: Session, run: Run, unit: Unit, run_units: dict[int, RunUn
 
 def funding_table(session: Session, run: Run, college: str) -> FundingTable:
     period = [to_roc(y) for y in range(run.period_from, run.period_to + 1)]
-    sources = effective_imports(session, period)
+    sources = effective_imports(session, period, run=run)
     years = list(sources)
     projects = projects_of(session, sources)
     run_units = {ru.unit_id: ru for ru in session.scalars(select(RunUnit).where(RunUnit.run_id == run.id))}

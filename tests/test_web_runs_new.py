@@ -9,6 +9,7 @@ from app.config import Settings
 from app.db.models import Run
 from app.main import create_app
 from tests.elsevier_fixtures import SCOPUS_URL
+from tests.funding_builder import sample_funding
 from tests.mapping_builder import sample_mapping
 from tests.moe_builder import sample_moe
 from tests.run_helpers import FakeElsevier
@@ -25,6 +26,7 @@ def seeded(tmp_path):
     with TestClient(create_app(s)) as c:
         c.post("/mapping", files={"file": ("m.xlsx", sample_mapping(), XLSX)})
         c.post("/teachers/import", files={"file": ("moe.xlsx", sample_moe(), XLSX)})
+        c.post("/funding/import", files={"file": ("f.xlsx", sample_funding(), XLSX)})
         yield c
 
 
