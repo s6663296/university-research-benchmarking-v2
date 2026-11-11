@@ -28,16 +28,21 @@ def test_full_view_refs_keeps_only_scopus_ids():
     assert full_view_refs({"abstracts-retrieval-response": {}}) == []
 
 
-def test_count_in_set_ignores_self_reference_and_outside_papers():
+def test_count_in_set_counts_self_reference_and_ignores_outside_papers():
+    # B 的參考文獻列了自己：SciVal 也當作組內的自我引用扣掉
     refs = {"A": {"B", "X"}, "B": {"B", "C"}, "C": {"B"}, "D": set()}
-    assert count_in_set(refs) == {"B": 2, "C": 1}
+    assert count_in_set(refs) == {"B": 3, "C": 1}
 
 
 async def test_no_request_when_nothing_cited(respx_mock):
     route = respx_mock.get(url__regex=ABSTRACT_URL)
     assert await InSetSelfCitations(client()).count(["1", "2"], {"1": 0, "2": None}) == {}
-    assert await InSetSelfCitations(client()).count(["1"], {"1": 5}) == {}
     assert route.call_count == 0
+
+
+async def test_single_paper_citing_itself(respx_mock):
+    respx_mock.get(url__regex=ABSTRACT_URL).mock(return_value=httpx.Response(200, json=abstract_full(["1", "9"])))
+    assert await InSetSelfCitations(client()).count(["1"], {"1": 5}) == {"1": 1}
 
 
 async def test_count_and_permanent_cache(respx_mock, session_factory):

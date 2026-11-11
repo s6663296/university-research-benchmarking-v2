@@ -37,11 +37,15 @@ def full_view_refs(data: dict) -> list[str]:
 
 
 def count_in_set(refs: dict[str, set[str]]) -> dict[str, int]:
-    """refs：組內每篇論文 → 它引用的 Scopus ID。回傳每篇被組內其他論文引用的次數（0 次的不列出）。"""
+    """refs：組內每篇論文 → 它引用的 Scopus ID。回傳每篇被組內論文引用的次數（0 次的不列出）。
+
+    參考文獻列了自己的論文也算：Scopus 把它計入被引數，SciVal 排除時也會扣掉
+    （2026-11-11 中央財金 145 篇：網頁排除 100 次 = 組內互引 98 次 + 引用自己 2 次）。
+    """
     counts: dict[str, int] = {}
-    for citing, cited in refs.items():
+    for cited in refs.values():
         for sid in cited:
-            if sid != citing and sid in refs:
+            if sid in refs:
                 counts[sid] = counts.get(sid, 0) + 1
     return counts
 
@@ -58,12 +62,12 @@ class InSetSelfCitations:
         self.fetched = 0                              # 這次實際向 Abstract Retrieval 要的篇數
 
     async def count(self, ids: list[str], citations: dict[str, int | None]) -> dict[str, int]:
-        """ids 是一個單位的論文（即 SciVal 的 Publication Set）；回傳每篇被組內其他論文引用的次數。
+        """ids 是一個單位的論文（即 SciVal 的 Publication Set）；回傳每篇被組內論文引用的次數。
 
         組內沒有任何論文被引用過時，不可能有組內互引，不查參考文獻。
         """
         ids = list(dict.fromkeys(ids))
-        if len(ids) < 2 or not any((citations.get(s) or 0) > 0 for s in ids):
+        if not any((citations.get(s) or 0) > 0 for s in ids):
             return {}
         self._preload(ids)
         results = await asyncio.gather(*(self._refs_of(s) for s in ids), return_exceptions=True)
