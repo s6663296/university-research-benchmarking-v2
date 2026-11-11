@@ -97,7 +97,7 @@
 ```
 app/          主程式（mapping、teachers、elsevier、metrics、runs、reports、web）
 templates/    簡報範本（由 scripts/make_report_template.py 從範例報告產生）
-scripts/      開發用工具（產生簡報範本、把錄下的 API 回應轉成測試資料）
+scripts/      開發用工具（產生簡報範本、把錄下的 API 回應轉成測試資料、check_pubset_selfcite 核對排除自我引用與 SciVal 網頁是否相同）
 alembic/      資料庫 migration
 tests/        自動化測試
 api_test/     Elsevier API 連線測試工具（可單獨執行 run_api_test.bat）
