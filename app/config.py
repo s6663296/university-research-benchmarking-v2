@@ -1,5 +1,6 @@
 """應用程式設定：敏感資料（API Key）只放在 .env。"""
 
+import re
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,6 +17,16 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     env_path: Path = ENV_FILE
+
+    @property
+    def elsevier_api_keys(self) -> list[str]:
+        """ELSEVIER_API_KEY 可放多組，以逗號分隔；額度用完時依序換下一組。"""
+        return parse_api_keys(self.elsevier_api_key)
+
+
+def parse_api_keys(raw: str) -> list[str]:
+    """以逗號、空白或換行分隔多組 API Key，去除重複並保留順序。"""
+    return list(dict.fromkeys(k for k in re.split(r"[\s,]+", raw or "") if k))
 
 
 def save_env(path: Path, api_key: str, insttoken: str) -> None:

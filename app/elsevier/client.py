@@ -127,13 +127,16 @@ def _http_message(status: int) -> str:
 
 
 class ElsevierClient:
-    def __init__(self, api_key: str, insttoken: str = "", *, base_url: str = "https://api.elsevier.com",
+    def __init__(self, api_key: str | list[str], insttoken: str = "", *, base_url: str = "https://api.elsevier.com",
                  rate_per_sec: float = 3.0, max_retries: int = 3, backoff_base: float = 1.0,
                  timeout: float = 60.0, cache: ApiCache | None = None,
                  on_quota: Callable[[str, Quota], None] | None = None,
                  transport: httpx.AsyncBaseTransport | None = None, max_concurrency: int = 4,
                  rate_limit_retries: int = 8, max_backoff: float = 120.0):
-        headers = {"X-ELS-APIKey": api_key, "Accept": "application/json"}
+        # 可傳入多組 Key：某支 API 的額度用完時換下一組（Scopus、SciVal 額度各自獨立，分開切換）
+        self.api_keys = ([api_key] if isinstance(api_key, str) else list(api_key)) or [""]
+        self._key_index: dict[str, int] = {}
+        headers = {"Accept": "application/json"}
         if insttoken:
             headers["X-ELS-Insttoken"] = insttoken
         self._http = httpx.AsyncClient(base_url=base_url, headers=headers, timeout=timeout, transport=transport)
@@ -157,8 +160,10 @@ class ElsevierClient:
         while True:
             await self._limiter.acquire()
             try:
+                index = self._key_index.get(api_of(path), 0)
                 async with self._slots:
-                    resp = await self._http.get(path, params=params)
+                    resp = await self._http.get(path, params=params,
+                                                headers={"X-ELS-APIKey": self.api_keys[index]})
             except (httpx.TimeoutException, httpx.TransportError) as e:
                 error = ElsevierError(None, True, f"{OFFLINE_MESSAGE}（{type(e).__name__}）")
             else:
@@ -177,6 +182,8 @@ class ElsevierClient:
                 if resp.status_code == 429:
                     reset = quota_reset(resp.headers)
                     if reset is not None and reset - time.time() > self.max_backoff:
+                        if self._next_key(api_of(path), index):
+                            continue
                         when = datetime.fromtimestamp(reset).strftime("%Y-%m-%d %H:%M")
                         raise ElsevierError(429, False, f"{api_label(path)} 的額度已用完，{when} 才會重置；"
                                                         "已抓到的資料會保留，屆時可按「繼續」接著抓")
@@ -197,6 +204,19 @@ class ElsevierClient:
                 raise error
             await asyncio.sleep(self._backoff(attempt))
             attempt += 1
+
+    def _next_key(self, api: str, failed: int) -> bool:
+        """第 failed 組 Key 的額度用完：換下一組，沒有下一組就回傳 False。
+
+        同時有多個請求在途時，可能已被其他請求換過，此時直接用目前這組重試。
+        """
+        current = self._key_index.get(api, 0)
+        if current != failed:
+            return True
+        if current + 1 >= len(self.api_keys):
+            return False
+        self._key_index[api] = current + 1
+        return True
 
     async def get_json(self, path: str, params: dict, *, use_cache: bool = True, store: bool = True) -> dict:
         """store=False：呼叫端自行快取（例如 SciVal 逐篇快取），不存整個回應。"""
@@ -233,7 +253,7 @@ def make_client(settings, session) -> ElsevierClient:
     # 快取用自己的 session，背景任務中也能安全寫入
     cache = ApiCache(sessionmaker(session.get_bind(), expire_on_commit=False), get_setting(session, "cache_days"))
     return ElsevierClient(
-        settings.elsevier_api_key, settings.elsevier_insttoken,
+        settings.elsevier_api_keys, settings.elsevier_insttoken,
         rate_per_sec=float(get_setting(session, "rate_per_sec")),
         max_retries=int(get_setting(session, "max_retries")),
         backoff_base=float(get_setting(session, "backoff_base_sec")),

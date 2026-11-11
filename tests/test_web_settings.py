@@ -53,7 +53,8 @@ def test_post_rejects_invalid_number(client):
 
 
 def test_save_api_key_writes_env(keyed_client, tmp_path):
-    keyed_client.post("/settings/api-key", data={"api_key": "newkey9999", "insttoken": ""})
+    keyed_client.post("/settings/api-keys/delete", data={"index": "0"})
+    keyed_client.post("/settings/api-keys/add", data={"api_key": "newkey9999"})
     assert "ELSEVIER_API_KEY=newkey9999" in (tmp_path / ".env").read_text(encoding="utf-8")
     assert "9999" in keyed_client.get("/settings").text
 
@@ -104,7 +105,8 @@ def test_reset_clears_data_key_and_settings(client, tmp_path, web_done_run):
     from app.db.models import AppSetting, Base
 
     form(client, timeout_sec="45")
-    client.post("/settings/api-key", data={"api_key": "newkey9999", "insttoken": "tok5678"})
+    client.post("/settings/api-keys/add", data={"api_key": "newkey9999"})
+    client.post("/settings/insttoken", data={"insttoken": "tok5678"})
     (tmp_path / "exports" / str(web_done_run)).mkdir(parents=True, exist_ok=True)
     (tmp_path / ".env").write_text((tmp_path / ".env").read_text(encoding="utf-8") + "PORT=9000\n", encoding="utf-8")
 
@@ -120,7 +122,7 @@ def test_reset_clears_data_key_and_settings(client, tmp_path, web_done_run):
     assert "ELSEVIER_API_KEY=\n" in env and "ELSEVIER_INSTTOKEN=\n" in env and "PORT=9000" in env
     assert not (tmp_path / "exports").exists()
     assert client.app.state.settings.elsevier_api_key == ""
-    assert "API Key：未設定" in r.text
+    assert "尚未設定 API Key" in r.text
 
 
 def test_reset_refused_while_run_is_fetching(client):

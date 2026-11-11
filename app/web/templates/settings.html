@@ -7,13 +7,42 @@
 
 <section class="card">
   <h2>Elsevier API</h2>
-  <p>API Key：{{ key_status }}　insttoken：{{ insttoken_status }}</p>
-  <form method="post" action="/settings/api-key">
-    <div class="field"><label for="api_key">新的 API Key（留空表示不變）</label>
-      <input type="password" id="api_key" name="api_key" size="40" autocomplete="off"></div>
-    <div class="field"><label for="insttoken">insttoken（校外使用時才需要）</label>
-      <input type="password" id="insttoken" name="insttoken" size="40" autocomplete="off"></div>
-    <button type="submit">儲存到 .env</button>
+  {% if keys_added %}<div class="notice ok">已新增 {{ keys_added }} 組 API Key</div>{% endif %}
+  {% if keys_dup %}<div class="notice">這組 API Key 已經在清單中（{% for n in keys_dup %}第 {{ n }} 組{% if not loop.last %}、{% endif %}{% endfor %}），沒有重複新增</div>{% endif %}
+  <h3>API Key{% if masked_keys %}（已設定 {{ masked_keys|length }} 組）{% endif %}</h3>
+  {% if masked_keys %}
+  <p class="muted small">由上往下使用；某組的額度用完時，會自動換下一組。</p>
+  <table class="api-keys">
+    <tbody>
+    {% for k in masked_keys %}
+      <tr>
+        <td class="api-key-no">第 {{ loop.index }} 組</td>
+        <td><code>{{ k }}</code></td>
+        <td class="api-key-action">
+          <form method="post" action="/settings/api-keys/delete">
+            <input type="hidden" name="index" value="{{ loop.index0 }}">
+            <button type="submit" class="secondary" onclick="return confirm('確定要刪除第 {{ loop.index }} 組 API Key？')">刪除</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="warning">尚未設定 API Key</p>
+  {% endif %}
+  <form method="post" action="/settings/api-keys/add" class="api-key-add">
+    <label for="api_key" class="sr-only">新增 API Key</label>
+    <input type="password" id="api_key" name="api_key" size="40" autocomplete="off" placeholder="貼上新的 API Key" required>
+    <button type="submit">新增</button>
+  </form>
+
+  <h3>insttoken</h3>
+  <p class="muted small">校外使用時才需要。目前：{{ insttoken_status }}</p>
+  <form method="post" action="/settings/insttoken" class="api-key-add">
+    <label for="insttoken" class="sr-only">insttoken</label>
+    <input type="password" id="insttoken" name="insttoken" size="40" autocomplete="off" placeholder="留空並儲存表示清除">
+    <button type="submit" class="secondary">儲存 insttoken</button>
   </form>
 </section>
 

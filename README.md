@@ -31,6 +31,7 @@
    ```
 
    ```ini
+   # 可放多組，以逗號分隔；某組額度用完時會自動換下一組
    ELSEVIER_API_KEY=你的 API Key
    # 在校外使用時才需要
    ELSEVIER_INSTTOKEN=
