@@ -10,7 +10,7 @@ SCHEMA = {
     "type": "object",
     "properties": {
         "summary": {"type": "string"},
-        "comparison": {"type": ["string", "null"]},
+        "comparison": {"anyOf": [{"type": "string"}, {"type": "null"}]},
     },
     "required": ["summary", "comparison"],
     "additionalProperties": False,

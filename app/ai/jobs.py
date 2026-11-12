@@ -1,6 +1,7 @@
 """背景產生 AI 摘要：逐筆呼叫，單筆失敗記錄後繼續。"""
 
 import asyncio
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -10,6 +11,8 @@ from app.ai import service
 from app.ai.service import AiError, SummaryWriter
 from app.db.models import Run
 from app.db.settings_store import get_setting
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -47,14 +50,17 @@ class AiJobManager:
         return True
 
     async def _run(self, run_id: int, todo: list[tuple[str, str]], tone: str, model: str, state: JobState) -> None:
+        writer = None
         try:
-            writer = self.writer_factory()
             for kind, key in todo:
                 try:
+                    if writer is None:  # 建立失敗（例如設定有誤）要記在每個項目上，畫面才看得到
+                        writer = self.writer_factory()
                     await asyncio.to_thread(self._one, run_id, kind, key, writer, tone, model)
                 except AiError as e:
                     state.errors[(kind, key)] = e.message
                 except Exception:  # 單筆非預期錯誤也不能中斷其餘項目
+                    log.exception("產生 AI 摘要失敗：分析 %s、%s %s", run_id, kind, key)
                     state.errors[(kind, key)] = "產生時發生未預期的錯誤"
                 state.done += 1
         finally:

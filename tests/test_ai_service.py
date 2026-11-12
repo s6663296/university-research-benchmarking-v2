@@ -116,6 +116,21 @@ async def test_job_only_one_target_and_no_double_start(session, session_factory,
     assert manager.state(done_run.id).total == 1
 
 
+async def test_job_reports_writer_factory_failure(session, session_factory, done_run, caplog):
+    def broken():
+        raise RuntimeError("boom")
+
+    manager = AiJobManager(session_factory, broken)
+    manager.start(done_run.id)
+    await manager.tasks[done_run.id]
+    state = manager.state(done_run.id)
+    targets = service.targets(session, done_run)
+    assert state.finished and state.done == state.total == len(targets)
+    assert set(state.errors) == set(targets)
+    assert all(m == "產生時發生未預期的錯誤" for m in state.errors.values())
+    assert "boom" in caplog.text and rows(session) == []
+
+
 def fake_client(create):
     return SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
 
@@ -171,5 +186,7 @@ def test_claude_writer_parses_output_and_sends_expected_request():
     assert "temperature" not in seen and "thinking" not in seen
     assert seen["output_config"]["effort"] == "medium"
     assert seen["output_config"]["format"]["type"] == "json_schema"
+    assert seen["output_config"]["format"]["schema"]["properties"]["comparison"] == {
+        "anyOf": [{"type": "string"}, {"type": "null"}]}
     assert seen["fallbacks"] == "default" and seen["betas"] == ["server-side-fallback-2026-07-01"]
     assert "資管" in seen["messages"][0]["content"]
