@@ -37,6 +37,16 @@ async def test_compare_aligns_by_unit_key(session, two_runs):
     assert (row.a, row.b, row.delta) == (Decimal("1.10"), Decimal("1.20"), Decimal("0.10"))
 
 
+async def test_compare_includes_ranks(session, two_runs):
+    a, b = two_runs
+    row = next(r for r in compare_runs(session, a.id, b.id)
+               if (r.school, r.ncu_dept, r.comparison, r.indicator_id) == ("中央", "資訊管理學系", "benchmark", "q1"))
+    ranks = {rid: session.scalars(select(Result.rank).join(Unit, Unit.id == Result.unit_id).where(
+        Result.run_id == rid, Unit.school == "中央", Unit.ncu_dept == "資訊管理學系",
+        Result.comparison == "benchmark", Result.indicator_id == "q1")).one() for rid in (a.id, b.id)}
+    assert (row.rank_a, row.rank_b) == (ranks[a.id], ranks[b.id])
+
+
 async def test_compare_unit_only_in_one(session, two_runs):
     a, b = two_runs
     row = next(r for r in compare_runs(session, a.id, b.id) if r.school == "政治" and r.indicator_id == "total")
