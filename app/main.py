@@ -3,7 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.ai.claude import ClaudeWriter
+from app.ai.jobs import AiJobManager
 from app.config import Settings
+from app.db.settings_store import get_setting
 from app.db.import_session import retire_current_imports
 from app.db.session import init_db, make_engine, make_session_factory
 from app.elsevier.client import make_client
@@ -43,6 +46,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return make_client(app.state.settings, s)
 
         app.state.run_manager = RunManager(session_factory, client_factory)
+
+        def writer_factory():
+            with session_factory() as s:
+                model = get_setting(s, "ai_model")
+            return ClaudeWriter(app.state.settings.anthropic_api_key, model)
+
+        app.state.ai_jobs = AiJobManager(session_factory, writer_factory)
         app.state.moe_fetcher = MoeFetcher(session_factory, settings.data_dir)
         yield
         engine.dispose()

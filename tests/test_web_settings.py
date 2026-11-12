@@ -128,3 +128,27 @@ def test_reset_refused_while_run_is_fetching(client):
     manager.any_running = lambda: True
     r = client.post("/settings/reset")
     assert r.status_code == 409
+
+
+def test_save_ai_key_masks_and_writes_env(keyed_client, tmp_path):
+    keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-secret7777"})
+    assert "ANTHROPIC_API_KEY=sk-ant-secret7777" in (tmp_path / ".env").read_text(encoding="utf-8")
+    text = keyed_client.get("/settings").text
+    assert "7777" in text and "secret" not in text
+    keyed_client.post("/settings/reset")
+    assert "ANTHROPIC_API_KEY=\n" in (tmp_path / ".env").read_text(encoding="utf-8")
+    assert keyed_client.app.state.settings.anthropic_api_key == ""
+
+
+def test_save_ai_options(client):
+    from app.ai.prompts import DEFAULT_TONE
+    from app.db.settings_store import get_setting
+
+    client.post("/settings/ai", data={"ai_model": "claude-sonnet-5-5", "ai_tone_prompt": "自訂語氣"})
+    with client.app.state.session_factory() as s:
+        assert get_setting(s, "ai_model") == "claude-sonnet-5-5"
+        assert get_setting(s, "ai_tone_prompt") == "自訂語氣"
+    client.post("/settings/ai", data={"ai_model": "", "ai_tone_prompt": "  "})
+    with client.app.state.session_factory() as s:
+        assert get_setting(s, "ai_model") == "claude-opus-5-5"
+        assert get_setting(s, "ai_tone_prompt") == DEFAULT_TONE

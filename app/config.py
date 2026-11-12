@@ -12,15 +12,16 @@ class Settings(BaseSettings):
 
     elsevier_api_key: str = ""
     elsevier_insttoken: str = ""
+    anthropic_api_key: str = ""
     data_dir: Path = Path("data")
     host: str = "127.0.0.1"
     port: int = 8000
     env_path: Path = ENV_FILE
 
 
-def save_env(path: Path, api_key: str, insttoken: str) -> None:
-    """改寫 .env 中的 API Key 與 insttoken，保留其他設定。"""
-    values = {"ELSEVIER_API_KEY": api_key, "ELSEVIER_INSTTOKEN": insttoken}
+def save_env(path: Path, values: dict[str, str]) -> None:
+    """改寫 .env 中指定的鍵，保留其他設定。"""
+    values = dict(values)
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
     out = []
     for line in lines:

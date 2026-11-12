@@ -17,6 +17,23 @@
   </form>
 </section>
 
+<section class="card">
+  <h2>Claude（AI 摘要）</h2>
+  <p>API Key：{{ ai_key_status }}</p>
+  <form method="post" action="/settings/ai-key">
+    <div class="field"><label for="ai_key">新的 Claude API Key（留空表示不變）</label>
+      <input type="password" id="ai_key" name="ai_key" size="40" autocomplete="off"></div>
+    <button type="submit">儲存到 .env</button>
+  </form>
+  <form method="post" action="/settings/ai">
+    <div class="field"><label for="ai_model">模型（留空使用預設）</label>
+      <input type="text" id="ai_model" name="ai_model" size="40" value="{{ ai_model }}"></div>
+    <div class="field"><label for="ai_tone_prompt">語氣提示（留空回到預設）</label>
+      <textarea id="ai_tone_prompt" name="ai_tone_prompt" rows="8" cols="60">{{ ai_tone }}</textarea></div>
+    <button type="submit">儲存模型與語氣</button>
+  </form>
+</section>
+
 <form method="post" action="/settings">
 <section class="card">
   <h2>抓取與計算</h2>
@@ -39,7 +56,7 @@
 
 <section class="card danger-zone">
   <h2>清除所有資料</h2>
-  <p>刪除對照表、教師數、所有分析結果與產出檔、API 快取與額度紀錄，並清空 .env 中的 API Key 與 insttoken；上方參數回到預設值。此動作無法復原。</p>
+  <p>刪除對照表、教師數、所有分析結果與產出檔、API 快取與額度紀錄，並清空 .env 中的 API Key、insttoken 與 Claude API Key；上方參數回到預設值。此動作無法復原。</p>
   <form method="post" action="/settings/reset">
     <button type="submit" class="danger"
       onclick="return confirm('確定要清除所有資料？包含 API Key、對照表、教師數與所有分析結果，無法復原。')">清除所有資料</button>

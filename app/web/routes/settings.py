@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.ai.prompts import DEFAULT_TONE
 from app.config import save_env
 from app.db.session import clear_all_data
-from app.db.settings_store import get_setting, set_setting
+from app.db.settings_store import DEFAULT_SETTINGS, get_setting, set_setting
 from app.elsevier.selfcite import usable_strategy_id
 from app.elsevier.client import ConnectionStatus, make_client
 from app.elsevier.quota import quota_rows
@@ -46,6 +47,8 @@ def _context(session: Session, request: Request, **extra) -> dict:
         strategy=usable_strategy_id(get_setting(session, "self_citation_strategy")), strategy_choices=SELF_CITATION_CHOICES,
         key_status=mask_key(request.app.state.settings.elsevier_api_key),
         insttoken_status=mask_key(request.app.state.settings.elsevier_insttoken),
+        ai_key_status=mask_key(request.app.state.settings.anthropic_api_key),
+        ai_model=get_setting(session, "ai_model"), ai_tone=get_setting(session, "ai_tone_prompt"),
         errors=[], saved=False, reset=request.query_params.get("reset") == "1",
     )
     ctx.update(extra)
@@ -89,9 +92,28 @@ async def save_api_key(request: Request):
     settings = request.app.state.settings
     api_key = str(form.get("api_key", "")).strip() or settings.elsevier_api_key
     insttoken = str(form.get("insttoken", "")).strip()
-    save_env(settings.env_path, api_key, insttoken)
+    save_env(settings.env_path, {"ELSEVIER_API_KEY": api_key, "ELSEVIER_INSTTOKEN": insttoken})
     request.app.state.settings = settings.model_copy(
         update={"elsevier_api_key": api_key, "elsevier_insttoken": insttoken})
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/ai-key")
+async def save_ai_key(request: Request):
+    form = await request.form()
+    settings = request.app.state.settings
+    key = str(form.get("ai_key", "")).strip() or settings.anthropic_api_key
+    save_env(settings.env_path, {"ANTHROPIC_API_KEY": key})
+    request.app.state.settings = settings.model_copy(update={"anthropic_api_key": key})
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/ai")
+async def save_ai_options(request: Request, session: Session = Depends(get_session)):
+    """模型與語氣提示；留空就回到預設值。"""
+    form = await request.form()
+    set_setting(session, "ai_model", str(form.get("ai_model", "")).strip() or DEFAULT_SETTINGS["ai_model"])
+    set_setting(session, "ai_tone_prompt", str(form.get("ai_tone_prompt", "")).strip() or DEFAULT_TONE)
     return RedirectResponse("/settings", status_code=303)
 
 
@@ -103,8 +125,9 @@ def reset_all(request: Request):
     settings = request.app.state.settings
     clear_all_data(request.app.state.engine)
     shutil.rmtree(settings.data_dir / "exports", ignore_errors=True)
-    save_env(settings.env_path, "", "")
-    request.app.state.settings = settings.model_copy(update={"elsevier_api_key": "", "elsevier_insttoken": ""})
+    save_env(settings.env_path, {"ELSEVIER_API_KEY": "", "ELSEVIER_INSTTOKEN": "", "ANTHROPIC_API_KEY": ""})
+    request.app.state.settings = settings.model_copy(
+        update={"elsevier_api_key": "", "elsevier_insttoken": "", "anthropic_api_key": ""})
     return RedirectResponse("/settings?reset=1", status_code=303)
 
 
