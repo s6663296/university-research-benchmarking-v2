@@ -122,6 +122,8 @@ def reset_all(request: Request):
     """清除所有資料：資料庫、產出檔與 .env 中的 API Key；設定回到預設值。"""
     if request.app.state.run_manager.any_running():
         raise HTTPException(409, "仍有分析在抓取中，請等它結束後再清除")
+    if request.app.state.ai_jobs.any_running():
+        raise HTTPException(409, "AI 總結仍在產生中，請等它結束後再清除")
     settings = request.app.state.settings
     clear_all_data(request.app.state.engine)
     shutil.rmtree(settings.data_dir / "exports", ignore_errors=True)

@@ -19,6 +19,7 @@ from app.runs.scope import RunConfig
 class SummaryDraft:
     summary: str
     comparison: str | None
+    has_baseline: bool = False  # 有前期卻沒有比較說明時，報告不能寫「無前期資料可比較」
 
 
 class SummaryWriter(Protocol):
@@ -84,7 +85,7 @@ def fresh_text(session: Session, run: Run, kind: str, key: str) -> SummaryDraft 
     row = _row(session, run.id, kind, key)
     if row is None or not is_fresh(session, row):
         return None
-    return SummaryDraft(row.summary, row.comparison)
+    return SummaryDraft(row.summary, row.comparison, row.baseline_run_id is not None)
 
 
 def targets(session: Session, run: Run) -> list[tuple[str, str]]:

@@ -492,6 +492,8 @@ class ReportBuilder(DeckBuilder):
         if self.funding.has_data:
             chapters.insert(0, "funding")
         sections = [f"{self.numbers[c]}. {self.text.field(c, 'name')}" for c in chapters]
+        if self.ai_text:
+            sections.append(f"{self.numbers['ai']}. 總結與建議")
         box = slide.shapes.add_textbox(Emu(MARGIN + 200000), Emu(SUB_Y + 100000), Emu(CONTENT_W - 400000),
                                        Emu(FOOTER_RULE_Y - SUB_Y - 250000))
         frame = box.text_frame
@@ -503,7 +505,7 @@ class ReportBuilder(DeckBuilder):
             para.space_before = Pt(14 if i else 0)
             _font(para.add_run(), Pt(20), True, NAVY)
             para.runs[0].text = section
-            if i == len(sections) - 1:   # 最後一節（本系所各指標）列出各指標
+            if i == len(chapters) - 1:   # 本系所各指標那一節列出各指標（AI 章在其後）
                 for key in INDICATOR_KEYS:
                     sub = frame.add_paragraph()
                     sub.level = 1
@@ -604,9 +606,11 @@ class ReportBuilder(DeckBuilder):
 
     def ai_page(self):
         """最後一章：Claude 產生的總結與前期比較（無前期資料時明說）。"""
-        comparison = self.ai_text.comparison or "無前期資料可比較"
-        self.text_pages(f"{self.ncu_dept}總結與建議", f"{self.numbers['ai']}. 總結與建議",
-                        [("總結", self.ai_text.summary), ("與前期比較", comparison)])
+        sections = [("總結", self.ai_text.summary)]
+        comparison = self.ai_text.comparison or (None if self.ai_text.has_baseline else "無前期資料可比較")
+        if comparison:
+            sections.append(("與前期比較", comparison))
+        self.text_pages(f"{self.ncu_dept}總結與建議", f"{self.numbers['ai']}. 總結與建議", sections)
 
     def build(self, out_path: Path) -> Path:
         self.cover()

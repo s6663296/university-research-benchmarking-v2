@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.ai.inputs import college_input, dept_input, input_hash
 from app.db.models import Anomaly, Result, Unit
@@ -46,7 +46,7 @@ async def test_baseline_changes_and_basis(session, session_factory, respx_mock):
     await execute_run(cur.id, session_factory, fake_client())
     session.expire_all()
     prev = dept_input(session, cur, DEPT)["前期"]
-    assert prev["分析編號"] == old.id
+    assert "分析編號" not in prev and prev["期間"] == "2020-2024"
     assert "對標學校不同" in prev["比較基準差異"]
     q1 = next(c for c in prev["指標變化"] if c["比較"] == "對標學校比較" and c["名稱"] == BY_ID["q1"].label)
     old_row = next(r for r in indicator_table(session, old.id, "benchmark", DEPT, "q1").rows if r.is_ncu)
@@ -83,3 +83,25 @@ async def test_funding_has_no_derived_totals(session, done_run):
     table = funding_table(session, done_run, dept["學院"])
     if table.has_data:
         assert [r["系所"] for r in college["計畫經費"]["各系所"]] == [r.ncu_dept for r in table.rows]
+
+
+async def test_renumbering_baseline_keeps_hash(session, session_factory, respx_mock, tmp_path):
+    from app.db.models import Run, RunUnit
+    from app.runs.renumber import renumber_runs
+    FakeElsevier().install(respx_mock)
+    dummy = make_run(session)
+    old = make_run(session, year_from=2020, year_to=2024, schools=("台大",))
+    await execute_run(old.id, session_factory, fake_client())
+    cur = make_run(session)
+    await execute_run(cur.id, session_factory, fake_client())
+    session.expire_all()
+    cur_id = cur.id
+    before = input_hash(dept_input(session, session.get(Run, cur.id), DEPT))
+    session.execute(delete(RunUnit).where(RunUnit.run_id == dummy.id))
+    session.delete(session.get(Run, dummy.id))
+    session.commit()
+    assert renumber_runs(session, tmp_path)
+    session.expire_all()
+    cur_after = session.scalars(select(Run).order_by(Run.id.desc())).first()
+    assert cur_after.id != cur_id
+    assert input_hash(dept_input(session, cur_after, DEPT)) == before

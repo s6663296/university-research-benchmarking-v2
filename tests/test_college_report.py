@@ -26,6 +26,12 @@ async def test_college_deck_without_baseline(session, done_run, tmp_path):
     assert "無前期資料可比較" in texts_on(p.slides[2])
 
 
+async def test_college_deck_with_baseline_but_no_comparison_omits_page(session, done_run, tmp_path):
+    p = build(session, done_run, tmp_path, SummaryDraft("穩定。", None, has_baseline=True))
+    assert len(p.slides) == 2
+    assert all("無前期資料可比較" not in texts_on(s) for s in p.slides)
+
+
 async def test_college_filename(session, done_run):
     assert college_report_filename(done_run, "管理學院") == (
         f"{done_run.period_from}-{done_run.period_to}管理學院論文指標全院總結.pptx")

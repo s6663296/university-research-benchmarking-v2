@@ -130,6 +130,11 @@ def test_reset_refused_while_run_is_fetching(client):
     assert r.status_code == 409
 
 
+def test_reset_refused_while_ai_job_runs(client):
+    client.app.state.ai_jobs.any_running = lambda: True
+    assert client.post("/settings/reset").status_code == 409
+
+
 def test_save_ai_key_masks_and_writes_env(keyed_client, tmp_path):
     keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-secret7777"})
     assert "ANTHROPIC_API_KEY=sk-ant-secret7777" in (tmp_path / ".env").read_text(encoding="utf-8")

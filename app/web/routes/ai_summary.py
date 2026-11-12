@@ -85,7 +85,10 @@ async def save_summary(request: Request, run_id: int, summary_id: int, session: 
     if row is None or row.run_id != run_id:
         raise HTTPException(404, "找不到這筆總結")
     form = await request.form()
-    service.save_edit(session, summary_id, str(form.get("summary", "")).strip(),
+    text = str(form.get("summary", "")).strip()
+    if not text:
+        raise HTTPException(400, "總結不能是空白")
+    service.save_edit(session, summary_id, text,
                       str(form.get("comparison", "")).strip() or None)
     return _back(run_id)
 

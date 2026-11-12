@@ -146,3 +146,15 @@ def test_fresh_text_failure_does_not_break_download(client, run_id, monkeypatch)
     monkeypatch.setattr("app.web.routes.runs.fresh_text", boom)
     assert client.get(f"/runs/{run_id}/pptx/{DEPT}").status_code == 200
     assert client.get(f"/runs/{run_id}/pptx.zip").status_code == 200
+
+
+@pytest.mark.parametrize("value", ["", "   \n "])
+def test_save_empty_summary_rejected(client, run_id, value):
+    generate(client, run_id)
+    with client.app.state.session_factory() as s:
+        row = s.scalars(select(AiSummary)).first()
+        sid, old = row.id, row.summary
+    r = client.post(f"/runs/{run_id}/ai/summaries/{sid}", data={"summary": value}, follow_redirects=False)
+    assert r.status_code == 400
+    with client.app.state.session_factory() as s:
+        assert s.get(AiSummary, sid).summary == old

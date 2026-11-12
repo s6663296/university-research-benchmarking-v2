@@ -1,3 +1,4 @@
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -190,3 +191,22 @@ def test_claude_writer_parses_output_and_sends_expected_request():
         "anyOf": [{"type": "string"}, {"type": "null"}]}
     assert seen["fallbacks"] == "default" and seen["betas"] == ["server-side-fallback-2026-07-01"]
     assert "資管" in seen["messages"][0]["content"]
+
+
+async def test_fresh_text_reports_baseline(session, done_run):
+    row = service.generate(session, done_run, "dept", DEPT, FakeWriter(), DEFAULT_TONE, "m")
+    assert service.fresh_text(session, done_run, "dept", DEPT).has_baseline is False
+    row.baseline_run_id = 99
+    session.commit()
+    assert service.fresh_text(session, done_run, "dept", DEPT).has_baseline is True
+
+
+async def test_any_running_tracks_tasks(session_factory):
+    manager = AiJobManager(session_factory, lambda: FakeWriter())
+    assert manager.any_running() is False
+    task = asyncio.create_task(asyncio.sleep(10))
+    manager.tasks[1] = task
+    assert manager.any_running() is True
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    assert manager.any_running() is False

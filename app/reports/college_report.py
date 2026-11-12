@@ -28,8 +28,9 @@ class CollegeReportBuilder(DeckBuilder):
         self._cover("員額小組論文資料", f"{NCU_SHEET}{self.college}",
                     f"{self.period} 論文指標全院總結\n{date.today().strftime('%Y/%m/%d')}")
         self.text_pages("全院總結", "I. 全院總結", [("全院總結", self.ai_text.summary)])
-        self.text_pages("與前期比較", "II. 與前期比較",
-                        [("與前期比較", self.ai_text.comparison or "無前期資料可比較")])
+        comparison = self.ai_text.comparison or (None if self.ai_text.has_baseline else "無前期資料可比較")
+        if comparison:
+            self.text_pages("與前期比較", "II. 與前期比較", [("與前期比較", comparison)])
         self._footer(f"{NCU_SHEET} {self.college}｜{self.period} 論文指標全院總結")
         out_path.parent.mkdir(parents=True, exist_ok=True)
         self.prs.save(out_path)

@@ -37,6 +37,9 @@ class AiJobManager:
         task = self.tasks.get(run_id)
         return task is not None and not task.done()
 
+    def any_running(self) -> bool:
+        return any(not t.done() for t in self.tasks.values())
+
     def start(self, run_id: int, only: tuple[str, str] | None = None) -> bool:
         """已在跑回 False。"""
         if self.is_running(run_id):

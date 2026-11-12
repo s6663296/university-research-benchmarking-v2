@@ -43,6 +43,8 @@ def delete_run(request: Request, run_id: int, session: Session = Depends(get_ses
     run = get_run(session, run_id)
     if request.app.state.run_manager.is_running(run_id):
         raise HTTPException(409, "這個分析仍在抓取中，無法刪除")
+    if request.app.state.ai_jobs.any_running():
+        raise HTTPException(409, "AI 總結仍在產生中，請等它結束後再刪除")
     for model in (Result, Anomaly, RunPublication, RunUnit, Export, AiSummary):
         session.execute(delete(model).where(model.run_id == run_id))
     # 其他分析若以它為前期，清掉指向（不設外鍵，由程式維護）
@@ -52,7 +54,7 @@ def delete_run(request: Request, run_id: int, session: Session = Depends(get_ses
     session.commit()
     data_dir = request.app.state.settings.data_dir
     shutil.rmtree(data_dir / "exports" / str(run_id), ignore_errors=True)
-    if not request.app.state.run_manager.any_running():  # 有分析在跑時編號不能動，留到下次刪除或重啟
+    if not request.app.state.run_manager.any_running() and not request.app.state.ai_jobs.any_running():  # 有分析在跑時編號不能動，留到下次刪除或重啟
         renumber_runs(session, data_dir)
     return RedirectResponse("/runs", status_code=303)
 

@@ -88,6 +88,12 @@ def test_cannot_delete_running_run(client, web_done_run):
     assert client.get(f"/runs/{web_done_run}").status_code == 200
 
 
+def test_cannot_delete_while_ai_job_running(client, web_done_run):
+    client.app.state.ai_jobs.any_running = lambda: True
+    assert client.post(f"/runs/{web_done_run}/delete").status_code == 409
+    assert client.get(f"/runs/{web_done_run}").status_code == 200
+
+
 def test_delete_run_renumbers_the_rest(client, web_done_run):
     import asyncio
     factory = client.app.state.session_factory

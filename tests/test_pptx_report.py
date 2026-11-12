@@ -236,6 +236,18 @@ async def test_ai_page_without_baseline_says_so(session, done_run, tmp_path):
     assert "無前期資料可比較" in texts_on(p.slides[-1])
 
 
+async def test_ai_page_with_baseline_but_no_comparison_omits_section(session, done_run, tmp_path):
+    p = build(session, done_run, tmp_path, SummaryDraft("本系穩定。", None, has_baseline=True))
+    last = texts_on(p.slides[-1])
+    assert "無前期資料可比較" not in last and "與前期比較" not in last and "本系穩定。" in last
+
+
+async def test_toc_lists_ai_chapter(session, done_run, tmp_path):
+    p = build(session, done_run, tmp_path, DRAFT)
+    assert "III. 總結與建議" in toc_text(p)
+    assert "總結與建議" not in toc_text(build(session, done_run, tmp_path))
+
+
 async def test_long_ai_text_splits_without_overlap(session, done_run, tmp_path):
     draft = SummaryDraft("\n".join("字" * 60 for _ in range(40)), None)
     p = build(session, done_run, tmp_path, draft)

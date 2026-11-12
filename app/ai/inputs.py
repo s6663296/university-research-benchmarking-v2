@@ -89,7 +89,7 @@ def _previous(session: Session, run: Run, base: Run, dept: str, college: str) ->
     funding = None
     if old_row is not None:
         funding = {"前期": _funding_row(old_row), "本期": _funding_row(new_row) if new_row else None}
-    return {"分析編號": base.id, "期間": _period(base),
+    return {"期間": _period(base),
             "比較基準差異": basis_differences(run, base, dept),
             "指標變化": changes, "計畫經費變化": funding}
 
