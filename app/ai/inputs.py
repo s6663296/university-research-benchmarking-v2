@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -54,20 +53,12 @@ def _funding_row(row: FundingRow) -> dict:
             "教師數": row.teachers}
 
 
-def _funding_college(table: FundingTable) -> dict:
-    def total(attr: str) -> Decimal:
-        return sum((getattr(r, attr) for r in table.rows), Decimal(0))
-    return {"國科會年平均": money(total("nstc_avg")), "產學年平均": money(total("industry_avg")),
-            "合計年平均": money(total("total_avg"))}
-
-
 def _funding(session: Session, run: Run, dept: str, college: str) -> dict | None:
     table = funding_table(session, run, college)
     if not table.has_data:
         return None
     row = next((r for r in table.rows if r.ncu_dept == dept), None)
-    return {"年度": list(table.years), "該系所": _funding_row(row) if row else None,
-            "全院": _funding_college(table)}
+    return {"年度": list(table.years), "該系所": _funding_row(row) if row else None}
 
 
 def _dept_funding_row(session: Session, run: Run, dept: str, college: str) -> FundingRow | None:
@@ -122,8 +113,7 @@ def college_input(session: Session, run: Run, college: str) -> dict:
     table = funding_table(session, run, college)
     funding = None if not table.has_data else {
         "年度": list(table.years),
-        "各系所": [{"系所": r.ncu_dept, **_funding_row(r)} for r in table.rows],
-        "全院": _funding_college(table)}
+        "各系所": [{"系所": r.ncu_dept, **_funding_row(r)} for r in table.rows]}
     return {"學院": college, "期間": _period(run),
             "系所": [{k: v for k, v in dept_input(session, run, d).items() if k not in top_level} for d in names],
             "計畫經費": funding}

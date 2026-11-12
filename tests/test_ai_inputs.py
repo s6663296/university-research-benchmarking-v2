@@ -73,3 +73,13 @@ async def test_hash_changes_when_data_changes(session, done_run):
     r.value = (r.value or Decimal(0)) + Decimal("1.00")
     session.commit()
     assert h != input_hash(dept_input(session, done_run, DEPT))
+
+
+async def test_funding_has_no_derived_totals(session, done_run):
+    from app.funding.service import funding_table
+    dept = dept_input(session, done_run, DEPT)
+    college = college_input(session, done_run, dept["學院"])
+    assert "全院" not in str(dept["計畫經費"]) and "全院" not in str(college["計畫經費"])
+    table = funding_table(session, done_run, dept["學院"])
+    if table.has_data:
+        assert [r["系所"] for r in college["計畫經費"]["各系所"]] == [r.ncu_dept for r in table.rows]
