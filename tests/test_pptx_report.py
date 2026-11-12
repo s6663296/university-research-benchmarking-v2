@@ -3,7 +3,8 @@ from pptx.dml.color import RGBColor
 from sqlalchemy import select
 
 from app.db.models import Anomaly, Export, RunUnit
-from app.reports.pptx_report import TEMPLATE, build_dept_report
+from app.ai.service import SummaryDraft
+from app.reports.pptx_report import FOOTER_RULE_Y, NAVY, TEMPLATE, build_dept_report
 from app.reports.tables import fmt, indicator_table
 
 RED = RGBColor(0xFF, 0x00, 0x00)
@@ -17,8 +18,8 @@ def texts_on(slide):
     return "\n".join(s.text_frame.text for s in slide.shapes if s.has_text_frame)
 
 
-def build(session, run, tmp_path):
-    return Presentation(build_dept_report(session, run.id, "資訊管理學系", tmp_path / "r.pptx"))
+def build(session, run, tmp_path, ai_text=None):
+    return Presentation(build_dept_report(session, run.id, "資訊管理學系", tmp_path / "r.pptx", ai_text))
 
 
 def test_template_has_no_slides():
@@ -212,3 +213,48 @@ def test_custom_text_reaches_download(client, web_done_run):
 
     p = Presentation(BytesIO(r.content))
     assert "下載驗證名稱" in toc_text(p) and p.slides[3].shapes.title.text == "2021-2025 下載驗證名稱"
+
+
+DRAFT = SummaryDraft("本系 Q1 表現穩定。", "Q1 師均由 1.10 提升至 1.20。")
+
+
+async def test_no_ai_text_keeps_structure(session, done_run, tmp_path):
+    assert len(build(session, done_run, tmp_path).slides) == 9
+
+
+async def test_ai_page_is_last(session, done_run, tmp_path):
+    p = build(session, done_run, tmp_path, DRAFT)
+    assert len(p.slides) == 10
+    last = texts_on(p.slides[-1])
+    assert "資訊管理學系總結與建議" in last and "本系 Q1 表現穩定。" in last
+    assert "Q1 師均由 1.10 提升至 1.20。" in last and "10 / 10" in last
+    assert "III. 總結與建議" in last
+
+
+async def test_ai_page_without_baseline_says_so(session, done_run, tmp_path):
+    p = build(session, done_run, tmp_path, SummaryDraft("本系穩定。", None))
+    assert "無前期資料可比較" in texts_on(p.slides[-1])
+
+
+async def test_long_ai_text_splits_without_overlap(session, done_run, tmp_path):
+    draft = SummaryDraft("\n".join("字" * 60 for _ in range(40)), None)
+    p = build(session, done_run, tmp_path, draft)
+    assert len(p.slides) > 10
+    assert "（續）" in p.slides[-1].shapes.title.text
+    for slide in list(p.slides)[9:]:
+        shapes = list(boxes(slide))
+        for name, x0, y0, x1, y1 in shapes:
+            assert y1 <= p.slide_height and x1 <= p.slide_width, name
+        for name, x0, y0, x1, y1 in shapes:
+            if "Title" not in name and y0 < FOOTER_RULE_Y:
+                assert y1 <= FOOTER_RULE_Y, name
+        for i, a in enumerate(shapes):
+            for b in shapes[i + 1:]:
+                assert a[3] <= b[1] or b[3] <= a[1] or a[4] <= b[2] or b[4] <= a[2], (a[0], b[0])
+
+
+async def test_ai_page_uses_report_style(session, done_run, tmp_path):
+    p = build(session, done_run, tmp_path, DRAFT)
+    for slide in (p.slides[3], p.slides[-1]):
+        run = slide.shapes.title.text_frame.paragraphs[0].runs[0]
+        assert run.font.name == "Microsoft JhengHei" and run.font.color.rgb == NAVY

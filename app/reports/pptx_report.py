@@ -16,6 +16,7 @@ from datetime import date
 from decimal import Decimal
 from itertools import groupby
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from lxml import etree
 from pptx import Presentation
@@ -34,6 +35,9 @@ from app.mapping.parser import NCU_SHEET, is_ncu
 from app.mapping.service import units_of
 from app.reports.report_text import INDICATOR_KEYS, ReportText, report_values
 from app.reports.tables import IndicatorTable, Row, fmt, indicator_table, summary_table
+
+if TYPE_CHECKING:
+    from app.ai.service import SummaryDraft
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "report_template.pptx"
 
@@ -75,6 +79,8 @@ LINE = 1.3                       # 行高 / 字級（中文字型行距較大，
 WIDTH_SAFETY = 1.1               # 字寬估計的安全係數：實際字型略寬於估計，避免剛好放得下卻被換行
 PT = 12700                       # EMU per point
 TEXT_INSETS = 2 * 45720          # 文字框預設的上下留白
+TEXT_MAX_PT, TEXT_MIN_PT = 18, 12             # 文字頁字級範圍
+HEAD_GAP, SECTION_GAP = 40000, 160000        # 文字頁：小標與內文、區塊之間的間距
 
 def _font(run, size=None, bold=None, color=None):
     """統一字型：中英文都用微軟正黑體。顏色要在字型之前設定（XML 元素順序）。"""
@@ -274,28 +280,51 @@ def _count(value: Decimal | None) -> str:
     return "待確認" if value is None else str(int(value))
 
 
-class ReportBuilder:
-    def __init__(self, session: Session, run_id: int, ncu_dept: str):
-        self.session, self.run_id, self.ncu_dept = session, run_id, ncu_dept
+def _block_height(text: str, size: float) -> int:
+    """文字頁區塊的文字框高度：行數估計同 _fit_size。"""
+    lines = sum(max(1, math.ceil(_em(p) * size * PT / CONTENT_W)) for p in text.split("\n"))
+    return int(lines * size * PT * 1.2 + TEXT_INSETS)
+
+
+def _paginate(sections: list[tuple[str, str]], size: float, avail: int) -> list[list[tuple[bool, str]]]:
+    """依段落貪婪填頁，回傳每頁的區塊 (是否為小標, 文字)；相鄰段落併成一個文字框，小標不會落在頁尾。"""
+    def height(blocks):
+        return sum(_block_height(t, size + 2 if head else size) + (HEAD_GAP if head else SECTION_GAP)
+                   for head, t in blocks)
+
+    pages: list[list[tuple[bool, str]]] = [[]]
+    for heading, body in sections:
+        paras = [p for p in body.split("\n") if p.strip()]
+        for n, para in enumerate([None, *paras]):         # None 代表小標
+            def add(page):
+                if para is None:
+                    return [*page, (True, heading)]
+                if page and not page[-1][0]:
+                    return [*page[:-1], (False, page[-1][1] + "\n" + para)]
+                return [*page, (False, para)]
+
+            # 小標與它的第一段一起試放，放不下就整組換頁
+            if para is None:
+                probe = [*pages[-1], (True, heading), (False, paras[0] if paras else "")]
+            else:
+                probe = add(pages[-1])
+            if height(probe) > avail and pages[-1]:
+                pages.append([])
+            pages[-1] = add(pages[-1])
+    return pages
+
+
+class DeckBuilder:
+    """各份簡報共用的版面基底：內容頁、封面、頁尾與長文分頁，不含任何系所專屬內容。"""
+
+    def __init__(self, session: Session, run_id: int):
+        self.session, self.run_id = session, run_id
         self.run = session.get(Run, run_id)
-        self.notes = json.loads(self.run.notes_json or "{}")
-        unit = next(u for u in units_of(session, self.run.mapping_version_id)
-                    if is_ncu(u.school) and u.ncu_dept == ncu_dept)
-        self.unit_id, self.college = unit.id, unit.ncu_college or ""
-        self.period = f"{self.run.period_from}-{self.run.period_to}"
-        self.years = self.run.period_to - self.run.period_from + 1
         self.open_anomalies = session.scalar(select(func.count()).select_from(Anomaly).where(
             Anomaly.run_id == run_id, Anomaly.status != "confirmed"))
         self.prs = Presentation(TEMPLATE)
         self.layouts = {layout.name: layout for layout in self.prs.slide_layouts}
-        # 有經分表資料時，第 I 部分是計畫經費，論文指標順延為 II、III（範例報告的編號）
-        self.funding = funding_table(session, self.run, self.college)
-        nums = ("II", "III") if self.funding.has_data else ("I", "II")
-        self.numbers = {"funding": "I", "summary": nums[0], "detail": nums[1]}
-        self.text = ReportText(get_setting(session, "report_text"),
-                               report_values(session, self.run, ncu_dept, self.college, self.funding))
 
-    # ---- 共用 ----
     def _slide(self, title: str, kicker: str = "", subtitle: str = ""):
         """內容頁：章節標籤、標題、細線、副標；有待確認資料時右上角標示。"""
         slide = self.prs.slides.add_slide(self.layouts["只有標題"])
@@ -322,6 +351,80 @@ class ReportBuilder:
                   anchor=MSO_ANCHOR.MIDDLE)
         return slide
 
+    def _cover(self, label: str, title: str, subtitle: str):
+        """封面：深藍底、白字標題；label 在標題上方，subtitle 第一行為粗體主副標，其餘為小字。"""
+        slide = self.prs.slides.add_slide(self.layouts["標題投影片"])
+        fill = slide.background.fill
+        fill.solid()
+        fill.fore_color.rgb = NAVY
+        _text(slide, label, 1000000, 1450000, 8000000, 380000, Pt(16), RGBColor(0xBD, 0xD7, 0xEE), True)
+        shape = slide.shapes.title
+        shape.left, shape.top, shape.width, shape.height = Emu(1000000), Emu(1900000), Emu(10200000), Emu(1700000)
+        shape.text = title
+        frame = shape.text_frame
+        frame.word_wrap, frame.vertical_anchor = True, MSO_ANCHOR.TOP
+        for para in frame.paragraphs:
+            para.alignment = PP_ALIGN.LEFT
+            for run in para.runs:
+                _font(run, Pt(40), True, WHITE)
+        _rect(slide, 1000000, 3750000, 1600000, 50000, RGBColor(0x9D, 0xC3, 0xE6))
+        sub = slide.placeholders[1]
+        sub.left, sub.top, sub.width, sub.height = Emu(1000000), Emu(3950000), Emu(10200000), Emu(1100000)
+        sub.text = subtitle
+        for i, para in enumerate(sub.text_frame.paragraphs):
+            para.alignment = PP_ALIGN.LEFT
+            for run in para.runs:
+                _font(run, Pt(22 if i == 0 else 16), i == 0, WHITE if i == 0 else RGBColor(0xBD, 0xD7, 0xEE))
+
+    def _footer(self, name: str):
+        """每頁（封面除外）頁尾：細線、報告名稱、頁碼。最後統一加上才知道總頁數。"""
+        slides = list(self.prs.slides)
+        for n, slide in enumerate(slides[1:], start=2):
+            _rect(slide, MARGIN, FOOTER_RULE_Y, CONTENT_W, 9525, RGBColor(0xBF, 0xBF, 0xBF))
+            _text(slide, name, MARGIN, FOOTER_Y, CONTENT_W - 1300000, FOOTER_H, Pt(9), GRAY,
+                  anchor=MSO_ANCHOR.MIDDLE)
+            _text(slide, f"{n} / {len(slides)}", SLIDE_W - MARGIN - 1100000, FOOTER_Y, 1100000, FOOTER_H, Pt(9),
+                  GRAY, align=PP_ALIGN.RIGHT, anchor=MSO_ANCHOR.MIDDLE)
+
+    def text_pages(self, title: str, kicker: str, sections: list[tuple[str, str]]):
+        """文字頁：每節（小標, 內文）由上往下排；字級由 18pt 往下縮到 12pt，仍放不下就以段落為界分頁。"""
+        top = SUB_Y + 100000
+        avail = FOOTER_RULE_Y - 100000 - top
+        size = TEXT_MAX_PT
+        while True:
+            pages = _paginate(sections, size, avail)
+            if len(pages) == 1 or size <= TEXT_MIN_PT:
+                break
+            size -= 0.5
+        for i, blocks in enumerate(pages):
+            slide = self._slide(title + ("（續）" if i else ""), kicker)
+            y = top
+            for head, text in blocks:
+                pt = size + 2 if head else size
+                height = _block_height(text, pt)
+                _text(slide, text, MARGIN, y, CONTENT_W, height, Pt(pt), NAVY if head else GRAY, head)
+                y += height + (HEAD_GAP if head else SECTION_GAP)
+
+
+class ReportBuilder(DeckBuilder):
+    def __init__(self, session: Session, run_id: int, ncu_dept: str, ai_text: "SummaryDraft | None" = None):
+        super().__init__(session, run_id)
+        self.ncu_dept, self.ai_text = ncu_dept, ai_text
+        self.notes = json.loads(self.run.notes_json or "{}")
+        unit = next(u for u in units_of(session, self.run.mapping_version_id)
+                    if is_ncu(u.school) and u.ncu_dept == ncu_dept)
+        self.unit_id, self.college = unit.id, unit.ncu_college or ""
+        self.period = f"{self.run.period_from}-{self.run.period_to}"
+        self.years = self.run.period_to - self.run.period_from + 1
+        # 有經分表資料時，第 I 部分是計畫經費，論文指標順延為 II、III（範例報告的編號）
+        self.funding = funding_table(session, self.run, self.college)
+        nums = ("II", "III") if self.funding.has_data else ("I", "II")
+        self.numbers = {"funding": "I", "summary": nums[0], "detail": nums[1],
+                        "ai": "IV" if self.funding.has_data else "III"}
+        self.text = ReportText(get_setting(session, "report_text"),
+                               report_values(session, self.run, ncu_dept, self.college, self.funding))
+
+    # ---- 共用 ----
     def _page(self, key: str, chapter: str, suffix: str = ""):
         """依設定的文字建立內容頁：標題、章節標籤與副標都來自 report_text。"""
         kicker = f"{self.numbers[chapter]}. {self.text.kicker(chapter)}"
@@ -362,42 +465,11 @@ class ReportBuilder:
             self._label(slide, x, label)
             _table(slide, rows, x, TABLE_Y, HALF_W, max_height, header_rows, merges, red, max_size=size)
 
-    def _footer(self):
-        """每頁（封面除外）頁尾：細線、報告名稱、頁碼。最後統一加上才知道總頁數。"""
-        slides = list(self.prs.slides)
-        name = f"{NCU_SHEET} {self.college} {self.ncu_dept}｜{self.period} 論文表現分析"
-        for n, slide in enumerate(slides[1:], start=2):
-            _rect(slide, MARGIN, FOOTER_RULE_Y, CONTENT_W, 9525, RGBColor(0xBF, 0xBF, 0xBF))
-            _text(slide, name, MARGIN, FOOTER_Y, CONTENT_W - 1300000, FOOTER_H, Pt(9), GRAY,
-                  anchor=MSO_ANCHOR.MIDDLE)
-            _text(slide, f"{n} / {len(slides)}", SLIDE_W - MARGIN - 1100000, FOOTER_Y, 1100000, FOOTER_H, Pt(9),
-                  GRAY, align=PP_ALIGN.RIGHT, anchor=MSO_ANCHOR.MIDDLE)
-
     # ---- 各頁 ----
     def cover(self):
         """封面：深藍底、白字標題，下方為報告期間與產出日期。"""
-        slide = self.prs.slides.add_slide(self.layouts["標題投影片"])
-        fill = slide.background.fill
-        fill.solid()
-        fill.fore_color.rgb = NAVY
-        _text(slide, "員額小組論文資料", 1000000, 1450000, 8000000, 380000, Pt(16), RGBColor(0xBD, 0xD7, 0xEE), True)
-        title = slide.shapes.title
-        title.left, title.top, title.width, title.height = Emu(1000000), Emu(1900000), Emu(10200000), Emu(1700000)
-        title.text = f"{NCU_SHEET}{self.college}-\v{self.ncu_dept}"
-        frame = title.text_frame
-        frame.word_wrap, frame.vertical_anchor = True, MSO_ANCHOR.TOP
-        for para in frame.paragraphs:
-            para.alignment = PP_ALIGN.LEFT
-            for run in para.runs:
-                _font(run, Pt(40), True, WHITE)
-        _rect(slide, 1000000, 3750000, 1600000, 50000, RGBColor(0x9D, 0xC3, 0xE6))
-        sub = slide.placeholders[1]
-        sub.left, sub.top, sub.width, sub.height = Emu(1000000), Emu(3950000), Emu(10200000), Emu(1100000)
-        sub.text = f"{self.period} 論文表現分析\n{date.today().strftime('%Y/%m/%d')}"
-        for i, para in enumerate(sub.text_frame.paragraphs):
-            para.alignment = PP_ALIGN.LEFT
-            for run in para.runs:
-                _font(run, Pt(22 if i == 0 else 16), i == 0, WHITE if i == 0 else RGBColor(0xBD, 0xD7, 0xEE))
+        self._cover("員額小組論文資料", f"{NCU_SHEET}{self.college}-\v{self.ncu_dept}",
+                    f"{self.period} 論文表現分析\n{date.today().strftime('%Y/%m/%d')}")
 
     def toc(self):
         slide = self._slide("目錄")
@@ -515,6 +587,12 @@ class ReportBuilder:
         self._pair(slide, render, indicator_id)
         self._bottom(slide, indicator_id)
 
+    def ai_page(self):
+        """最後一章：Claude 產生的總結與前期比較（無前期資料時明說）。"""
+        comparison = self.ai_text.comparison or "無前期資料可比較"
+        self.text_pages(f"{self.ncu_dept}總結與建議", f"{self.numbers['ai']}. 總結與建議",
+                        [("總結", self.ai_text.summary), ("與前期比較", comparison)])
+
     def build(self, out_path: Path) -> Path:
         self.cover()
         self.toc()
@@ -527,14 +605,17 @@ class ReportBuilder:
         self.value_page("fwci", "FWCI")
         self.value_page("avg_citations", "平均論文被引次數(排除自我引用)")
         self.count_page("intl_collab")
-        self._footer()
+        if self.ai_text:
+            self.ai_page()
+        self._footer(f"{NCU_SHEET} {self.college} {self.ncu_dept}｜{self.period} 論文表現分析")
         out_path.parent.mkdir(parents=True, exist_ok=True)
         self.prs.save(out_path)
         return out_path
 
 
-def build_dept_report(session: Session, run_id: int, ncu_dept: str, out_path: Path) -> Path:
-    return ReportBuilder(session, run_id, ncu_dept).build(out_path)
+def build_dept_report(session: Session, run_id: int, ncu_dept: str, out_path: Path,
+                      ai_text: "SummaryDraft | None" = None) -> Path:
+    return ReportBuilder(session, run_id, ncu_dept, ai_text).build(out_path)
 
 
 def report_filename(session: Session, run_id: int, ncu_dept: str) -> str:
