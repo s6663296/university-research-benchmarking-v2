@@ -258,3 +258,16 @@ async def test_ai_page_uses_report_style(session, done_run, tmp_path):
     for slide in (p.slides[3], p.slides[-1]):
         run = slide.shapes.title.text_frame.paragraphs[0].runs[0]
         assert run.font.name == "Microsoft JhengHei" and run.font.color.rgb == NAVY
+
+
+async def test_single_huge_paragraph_stays_above_footer(session, done_run, tmp_path):
+    p = build(session, done_run, tmp_path, SummaryDraft("字" * 3000, None))
+    assert len(p.slides) > 10
+    for slide in list(p.slides)[9:]:
+        shapes = list(boxes(slide))
+        for name, x0, y0, x1, y1 in shapes:
+            if "Title" not in name and y0 < FOOTER_RULE_Y:
+                assert y1 <= FOOTER_RULE_Y, name
+        for i, a in enumerate(shapes):
+            for b in shapes[i + 1:]:
+                assert a[3] <= b[1] or b[3] <= a[1] or a[4] <= b[2] or b[4] <= a[2], (a[0], b[0])

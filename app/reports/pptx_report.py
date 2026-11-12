@@ -283,7 +283,22 @@ def _count(value: Decimal | None) -> str:
 def _block_height(text: str, size: float) -> int:
     """文字頁區塊的文字框高度：行數估計同 _fit_size。"""
     lines = sum(max(1, math.ceil(_em(p) * size * PT / CONTENT_W)) for p in text.split("\n"))
-    return int(lines * size * PT * 1.2 + TEXT_INSETS)
+    return int(lines * size * PT * LINE + TEXT_INSETS)
+
+
+def _split_long(text: str, size: float, avail: int) -> list[str]:
+    """單段高度超過一頁可用空間（扣掉小標）時，依字寬切成每塊都放得下的幾段。"""
+    budget = avail - _block_height("標", size + 2) - HEAD_GAP - SECTION_GAP
+    lines = max(int((budget - TEXT_INSETS) / (size * PT * LINE)) - 1, 1)   # 留一行給換行損耗
+    limit = lines * CONTENT_W / (size * PT)
+    chunks, current, used = [], "", 0.0
+    for ch in text:
+        width = _em(ch)
+        if used + width > limit:
+            chunks.append(current)
+            current, used = "", 0.0
+        current, used = current + ch, used + width
+    return [*chunks, current] if current else chunks
 
 
 def _paginate(sections: list[tuple[str, str]], size: float, avail: int) -> list[list[tuple[bool, str]]]:
@@ -294,7 +309,7 @@ def _paginate(sections: list[tuple[str, str]], size: float, avail: int) -> list[
 
     pages: list[list[tuple[bool, str]]] = [[]]
     for heading, body in sections:
-        paras = [p for p in body.split("\n") if p.strip()]
+        paras = [c for p in body.split("\n") if p.strip() for c in _split_long(p, size, avail)]
         for n, para in enumerate([None, *paras]):         # None 代表小標
             def add(page):
                 if para is None:
