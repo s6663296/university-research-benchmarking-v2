@@ -1,0 +1,42 @@
+<p class="muted">由 Claude 依本次分析的數字撰寫，請逐項確認後再下載簡報。資料更新後過時的總結不會放進簡報。</p>
+
+{% include "_ai_progress.html" %}
+
+<form method="post" action="/runs/{{ run.id }}/ai/generate" class="inline">
+  <button type="submit"{% if ai_polling %} disabled{% endif %}>產生 AI 總結</button>
+  <span class="muted">會重新產生所有系所與學院，並覆蓋已修改的文字</span>
+</form>
+
+<form method="post" action="/runs/{{ run.id }}/ai/baseline" class="inline">
+  <label for="ai-baseline">與前期比較</label>
+  <select id="ai-baseline" name="baseline">
+    <option value="">自動（上一期）</option>
+    {% for r in baseline_options %}<option value="{{ r.id }}"{% if run.ai_baseline_run_id == r.id %} selected{% endif %}>分析 #{{ r.id }}（{{ r.period_from }}–{{ r.period_to }}）</option>{% endfor %}
+  </select>
+  <button type="submit" class="secondary">套用</button>
+  <span class="muted">更換前期後，既有總結會顯示為過時，需重新產生</span>
+</form>
+
+{% for r in ai_rows %}
+<section class="card">
+  <h3>{{ r.key }}（{{ r.kind_label }}）<span class="{{ 'pending' if r.stale else 'muted' }}">{{ r.status }}</span></h3>
+  {% if r.kind == "dept" %}
+  <p class="muted">
+    {% if r.base %}比較前期：分析 #{{ r.base.id }}（{{ r.base.period_from }}–{{ r.base.period_to }}）{% if r.diffs %}；計算基準不同：{{ r.diffs | join("、") }}{% endif %}
+    {% else %}無前期資料可比較{% endif %}
+  </p>
+  {% endif %}
+  {% if r.row %}
+  <form method="post" action="/runs/{{ run.id }}/ai/summaries/{{ r.row.id }}">
+    <div class="field"><label for="s{{ r.row.id }}">總結</label><textarea id="s{{ r.row.id }}" name="summary" rows="6">{{ r.row.summary }}</textarea></div>
+    <div class="field"><label for="c{{ r.row.id }}">與前期比較</label><textarea id="c{{ r.row.id }}" name="comparison" rows="4">{{ r.row.comparison or "" }}</textarea></div>
+    <button type="submit">儲存</button>
+    <button type="submit" class="secondary" formaction="/runs/{{ run.id }}/ai/generate/{{ r.kind }}/{{ r.key | urlencode }}"{% if ai_polling %} disabled{% endif %}>重新產生</button>
+  </form>
+  {% else %}
+  <form method="post" action="/runs/{{ run.id }}/ai/generate/{{ r.kind }}/{{ r.key | urlencode }}">
+    <button type="submit" class="secondary"{% if ai_polling %} disabled{% endif %}>產生</button>
+  </form>
+  {% endif %}
+</section>
+{% endfor %}

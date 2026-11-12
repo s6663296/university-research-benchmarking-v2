@@ -1,4 +1,5 @@
 import json
+import logging
 import zipfile
 from datetime import date
 
@@ -7,6 +8,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai.service import SummaryDraft, fresh_text
 from app.db.models import Anomaly, Run, RunUnit, Unit
 from app.db.settings_store import get_setting
 from app.elsevier.client import make_client
@@ -26,6 +28,7 @@ from app.teachers.moe import import_years, latest_import
 from app.web.deps import get_session, render
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 
 RUN_STATUS = {"pending": "等待中", "running": "執行中", "done": "完成", "failed": "失敗", "interrupted": "中斷",
               "stopped": "已停止"}
@@ -202,6 +205,8 @@ def fetch_status(request: Request, run_id: int, session: Session = Depends(get_s
 
 
 def result_context(session: Session, run: Run, ind: str) -> dict:
+    from app.web.routes.ai_summary import ai_context  # ai_summary 也用到本檔的 get_run，延後匯入避免循環
+
     explainer = Explainer(session, run.id)
     groups = explainer.groups
     colleges = list(dict.fromkeys(g.key for g in groups if g.comparison == "college"))
@@ -231,6 +236,8 @@ def result_context(session: Session, run: Run, ind: str) -> dict:
         funding=[(t, funding_notes(t)) for t in (funding_table(session, run, c) for c in run_colleges(session, run))]
         if ind == "funding" else [],
         money=money, count_text=count_text,
+        college_names=run_colleges(session, run),
+        **(ai_context(session, run) if ind == "ai" else {}),
     )
 
 
@@ -242,6 +249,10 @@ def run_detail(request: Request, run_id: int, ind: str = "summary", busy: int = 
     ctx["busy"], ctx["hl"] = bool(busy), hl
     if run.status == "done":
         ctx.update(result_context(session, run, ind))
+        if ind == "ai":
+            from app.web.routes.ai_summary import ai_progress_context
+
+            ctx.update(ai_progress_context(request, run))
     return render(request, "run_detail.html", **ctx)
 
 
@@ -340,6 +351,15 @@ def _done_run(session: Session, run_id: int) -> Run:
     return run
 
 
+def _ai_text(session: Session, run: Run, kind: str, key: str) -> SummaryDraft | None:
+    """AI 總結不能影響原本的下載：任何失敗都記錄後當作沒有。"""
+    try:
+        return fresh_text(session, run, kind, key)
+    except Exception:
+        log.exception("讀取 AI 總結失敗：分析 %s、%s %s", run.id, kind, key)
+        return None
+
+
 @router.get("/runs/{run_id}/pptx.zip")
 def download_all_pptx(request: Request, run_id: int, session: Session = Depends(get_session)):
     run = _done_run(session, run_id)
@@ -348,7 +368,9 @@ def download_all_pptx(request: Request, run_id: int, session: Session = Depends(
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for dept in RunConfig.from_json(run.scope_json).ncu_depts:
             name = report_filename(session, run_id, dept)
-            zf.write(build_dept_report(session, run_id, dept, export_path(settings, run_id, name)), name)
+            path = build_dept_report(session, run_id, dept, export_path(settings, run_id, name),
+                                     ai_text=_ai_text(session, run, "dept", dept))
+            zf.write(path, name)
     record_export(session, run_id, "pptx_zip", zip_path)
     return FileResponse(zip_path, media_type="application/zip", filename=zip_path.name)
 
@@ -359,7 +381,8 @@ def download_pptx(request: Request, run_id: int, ncu_dept: str, session: Session
     if ncu_dept not in RunConfig.from_json(run.scope_json).ncu_depts:
         raise HTTPException(404, "這次分析沒有這個系所")
     name = report_filename(session, run_id, ncu_dept)
-    path = build_dept_report(session, run_id, ncu_dept, export_path(request.app.state.settings, run_id, name))
+    path = build_dept_report(session, run_id, ncu_dept, export_path(request.app.state.settings, run_id, name),
+                             ai_text=_ai_text(session, run, "dept", ncu_dept))
     record_export(session, run_id, "pptx", path)
     return FileResponse(path, media_type=PPTX_TYPE, filename=name)
 

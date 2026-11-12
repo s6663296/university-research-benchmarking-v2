@@ -15,6 +15,7 @@ from app.runs.renumber import renumber_runs
 from app.teachers.moe_fetch import MoeFetcher
 from app.web.deps import WEB_DIR
 from app.web.routes import (
+    ai_summary,
     funding,
     history,
     home,
@@ -67,5 +68,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(funding.router)
     app.include_router(report_text.router)
     app.include_router(history.router)  # /runs/compare 要在 /runs/{run_id} 之前
+    app.include_router(ai_summary.router)  # 要在 runs 之前，避免被 /runs/{run_id} 系列路由搶先
     app.include_router(runs.router)
     return app
