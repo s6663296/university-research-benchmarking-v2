@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Index, Integer, LargeBinary, String, Text
+from sqlalchemy import ForeignKey, Index, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
 
@@ -119,6 +119,25 @@ class Run(Base):
     status: Mapped[str] = mapped_column(String)
     notes_json: Mapped[str] = mapped_column(Text, default="{}")
     error: Mapped[str | None] = mapped_column(Text)
+    # 期間比較時使用者改選的前期分析；不設外鍵以免刪除前期時卡住，由程式維護
+    ai_baseline_run_id: Mapped[int | None] = mapped_column(Integer)
+
+
+class AiSummary(Base):
+    __tablename__ = "ai_summaries"
+    __table_args__ = (UniqueConstraint("run_id", "kind", "key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"), index=True)
+    kind: Mapped[str] = mapped_column(String)  # "dept" 或 "college"
+    key: Mapped[str] = mapped_column(String)  # 系所名或學院名
+    baseline_run_id: Mapped[int | None] = mapped_column(Integer)
+    summary: Mapped[str] = mapped_column(Text)
+    comparison: Mapped[str | None] = mapped_column(Text)
+    input_hash: Mapped[str] = mapped_column(String)
+    model: Mapped[str] = mapped_column(String)
+    edited: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime]
+    updated_at: Mapped[datetime]
 
 
 class RunUnit(Base):
