@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.ai.claude import list_models
 from app.ai.prompts import DEFAULT_TONE
+from app.ai.service import AiError
 from app.config import parse_api_keys, save_env
 from app.db.session import clear_all_data, clear_refs_cache, refs_cache_stats
 from app.db.settings_store import DEFAULT_SETTINGS, get_setting, set_setting
@@ -186,6 +188,20 @@ async def save_ai_options(request: Request, session: Session = Depends(get_sessi
     set_setting(session, "ai_model", str(form.get("ai_model", "")).strip() or DEFAULT_SETTINGS["ai_model"])
     set_setting(session, "ai_tone_prompt", str(form.get("ai_tone_prompt", "")).strip() or DEFAULT_TONE)
     return RedirectResponse("/settings", status_code=303)
+
+
+@router.get("/settings/ai-models")
+def ai_models_field(request: Request, session: Session = Depends(get_session)):
+    """設定頁載入後才打 API 取模型列表，換成下拉選單；失敗就保留文字欄位。"""
+    models, error = [], None
+    key = request.app.state.settings.anthropic_api_key
+    if key:
+        try:
+            models = list_models(key)
+        except AiError as e:
+            error = str(e)
+    return render(request, "_ai_model_field.html", models=models, error=error, load_models=False,
+                  ai_model=get_setting(session, "ai_model"))
 
 
 @router.post("/settings/reset")
