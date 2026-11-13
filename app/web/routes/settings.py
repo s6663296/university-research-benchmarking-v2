@@ -1,10 +1,11 @@
 import shutil
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.config import save_env
+from app.config import parse_api_keys, save_env
 from app.db.session import clear_all_data
 from app.db.settings_store import get_setting, set_setting
 from app.elsevier.selfcite import usable_strategy_id
@@ -38,15 +39,29 @@ def mask_key(key: str) -> str:
     return f"已設定（末 4 碼 ****{key[-4:]}）" if key else "未設定"
 
 
+def mask_api_key(key: str) -> str:
+    """保留開頭與結尾各 4 碼，中間以 * 取代；太短的 Key 全部遮住。"""
+    if len(key) <= 8:
+        return "*" * len(key)
+    return key[:4] + "*" * (len(key) - 8) + key[-4:]
+
+
+def _int_param(request: Request, name: str) -> int:
+    value = request.query_params.get(name, "")
+    return int(value) if value.isdigit() else 0
+
+
 def _context(session: Session, request: Request, **extra) -> dict:
     values = {f: get_setting(session, f) for f, *_ in NUMERIC_FIELDS}
     ctx = dict(
         numeric_fields=NUMERIC_FIELDS, values=values,
         teacher_column=get_setting(session, "teacher_column"), teacher_choices=TEACHER_COLUMN_CHOICES,
         strategy=usable_strategy_id(get_setting(session, "self_citation_strategy")), strategy_choices=SELF_CITATION_CHOICES,
-        key_status=mask_key(request.app.state.settings.elsevier_api_key),
+        masked_keys=[mask_api_key(k) for k in request.app.state.settings.elsevier_api_keys],
         insttoken_status=mask_key(request.app.state.settings.elsevier_insttoken),
         errors=[], saved=False, reset=request.query_params.get("reset") == "1",
+        keys_added=_int_param(request, "added"),
+        keys_dup=[int(n) for n in request.query_params.get("dup", "").split(",") if n.isdigit()],
     )
     ctx.update(extra)
     return ctx
@@ -83,16 +98,48 @@ async def save_settings(request: Request, session: Session = Depends(get_session
     return render(request, "settings.html", **_context(session, request, saved=True))
 
 
-@router.post("/settings/api-key")
-async def save_api_key(request: Request):
-    form = await request.form()
+def _save_credentials(request: Request, keys: list[str], insttoken: str) -> RedirectResponse:
+    """寫回 .env 並更新記憶體中的設定。多組 Key 以逗號分隔存在同一行。"""
     settings = request.app.state.settings
-    api_key = str(form.get("api_key", "")).strip() or settings.elsevier_api_key
-    insttoken = str(form.get("insttoken", "")).strip()
+    api_key = ",".join(keys)
     save_env(settings.env_path, api_key, insttoken)
     request.app.state.settings = settings.model_copy(
         update={"elsevier_api_key": api_key, "elsevier_insttoken": insttoken})
     return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/api-keys/add")
+async def add_api_key(request: Request):
+    """新增到清單最後；一次貼上多組（逗號或換行分隔）也可以。已在清單中的不重複加入，並提醒是第幾組。"""
+    form = await request.form()
+    settings = request.app.state.settings
+    keys = settings.elsevier_api_keys
+    entered = parse_api_keys(str(form.get("api_key", "")))
+    dup = [keys.index(k) + 1 for k in entered if k in keys]
+    added = [k for k in entered if k not in keys]
+    query = urlencode({"added": len(added), "dup": ",".join(map(str, dup))})
+    if added:
+        _save_credentials(request, keys + added, settings.elsevier_insttoken)
+    return RedirectResponse(f"/settings?{query}", status_code=303)
+
+
+@router.post("/settings/api-keys/delete")
+async def delete_api_key(request: Request):
+    form = await request.form()
+    settings = request.app.state.settings
+    keys = settings.elsevier_api_keys
+    try:
+        keys.pop(int(str(form.get("index", ""))))
+    except (ValueError, IndexError):
+        return RedirectResponse("/settings", status_code=303)
+    return _save_credentials(request, keys, settings.elsevier_insttoken)
+
+
+@router.post("/settings/insttoken")
+async def save_insttoken(request: Request):
+    form = await request.form()
+    settings = request.app.state.settings
+    return _save_credentials(request, settings.elsevier_api_keys, str(form.get("insttoken", "")).strip())
 
 
 @router.post("/settings/reset")
