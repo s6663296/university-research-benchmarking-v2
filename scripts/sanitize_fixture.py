@@ -1,4 +1,4 @@
-"""把 api_test/output 錄下的 Elsevier 回應轉成測試 fixture：移除所有 link 欄位（內含 API Key）。
+"""把錄下的 Elsevier 回應轉成測試 fixture：移除所有 link 欄位（內含 API Key）。
 
 用法：python scripts/sanitize_fixture.py <輸入.json> <輸出.json>
 """

@@ -4,10 +4,10 @@
 {% include "_pipeline.html" %}
 <div class="grid home-cards">
   <section class="card">
-    <h2>API 連線狀態</h2>
-    <div id="api-quota" hx-get="/status/panel" hx-trigger="load"><p class="muted">載入中…</p></div>
+    <div class="card-head"><h2>API 連線狀態</h2>
+      <button type="button" class="secondary" hx-get="/status" hx-target="#api-quota" hx-disabled-elt="this">檢查連線</button></div>
     <p id="api-check"></p>
-    <button type="button" hx-get="/status" hx-target="#api-quota" hx-disabled-elt="this">檢查連線</button>
+    <div id="api-quota" hx-get="/status/panel" hx-trigger="load"><p class="muted">載入中…</p></div>
   </section>
   <section class="card recent-card">
     <div class="card-head"><h2>最近分析</h2>{% if runs %}<a href="/runs">全部</a>{% endif %}</div>

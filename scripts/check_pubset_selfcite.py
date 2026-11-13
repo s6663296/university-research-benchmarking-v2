@@ -33,7 +33,7 @@ from app.elsevier.inset_selfcite import InSetSelfCitations
 from app.elsevier.scival import MetricsFetcher, scival_year_ranges
 from app.elsevier.scopus import build_query, school_names, search_docs
 
-OUTDIR = Path(__file__).resolve().parent.parent / "api_test" / "output"
+OUTDIR = Path(__file__).resolve().parent.parent / "data" / "checks"
 # 2026-11-10 SciVal 網頁測試用的 Publication Set（發表年 2021–2025）：Citation Count 含 44、excl. self-citations 40
 SAMPLE_IDS = ["85120042660", "85141566632", "85144826309", "85170429613", "85150390837", "85178007617",
               "85093682401"]
@@ -177,7 +177,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--dept", help="系所英文名稱（與對照表相同寫法），例如 \"Department of Finance, National Central University\"")
     p.add_argument("--years", type=int, nargs=2, metavar=("FROM", "TO"), help="--dept 的發表年，預設為近 5 個完整年度")
-    p.add_argument("--save", help="--dept 的 EID 清單存放位置，預設 api_test/output/eids_<系所>.txt")
+    p.add_argument("--save", help="--dept 的 EID 清單存放位置，預設 data/checks/eids_<系所>.txt")
     p.add_argument("--ids", nargs="+", metavar="ID", help="EID 或 Scopus ID")
     p.add_argument("--file", help="EID／Scopus ID 清單的文字檔，一行一個")
     p.add_argument("--web", type=int, nargs=2, metavar=("INCL", "EXCL"),

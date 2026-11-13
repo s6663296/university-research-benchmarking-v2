@@ -1,11 +1,22 @@
 """應用程式設定：敏感資料（API Key）只放在 .env。"""
 
+import os
 import re
+import sys
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ENV_FILE = Path(".env")
+
+def app_home() -> Path:
+    """.env 與 data/ 的位置。安裝版的程式目錄可能沒有寫入權限（例如 Program Files），改放在使用者的 LOCALAPPDATA。"""
+    if getattr(sys, "frozen", False):
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "ResearchBenchmarking"
+    return Path(".")
+
+
+HOME = app_home()
+ENV_FILE = HOME / ".env"
 
 
 class Settings(BaseSettings):
@@ -14,7 +25,7 @@ class Settings(BaseSettings):
     elsevier_api_key: str = ""
     elsevier_insttoken: str = ""
     anthropic_api_key: str = ""
-    data_dir: Path = Path("data")
+    data_dir: Path = HOME / "data"
     host: str = "127.0.0.1"
     port: int = 8000
     env_path: Path = ENV_FILE
@@ -42,4 +53,5 @@ def save_env(path: Path, values: dict[str, str]) -> None:
         else:
             out.append(line)
     out += [f"{k}={v}" for k, v in values.items()]
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(out) + "\n", encoding="utf-8")

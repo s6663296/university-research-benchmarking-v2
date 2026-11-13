@@ -18,7 +18,7 @@
     <div>
       {% for item in pages %}
       {% set page = item.page %}
-      <section class="card" id="{{ page.key }}" data-report-page data-variables="{{ item.variables|join(',') }}">
+      <section class="card" id="page-{{ page.key }}" data-report-page="{{ page.key }}" data-variables="{{ item.variables|join(',') }}">
         <div class="report-page-head">
           <h2>{{ page.label }}</h2>
           {% if item.customized %}<button type="submit" class="secondary" name="reset_key" value="{{ page.key }}" formnovalidate>恢復預設</button>{% endif %}
@@ -51,5 +51,5 @@
   </div>
 </form>
 <script type="application/json" id="report-variables">{{ variables|tojson }}</script>
-<script src="/static/report-text.js?v=2" defer></script>
+<script src="/static/report-text.js?v=3" defer></script>
 {% endblock %}
