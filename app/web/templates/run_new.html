@@ -3,7 +3,7 @@
 <h1>分析設定</h1>
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
 {% if not ready %}
-<p class="notice">請先匯入 <a href="/mapping">對標學校資料表</a>、<a href="/teachers">教師人數統計表</a> 與 <a href="/funding">計畫經費統計表</a>。每次啟動程式都需要重新匯入。</p>
+<p class="notice">請先匯入 <a href="/mapping">對標學校資料表</a> 與 <a href="/teachers">教師人數統計表</a>。每次啟動程式都需要重新匯入。</p>
 {% else %}
 <form method="post" action="/runs" id="run-form">
 <section class="card">
@@ -14,7 +14,7 @@
     <select name="academic_year">
       {% for y in years | reverse %}<option value="{{ y }}" {% if y == cfg.academic_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
     </select></label>
-  <label><input type="checkbox" name="force_refresh" value="1" {% if cfg.force_refresh %}checked{% endif %}> 重新抓取全部資料（不使用快取）</label>
+  <label><input type="checkbox" name="force_refresh" value="1" {% if cfg.force_refresh %}checked{% endif %}> 不使用快取</label>
 </section>
 
 <section class="card" id="dept-picker">
@@ -23,17 +23,18 @@
     <span class="muted" data-total>已選 0 個系所</span>
     <button type="button" class="secondary" data-clear>全部清除</button>
   </div>
-  <p class="muted">勾選學院會一併勾選該學院的全部系所，也可以只勾部分系所。</p>
   <div class="college-grid">
   {% for college, depts in colleges.items() %}
   {% set picked = depts | select("in", cfg.ncu_depts) | list %}
-  <fieldset class="college-card" data-college>
-    <legend>
+  <div class="college-card" data-college role="group" aria-label="{{ college }}">
+    <div class="college-head">
       <label><input type="checkbox" data-college-all {% if picked | length == depts | length %}checked{% endif %}> {{ college }}</label>
       <span class="muted" data-count>{{ picked | length }}/{{ depts | length }}</span>
-    </legend>
-    {% for d in depts %}<label class="dept"><input type="checkbox" name="ncu_depts" value="{{ d }}" {% if d in cfg.ncu_depts %}checked{% endif %}> {{ d }}</label>{% endfor %}
-  </fieldset>
+    </div>
+    <div class="dept-cells">
+      {% for d in depts %}<label class="dept"><input type="checkbox" name="ncu_depts" value="{{ d }}" {% if d in cfg.ncu_depts %}checked{% endif %}><span>{{ d }}</span></label>{% endfor %}
+    </div>
+  </div>
   {% else %}
   <p class="error">mapping 表中沒有中大系所（請確認有「{{ NCU_SHEET }}」分頁）。</p>
   {% endfor %}
@@ -76,15 +77,11 @@
 
 <section class="card" id="compare-picker">
   <h2>比較範圍</h2>
-  <p class="muted">決定每個系所要跟誰排名，報告上的名次就是在這些群組內排出來的。</p>
-
   <fieldset class="compare-card" data-compare>
-    <legend><label><input type="checkbox" name="comparisons" value="benchmark" {% if "benchmark" in cfg.comparisons %}checked{% endif %}> {{ labels.benchmark }}</label>
-      <span class="compare-where">簡報左邊表格</span></legend>
-    <p class="muted">每個系所各自勾選要比較的學校。「—」表示對標學校資料表上該校沒有對應的系所；滑鼠停在勾選框上可看到該校的系所名稱。</p>
+    <legend><label><input type="checkbox" name="comparisons" value="benchmark" {% if "benchmark" in cfg.comparisons %}checked{% endif %}> {{ labels.benchmark }}</label></legend>
     <div class="compare-body">
       <input type="hidden" name="dept_school_form" value="1">
-      <p class="muted" data-matrix-empty>請先在上方「學院與系所」勾選系所。</p>
+      <p class="muted" data-matrix-empty>尚未勾選系所</p>
       <div class="matrix-scroll" role="region" aria-label="各系所的對標學校" tabindex="0" data-matrix-wrap>
       <table class="school-matrix">
         <tr>
@@ -104,11 +101,9 @@
   </fieldset>
 
   <fieldset class="compare-card" data-compare>
-    <legend><label><input type="checkbox" name="comparisons" value="college" {% if "college" in cfg.comparisons %}checked{% endif %}> {{ labels.college }}</label>
-      <span class="compare-where">簡報右邊表格</span></legend>
-    <p class="muted">勾選要放在同一張院內比較表裡互相排名的系所。這次分析的系所一定會納入（灰色勾選）。<span data-college-summary></span></p>
+    <legend><label><input type="checkbox" name="comparisons" value="college" {% if "college" in cfg.comparisons %}checked{% endif %}> {{ labels.college }}</label></legend>
     <div class="compare-body">
-      <p class="muted" data-college-empty>請先在上方「學院與系所」勾選系所。</p>
+      <p class="muted" data-college-empty>尚未勾選系所</p>
       {% for college, depts in colleges.items() %}
       {% set members = cfg.college_members(college) %}
       <div class="college-members" data-college-block="{{ college }}">
@@ -126,8 +121,7 @@
 
   <fieldset class="compare-card" data-compare>
     <legend><label><input type="checkbox" name="comparisons" value="custom" {% if "custom" in cfg.comparisons %}checked{% endif %}> {{ labels.custom }}</label>
-      <span class="compare-where">只出現在網頁與 Excel，簡報沒有</span></legend>
-    <p class="muted">自己挑選單位湊成一組比較，例如跨學院、跨學校。</p>
+      <span class="compare-where" title="只出現在網頁與 Excel">不含簡報</span></legend>
     <div class="compare-body">
       <div class="picker-head">
         <input type="search" placeholder="搜尋學校或系所" data-unit-search>
@@ -183,11 +177,12 @@
     box.querySelector("[data-matrix-empty]").hidden = depts.size > 0;
     box.querySelector("[data-matrix-wrap]").hidden = depts.size === 0;
     // 院內比較
-    const summary = [];
+    let active = 0;
     for (const block of blocks) {
       const members = [...block.querySelectorAll("[data-member]")];
-      const active = members.some(m => depts.has(m.dataset.member));
-      block.hidden = !active;
+      const on = members.some(m => depts.has(m.dataset.member));
+      block.hidden = !on;
+      active += on;
       for (const m of members) {
         const forced = depts.has(m.dataset.member);
         if (forced) m.checked = true;
@@ -195,10 +190,8 @@
       }
       const n = members.filter(m => m.checked).length;
       block.querySelector("[data-member-count]").textContent = `${n}/${members.length}`;
-      if (active) summary.push(`${block.dataset.collegeBlock} ${n} 個系所`);
     }
-    box.querySelector("[data-college-empty]").hidden = summary.length > 0;
-    box.querySelector("[data-college-summary]").textContent = summary.length ? `本次：${summary.join("、")}` : "";
+    box.querySelector("[data-college-empty]").hidden = active > 0;
     box.querySelector("[data-unit-count]").textContent = `已選 ${units.filter(u => u.checked).length} 個單位`;
   };
   box.addEventListener("change", e => {
@@ -231,7 +224,7 @@
 })();
 </script>
 
-<button type="button" class="secondary" hx-post="/runs/preview" hx-include="#run-form" hx-target="#preview">預覽查詢條件</button>
+<button type="button" class="secondary" hx-post="/runs/preview" hx-include="#run-form" hx-target="#preview">預覽</button>
 <button type="submit">開始分析</button>
 </form>
 <div id="preview"></div>

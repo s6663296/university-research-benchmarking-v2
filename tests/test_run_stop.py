@@ -1,4 +1,5 @@
 import asyncio
+from collections import Counter
 
 import pytest
 from sqlalchemy import select
@@ -65,6 +66,8 @@ async def test_pause_cancels_real_executor_fetches(session, session_factory, mon
             cancelled.set()
 
     class Client:
+        usage = Counter()
+
         async def aclose(self):
             pass
 
@@ -166,3 +169,35 @@ def test_run_page_controls_follow_background(client, web_done_run):
 def test_pause_from_run_page_returns_there(client, web_done_run):
     r = client.post(f"/runs/{web_done_run}/pause?from=run", follow_redirects=False)
     assert r.headers["location"] == f"/runs/{web_done_run}"
+
+
+def test_display_run_prefers_running_then_last_finished(monkeypatch):
+    """#2 執行中時對 #1 補做：#1 做完首頁仍顯示 #2；#2 也做完後顯示最後結束的 #2。"""
+    import app.runs.manager as manager_module
+    from app.runs.manager import RunManager
+
+    gates: dict[int, asyncio.Event] = {}
+
+    async def fake_execute(run_id, *args, **kwargs):
+        await gates[run_id].wait()
+
+    class FakeClient:
+        async def aclose(self):
+            pass
+
+    monkeypatch.setattr(manager_module, "execute_run", fake_execute)
+
+    async def scenario():
+        gates.update({1: asyncio.Event(), 2: asyncio.Event()})
+        m = RunManager(None, FakeClient)
+        m.start(2)
+        m.resume(1)
+        assert m.display_run_id == 1  # 兩個都在跑，顯示最後啟動的
+        gates[1].set()
+        await asyncio.sleep(0.01)
+        assert m.display_run_id == 2  # #1 做完，仍在跑的 #2
+        gates[2].set()
+        await asyncio.sleep(0.01)
+        assert m.display_run_id == 2 and not m.any_running()
+
+    asyncio.run(scenario())

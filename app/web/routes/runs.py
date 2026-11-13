@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Anomaly, Run, RunUnit, Unit
 from app.db.settings_store import get_setting
 from app.elsevier.client import make_client
-from app.funding.service import count_text, funding_notes, funding_table, imports as funding_imports, money, run_colleges
+from app.funding.service import count_text, funding_notes, funding_table, money, run_colleges
 from app.mapping.parser import is_ncu
 from app.mapping.service import latest_version, units_of
 from app.metrics.indicators import BY_ID, INDICATORS
@@ -24,6 +24,7 @@ from app.runs.scope import COMPARISON_LABELS, RunConfig, default_period
 from app.runs.service import create_run, last_config, preview_run
 from app.teachers.moe import import_years, latest_import
 from app.web.deps import get_session, render
+from app.web.live import watch_url
 
 router = APIRouter()
 
@@ -79,10 +80,9 @@ def config_from_form(form, units: list[Unit], session: Session) -> RunConfig:
 
 
 def _missing_imports(session: Session) -> list[str]:
-    """三份資料每次啟動程式都要重新匯入，缺任何一份都不能開始分析。"""
+    """對標學校與教師數是分析必要資料；計畫經費可不匯入，報告就略過經費頁。"""
     return [label for label, imported in (("對標學校資料表", latest_version(session)),
-                                          ("教師人數統計表", latest_import(session)),
-                                          ("計畫經費統計表", funding_imports(session))) if not imported]
+                                          ("教師人數統計表", latest_import(session))) if not imported]
 
 
 def _form_page(request: Request, session: Session, cfg: RunConfig | None = None, error: str | None = None,
@@ -198,7 +198,9 @@ def progress(request: Request, run_id: int, session: Session = Depends(get_sessi
 @router.get("/runs/{run_id}/fetch")
 def fetch_status(request: Request, run_id: int, session: Session = Depends(get_session)):
     """各單位的抓取狀態（Scopus 取 EID、SciVal 取指標）；分析完成後仍可查看。"""
-    return render(request, "run_fetch.html", **progress_context(request, session, get_run(session, run_id)))
+    run = get_run(session, run_id)
+    return render(request, "run_fetch.html", watch=watch_url(request, session, run.id),
+                  **progress_context(request, session, run))
 
 
 def result_context(session: Session, run: Run, ind: str) -> dict:
@@ -239,7 +241,7 @@ def run_detail(request: Request, run_id: int, ind: str = "summary", busy: int = 
                session: Session = Depends(get_session)):
     run = get_run(session, run_id)
     ctx = progress_context(request, session, run)
-    ctx["busy"], ctx["hl"] = bool(busy), hl
+    ctx["busy"], ctx["hl"], ctx["watch"] = bool(busy), hl, watch_url(request, session, run.id)
     if run.status == "done":
         ctx.update(result_context(session, run, ind))
     return render(request, "run_detail.html", **ctx)

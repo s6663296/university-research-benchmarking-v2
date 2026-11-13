@@ -9,9 +9,14 @@ SciVal 網頁的 Publication Set 取消勾選「Include self-citations」時，�
   1. 篩選（Scopus Search，約每 100 篇 1 次）：(單位查詢) AND (REF(P1) OR …)，
      取回「引用了單位論文的單位論文」C。中央財金 145 篇只有 47 篇，其餘不必查參考文獻
   2. C 的參考文獻：永久快取中已有的直接用；其餘用 Abstract Retrieval（view=FULL，每篇 1 次）取得並永久快取
-  3. Abstract Retrieval 的額度用完時，改用只花 Scopus Search 的做法：
+  3. 設定選「只用 Scopus Search」或 Abstract Retrieval 的額度用完時，改用只花 Scopus Search 的做法：
      OpenAlex 指出可能被單位內引用的 P → 逐篇 (單位查詢) AND REF(P) 取得精確的引用者；
      其餘 P 整組查一次，有結果才拆半，直到單篇。OpenAlex 只決定查詢順序，數字一律來自 Scopus
+     C 的參考文獻都已在永久快取時，仍直接用快取（不花額度）
+  兩種做法的請求數相近（2026-11-13 全校分析已完成的 42 個單位：第 2 步 1,807 次 Abstract Retrieval，
+  第 3 步估計 1,715–5,355 次 Scopus Search），差在第 2 步每篇要下載整份論文資料：大型合作論文
+  （作者上千人）一篇 5–6 MB、10 秒以上；第 3 步的回應只有 Scopus ID。第 2 步的參考文獻可永久快取，
+  重跑幾乎不花額度；第 3 步的引用者會隨時間增加，只能快取當天
   中央財金 145 篇三種做法都和 SciVal 網頁逐篇一致（100 次）：第 2 步 47 次 Abstract Retrieval；
   第 3 步 44 次 Scopus Search + 0 次 Abstract Retrieval。
 
@@ -23,12 +28,12 @@ import asyncio
 from collections.abc import Awaitable, Iterable
 
 from app import openalex
+from app.db.models import REFS_ENDPOINT   # 快取中參考文獻的分類名稱（只存 Scopus ID 清單，不存整份回應）
 from app.elsevier.cache import ApiCache
 from app.elsevier.client import ElsevierClient, ElsevierError
 from app.elsevier.scopus import SEARCH_PATH, search_docs
 
 ABSTRACT_PATH = "/content/abstract/scopus_id/{}"
-REFS_ENDPOINT = "/content/abstract/refs"   # 快取中參考文獻的分類名稱（只存 Scopus ID 清單，不存整份回應）
 PERMANENT_DAYS = 36500
 # 已知的引用關係：85141566632 的參考文獻有 85120042660（2026-11 以 Abstract Retrieval 與 SciVal 網頁確認）
 REF_CHECK = ("85120042660", "85141566632")
@@ -112,15 +117,18 @@ async def _all(awaitables: Iterable[Awaitable]) -> list:
 class InSetSelfCitations:
     """同一次分析共用一個實例：參考文獻、REF 檢查結果、Abstract Retrieval 額度狀態都在各單位間共用。"""
 
-    def __init__(self, client: ElsevierClient, *, use_cache: bool = True):
+    def __init__(self, client: ElsevierClient, *, use_cache: bool = True, scopus_only: bool = False):
         self.client = client
         self.use_cache = use_cache                    # Scopus Search 篩選結果是否沿用一般快取（參考文獻一律永久快取）
+        self.scopus_only = scopus_only                # 設定「只用 Scopus Search」：不向 Abstract Retrieval 要參考文獻
         self._ref_cache: ApiCache | None = None
         self._refs: dict[str, asyncio.Future] = {}   # 論文 → 它引用的 Scopus ID
         self._ref_ok: asyncio.Future | None = None   # REF(<Scopus ID>) 是否可用（每次分析檢查一次）
         self.abstract_exhausted = False               # Abstract Retrieval 額度用完後，其餘單位改用 Scopus Search
         self.fetched = 0                              # 這次實際向 Abstract Retrieval 要的篇數
         self.searches = 0                             # 這次為了排除自我引用送出的 Scopus Search 查詢數
+        self.refs_total = 0                           # 進度：需要參考文獻的篇數（含快取中已有的），各單位累計
+        self.refs_done = 0                            # 進度：其中已取得的篇數
 
     async def count(self, ids: list[str], citations: dict[str, int | None], *, query: str | None = None,
                     dois: dict[str, str] | None = None) -> dict[str, int]:
@@ -138,9 +146,12 @@ class InSetSelfCitations:
         citers = set().union(*await _all(self._search(ref_query(query, g)) for g in ref_groups(query, cited))) & members
         if not citers:
             return {}
-        if not self.abstract_exhausted:
+        citers = sorted(citers)
+        self._preload(citers)
+        known = all(self._has_refs(s) for s in citers)   # 都在永久快取中：不花額度，任何做法都直接用
+        if known or not (self.scopus_only or self.abstract_exhausted):
             try:
-                return await self._by_references(sorted(citers), members)
+                return await self._by_references(citers, members)
             except ElsevierError as e:
                 if not quota_exhausted(e):
                     raise
@@ -151,8 +162,22 @@ class InSetSelfCitations:
 
     async def _by_references(self, citers: list[str], members: Iterable[str]) -> dict[str, int]:
         self._preload(citers)
-        refs = await _all(self._refs_of(s) for s in citers)
+        futures = [self._refs_of(s) for s in citers]
+        self.refs_total += len(futures)
+        for fut in futures:   # 快取中已有的（已完成）直接計入；callback 要等下一輪 event loop 才會執行
+            if fut.done():
+                self.refs_done += 1
+            else:
+                fut.add_done_callback(self._ref_done)
+        refs = await _all(futures)
         return count_refs(dict(zip(citers, refs)), members)
+
+    def _ref_done(self, _fut: asyncio.Future) -> None:
+        self.refs_done += 1
+
+    def _has_refs(self, sid: str) -> bool:
+        fut = self._refs.get(sid)
+        return fut is not None and fut.done() and not fut.cancelled() and fut.exception() is None
 
     @property
     def ref_cache(self) -> ApiCache | None:

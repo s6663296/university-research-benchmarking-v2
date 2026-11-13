@@ -20,6 +20,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "anomaly_change_threshold": 0.30,
     "teacher_column": "total",            # 或 "asst_prof_plus"
     "self_citation_strategy": "scival_pubset",
+    "selfcite_method": "references",      # 組內互引的查法：references 逐篇抓參考文獻、scopus 只用 Scopus Search
     "rank_highlight_top": 2,              # 排名總表中名次 ≤ 2 標紅（範例第 4 頁）
     "report_text": {},                    # 簡報目錄名稱與備註的修改（只存與預設不同的欄位）
 }

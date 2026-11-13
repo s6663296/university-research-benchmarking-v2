@@ -118,7 +118,7 @@ def test_web_upload_list_and_delete(client):
     assert r.status_code == 200 and "經分表.xlsx" in r.text and "資訊管理學系" in r.text and "1,500,000" in r.text
     assert "計畫經費統計表" in client.get("/").text            # 導覽列
     r = client.post("/funding/1/delete")
-    assert "尚未匯入經分表" in r.text
+    assert "尚未匯入" in r.text
 
 
 def test_web_upload_rejects_wrong_file(client):
@@ -152,7 +152,7 @@ def test_run_detail_funding_tab(client, web_done_run):
     assert r.status_code == 200 and "?ind=funding" in r.text and "沒有經分表資料" in r.text
     client.post("/funding/import", files={"file": ("經分表.xlsx", sample_funding())})
     r = client.get(f"/runs/{web_done_run}?ind=funding")
-    assert "計算：A = 國科會計畫經費加總 ÷ 1" in r.text and "師均經費 = C ÷ D" in r.text
+    assert "加總 (C=A+B)" in r.text and "師均經費 (C/D)" in r.text
     assert "1,800,000" in r.text and "計入的計畫明細" in r.text
 
 

@@ -15,10 +15,12 @@ from app.mapping.service import import_mapping, latest_version
 from app.runs.service import create_run
 from app.teachers.moe import import_moe, latest_import
 from app.web.dashboard import pipeline
+from tests.test_web_runs_new import latest_run_id
+from tests.test_web_runs_new import wait_done as _wait
 from tests.funding_builder import build_funding, sample_funding
 from tests.mapping_builder import sample_mapping
 from tests.moe_builder import sample_moe
-from tests.run_helpers import TODAY, default_config, make_run, seed
+from tests.run_helpers import TODAY, FakeElsevier, default_config, make_run, seed
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -44,7 +46,7 @@ def test_first_three_stages_return_to_not_imported(session):
     import_funding(session, "f.xlsx", sample_funding())
     retire_current_imports(session)
     first_three = pipeline(session)[:3]
-    assert [s.summary for s in first_three] == ["尚未匯入"] * 3 and all(s.state == "todo" for s in first_three)
+    assert [s.summary for s in first_three] == ["尚未匯入", "尚未匯入", "略過"] and all(s.state == "todo" for s in first_three)
 
 
 def test_same_mapping_file_comes_back_without_new_version(session):
@@ -115,7 +117,8 @@ def test_each_start_requires_reimport_but_keeps_history(settings):
         first.post("/funding/import", files={"file": ("f.xlsx", sample_funding(), XLSX)})
         assert first.get("/pipeline").text.count(">尚未匯入<") == 0
     with TestClient(create_app(settings)) as second:
-        assert second.get("/pipeline").text.count(">尚未匯入<") == 3
+        text = second.get("/pipeline").text
+        assert text.count(">尚未匯入<") == 2 and text.count(">略過<") == 1
         with second.app.state.session_factory() as s:
             assert count(s, MappingVersion) == 1 and count(s, TeacherImport) == 1 and count(s, FundingImport) == 1
 
@@ -129,14 +132,23 @@ def missing_funding(tmp_path):
         yield c
 
 
-def test_analysis_form_asks_for_all_three_imports(missing_funding):
+def test_analysis_form_does_not_require_funding(missing_funding):
     text = missing_funding.get("/runs/new").text
-    assert 'id="run-form"' not in text and 'href="/funding"' in text.split('class="notice"')[1]
+    assert 'id="run-form"' in text and 'href="/funding"' not in text.split("<main>")[1]
 
 
-def test_cannot_start_analysis_without_funding(missing_funding):
+def test_analysis_runs_without_funding(missing_funding, respx_mock):
+    """沒匯入經分表也能分析，報告就略過計畫經費頁。"""
+    FakeElsevier().install(respx_mock)
     r = missing_funding.post("/runs", data={"year_from": "2021", "year_to": "2025", "ncu_depts": ["資訊管理學系"],
-                                            "comparisons": ["benchmark"], "schools": ["台大"], "academic_year": "114"})
-    assert r.status_code == 400 and "計畫經費統計表" in r.text
-    with missing_funding.app.state.session_factory() as s:
-        assert count(s, Run) == 0
+                                            "comparisons": ["benchmark"], "schools": ["台大"], "academic_year": "114"},
+                             follow_redirects=False)
+    assert r.status_code == 303
+    run_id = wait_done(missing_funding)
+    assert missing_funding.get(f"/runs/{run_id}/pptx.zip").status_code == 200
+
+
+def wait_done(client):
+    run_id = latest_run_id(client)
+    assert _wait(client, run_id) == "done"
+    return run_id

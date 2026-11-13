@@ -9,7 +9,6 @@
 {% endif %}
 
 {% if run.status == "done" %}
-{% if open_anomalies %}<div class="notice">還有 {{ open_anomalies }} 項待人工確認，<a href="?ind=anomalies">前往處理</a>。仍可產出報告，但報告上會加上標示。</div>{% endif %}
 {% if mismatches %}<div class="notice error">有 {{ mismatches | length }} 格重算值與存檔值不符，可能是計算後資料或程式有變動，可對該單位「重新抓取」：
   <ul>{% for m in mismatches[:20] %}{% set w = m.e.where %}<li><a href="?ind={{ w[2] }}&amp;hl={{ w[0] }}#u{{ w[0] }}-{{ w[1] }}">{{ m.label }}・{{ m.indicator }}・{{ m.e.title.split("（")[0] }}</a>：{{ m.e.check_text }}</li>{% endfor %}</ul>
   {% if mismatches | length > 20 %}<p>（另有 {{ mismatches | length - 20 }} 格未列出）</p>{% endif %}
@@ -19,7 +18,7 @@
   <a href="?ind=summary" class="{{ 'active' if ind == 'summary' }}">排名總表</a>
   {% for i in indicators %}<a href="?ind={{ i.id }}" class="{{ 'active' if ind == i.id }}">{{ i.label }}</a>{% endfor %}
   <a href="?ind=funding" class="{{ 'active' if ind == 'funding' }}">計畫經費</a>
-  <a href="?ind=anomalies" class="{{ 'active' if ind == 'anomalies' }}">待確認（{{ open_anomalies }}）</a>
+  <a href="?ind=anomalies" class="{{ 'active' if ind == 'anomalies' }}{{ ' has-pending' if open_anomalies }}">待確認（{{ open_anomalies }}）</a>
   <a href="?ind=notes" class="{{ 'active' if ind == 'notes' }}">版本備註</a>
   <a href="?ind=downloads" class="{{ 'active' if ind == 'downloads' }}">下載</a>
 </div>
@@ -42,7 +41,6 @@
   {% endfor %}
 
 {% elif indicator %}
-  <p class="muted">{{ notes.importance[indicator.id] if notes.importance else "" }}　計算：{{ indicator.source }}{% if indicator.per_faculty %}；師均 = A ÷ {{ run.period_to - run.period_from + 1 }} ÷ 單年教師數{% endif %}</p>
   <div class="pair">
   {% for title, t in tables %}
   <div>
@@ -56,7 +54,7 @@
         <td>{{ r.label }}</td>
         <td class="num">{{ r.raw | int if r.raw is not none else "待確認" }}{{ ev(r.explain.raw, run.id) }}</td>
         <td class="num">{{ fmt(r.five_year_avg) }}{{ ev(r.explain.avg, run.id) }}</td>
-        <td class="num">{{ r.teachers if r.teachers is not none else "待確認" }}{% if r.teacher_manual %}*{% endif %}{{ ev(r.explain.teachers, run.id) }}</td>
+        <td class="num">{{ r.teachers if r.teachers is not none else "待確認" }}{% if r.teacher_manual %}<span title="人工修改">*</span>{% endif %}{{ ev(r.explain.teachers, run.id) }}</td>
         <td class="num">{{ fmt(r.value) }}{{ ev(r.explain.value, run.id) }}</td>
         <td class="num">{{ r.rank or "" }}{{ ev(r.explain.rank, run.id) }}</td>
       </tr>
@@ -72,17 +70,14 @@
   </div>
   {% endfor %}
   </div>
-  <p class="muted">* 教師數為人工修改　｜　數字格可停留查看計算方式與來源，點擊查看明細</p>
 
 {% elif ind == "funding" %}
   {% for t, fnotes in funding %}
   {% set n = t.years | length %}
   <h2>{{ t.college }}國科會及產學計畫經費年平均</h2>
   {% if not t.has_data %}
-  <p class="notice">分析期間（{{ run.period_from - 1911 }}–{{ run.period_to - 1911 }} 年度）沒有經分表資料，簡報不會有計畫經費頁。請到 <a href="/funding">計畫經費統計表</a> 匯入經分表後，重新下載簡報即可（不需重新分析）。</p>
+  <p class="notice">{{ run.period_from - 1911 }}–{{ run.period_to - 1911 }} 年度沒有經分表資料，<a href="/funding">匯入</a>後重新下載簡報即可。</p>
   {% else %}
-  <p class="muted">計算：A = 國科會計畫經費加總 ÷ {{ n }}（年度數）；B = 產學合作計畫經費加總 ÷ {{ n }}；C = A + B；師均經費 = C ÷ D（單年教師數）。
-    國科會為計畫主類「國科會計畫」、產學為「產學合作計畫」，以計畫主持人主聘單位歸屬系所；採用 {{ t.years | join("、") }} 年度。</p>
   <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>
     <tr><th>系所</th><th class="num">國科會件數{% if n > 1 %}（年平均）{% endif %}</th><th class="num">國科會年平均 (A)</th><th class="num">產學年平均 (B)</th><th class="num">加總 (C=A+B)</th><th class="num">單年教師數 (D)</th><th class="num">師均經費 (C/D)</th></tr>
@@ -93,7 +88,7 @@
       <td class="num">{{ money(r.nstc_avg) }}</td>
       <td class="num">{{ money(r.industry_avg) }}</td>
       <td class="num">{{ money(r.total_avg) }}</td>
-      <td class="num">{% if r.teachers is none %}<span class="pending">待確認</span>{% else %}{{ r.teachers }}{% if r.teacher_manual %}*{% endif %}{% endif %}</td>
+      <td class="num">{% if r.teachers is none %}<span class="pending">待確認</span>{% else %}{{ r.teachers }}{% if r.teacher_manual %}<span title="人工修改">*</span>{% endif %}{% endif %}</td>
       <td class="num">{% if r.per_faculty is none %}<span class="pending">待確認</span>{% else %}{{ money(r.per_faculty) }}{% endif %}</td>
     </tr>
     {% endfor %}
@@ -155,13 +150,12 @@
   </form>
 
 {% elif ind == "downloads" %}
-  <h3>簡報（每個系所一份）</h3>
-  <p class="muted">目錄名稱與各頁備註可到「<a href="/report-text">簡報目錄與備註</a>」修改，下載時套用。</p>
+  <h3>簡報</h3>
   <ul>
     {% for dept in report_depts %}<li><a href="/runs/{{ run.id }}/pptx/{{ dept }}">{{ dept }}</a></li>{% endfor %}
   </ul>
   <p><a class="button" href="/runs/{{ run.id }}/pptx.zip">下載全部簡報（zip）</a></p>
-  <h3>Excel（整份分析）</h3>
+  <h3>Excel</h3>
   <p><a class="button" href="/runs/{{ run.id }}/xlsx">下載 xlsx</a></p>
 {% endif %}
 {% endif %}

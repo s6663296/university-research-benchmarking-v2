@@ -119,6 +119,8 @@ class Run(Base):
     status: Mapped[str] = mapped_column(String)
     notes_json: Mapped[str] = mapped_column(Text, default="{}")
     error: Mapped[str | None] = mapped_column(Text)
+    # 這次分析（含接續、重抓）各 API 消耗的請求數，如 {"scopus": 12, "abstract": 0, "scival": 30}；舊分析為 {}
+    api_usage_json: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
 
 
 class RunUnit(Base):
@@ -147,6 +149,10 @@ class RunPublication(Base):
     scopus_id: Mapped[str] = mapped_column(String)
     eid: Mapped[str] = mapped_column(String)
     metrics_json: Mapped[str | None] = mapped_column(Text)
+
+
+# 參考文獻快取的分類名稱（只存 Scopus ID 清單）：永久有效，重設系統時保留，設定頁另有按鈕清除
+REFS_ENDPOINT = "/content/abstract/refs"
 
 
 class ApiCache(Base):

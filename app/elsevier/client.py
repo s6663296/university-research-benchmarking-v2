@@ -3,6 +3,7 @@
 import asyncio
 import random
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -129,6 +130,10 @@ def _http_message(status: int) -> str:
 # 官方文件（dev.elsevier.com/api_key_settings.html）各 API 的每秒上限：Scopus Search 9、Abstract Retrieval 9、
 # SciVal 6，各自計算。保留一點餘裕；每支 API 各自排隊，彼此不必等待
 API_MAX_RATE = {"scopus": 8.0, "abstract": 8.0, "scival": 5.0}
+# 同時請求數的倍數：Abstract Retrieval 遇到大型合作論文（作者上千人）時一篇回應 5–6 MB、要 10 秒以上，
+# 同時只送 4 個會讓每秒完成不到 1 篇；2026-11-13 實測 8 個並行下載仍全部成功、整體快 3 倍以上。
+# 每秒請求數仍受 API_MAX_RATE 限制
+API_CONCURRENCY_FACTOR = {"abstract": 3}
 
 
 class ElsevierClient:
@@ -159,6 +164,7 @@ class ElsevierClient:
         self.cache = cache
         self.on_quota = on_quota
         self.quota: dict[str, Quota] = {}  # "scopus" / "scival" → 最近一次回應的額度
+        self.usage: Counter[str] = Counter()  # 各 API 實際成功的請求數（快取命中不算），即消耗的額度
 
     def limiter(self, api: str) -> AsyncRateLimiter:
         if api not in self._limiters:
@@ -168,7 +174,7 @@ class ElsevierClient:
 
     def _slots_of(self, api: str) -> asyncio.Semaphore:
         if api not in self._slots:   # 每支 API 同時在途的請求數上限
-            self._slots[api] = asyncio.Semaphore(self.max_concurrency)
+            self._slots[api] = asyncio.Semaphore(self.max_concurrency * API_CONCURRENCY_FACTOR.get(api, 1))
         return self._slots[api]
 
     def _backoff(self, attempt: int) -> float:
@@ -197,6 +203,7 @@ class ElsevierClient:
                         self.on_quota(api_of(path), quota)
                 if resp.status_code == 200:
                     limiter.reward()
+                    self.usage[api] += 1
                     try:
                         return strip_links(resp.json())
                     except ValueError:

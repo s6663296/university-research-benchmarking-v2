@@ -1,3 +1,4 @@
+import json
 import shutil
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -6,16 +7,25 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Anomaly, Export, Result, Run, RunPublication, RunUnit
-from app.metrics.indicators import BY_ID
-from app.reports.provenance import Explainer, Explanation, Source
-from app.reports.tables import fmt
-from app.runs.compare import compare_runs
 from app.runs.renumber import renumber_runs
 from app.runs.scope import COMPARISON_LABELS, RunConfig
 from app.web.deps import get_session, render
+from app.web.live import watch_url
 from app.web.routes.runs import RUN_STATUS, get_run
 
 router = APIRouter()
+
+# 版本紀錄的「API 使用」欄，各 API 額度分開計算所以分開列
+USAGE_LABELS = {"scopus": "Scopus Search", "abstract": "Abstract Retrieval", "scival": "SciVal"}
+RESUMABLE = {"interrupted", "stopped", "failed"}  # 未在背景執行、可從中斷處繼續的狀態
+
+
+def api_usage(run: Run) -> list[tuple[str, int]] | None:
+    """None：這個分析在開始記錄用量之前建立；空串列：全部取自快取，沒有用到額度。"""
+    usage = json.loads(run.api_usage_json or "{}")
+    if not usage:
+        return None
+    return [(label, usage[api]) for api, label in USAGE_LABELS.items() if usage.get(api)]
 
 
 def run_summaries(session: Session, limit: int | None = None) -> list[dict]:
@@ -27,15 +37,15 @@ def run_summaries(session: Session, limit: int | None = None) -> list[dict]:
         cfg = RunConfig.from_json(run.scope_json)
         open_count = session.scalar(select(func.count()).select_from(Anomaly).where(
             Anomaly.run_id == run.id, Anomaly.status != "confirmed"))
-        out.append(dict(run=run, status=RUN_STATUS.get(run.status, run.status), open=open_count,
-                        depts=cfg.ncu_depts,
+        out.append(dict(run=run, status=RUN_STATUS.get(run.status, run.status), open=open_count, resumable=run.status in RESUMABLE,
+                        depts=cfg.ncu_depts, usage=api_usage(run),
                         comparisons="、".join(COMPARISON_LABELS[c] for c in sorted(cfg.comparisons))))
     return out
 
 
 @router.get("/runs")
 def history(request: Request, session: Session = Depends(get_session)):
-    return render(request, "runs.html", runs=run_summaries(session))
+    return render(request, "runs.html", runs=run_summaries(session), watch=watch_url(request, session))
 
 
 @router.post("/runs/{run_id}/delete")
@@ -52,26 +62,3 @@ def delete_run(request: Request, run_id: int, session: Session = Depends(get_ses
     if not request.app.state.run_manager.any_running():  # 有分析在跑時編號不能動，留到下次刪除或重啟
         renumber_runs(session, data_dir)
     return RedirectResponse("/runs", status_code=303)
-
-
-@router.get("/runs/compare")
-def compare(request: Request, a: int, b: int, all: int = 0, session: Session = Depends(get_session)):
-    run_a, run_b = get_run(session, a), get_run(session, b)
-    rows = compare_runs(session, a, b)
-    if not all:
-        rows = [r for r in rows if r.delta is None or r.delta != 0]
-    ex_a, ex_b = Explainer(session, a), Explainer(session, b)
-
-    def explain(r) -> dict:
-        label = BY_ID[r.indicator_id].label
-        delta = None
-        if r.delta is not None:
-            delta = Explanation(title=f"差異（{label}）　{r.school}－{r.ncu_dept}", formula="B − A",
-                                substituted=f"{fmt(r.b)} − {fmt(r.a)} = {'+' if r.delta > 0 else ''}{fmt(r.delta)}",
-                                sources=[Source("A", f"分析 #{a}（{run_a.created_at:%Y/%m/%d %H:%M}）"),
-                                         Source("B", f"分析 #{b}（{run_b.created_at:%Y/%m/%d %H:%M}）")])
-        return dict(a=ex_a.cell(r.unit_a, r.comparison, r.indicator_id, "value") if r.unit_a else None,
-                    b=ex_b.cell(r.unit_b, r.comparison, r.indicator_id, "value") if r.unit_b else None, delta=delta)
-
-    return render(request, "compare.html", a=run_a, b=run_b, rows=[(r, explain(r)) for r in rows], show_all=all,
-                  labels={k: v.label for k, v in BY_ID.items()}, comparison_labels=COMPARISON_LABELS, fmt=fmt)

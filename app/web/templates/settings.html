@@ -3,15 +3,15 @@
 <h1>設定</h1>
 {% for e in errors %}<div class="notice error">{{ e }}</div>{% endfor %}
 {% if saved %}<div class="notice ok">設定已儲存</div>{% endif %}
-{% if reset %}<div class="notice ok">所有資料已清除，設定已回到預設值</div>{% endif %}
+{% if reset %}<div class="notice ok">系統已重設，設定已回到預設值（參考文獻快取保留）</div>{% endif %}
+{% if refs_cleared is not none %}<div class="notice ok">已清除 {{ "{:,}".format(refs_cleared) }} 篇論文的參考文獻快取</div>{% endif %}
 
 <section class="card">
   <h2>Elsevier API</h2>
   {% if keys_added %}<div class="notice ok">已新增 {{ keys_added }} 組 API Key</div>{% endif %}
   {% if keys_dup %}<div class="notice">這組 API Key 已經在清單中（{% for n in keys_dup %}第 {{ n }} 組{% if not loop.last %}、{% endif %}{% endfor %}），沒有重複新增</div>{% endif %}
-  <h3>API Key{% if masked_keys %}（已設定 {{ masked_keys|length }} 組）{% endif %}</h3>
+  <h3>API Key</h3>
   {% if masked_keys %}
-  <p class="muted small">由上往下使用；某組的額度用完時，會自動換下一組。</p>
   <table class="api-keys">
     <tbody>
     {% for k in masked_keys %}
@@ -38,11 +38,10 @@
   </form>
 
   <h3>insttoken</h3>
-  <p class="muted small">校外使用時才需要。目前：{{ insttoken_status }}</p>
   <form method="post" action="/settings/insttoken" class="api-key-add">
     <label for="insttoken" class="sr-only">insttoken</label>
-    <input type="password" id="insttoken" name="insttoken" size="40" autocomplete="off" placeholder="留空並儲存表示清除">
-    <button type="submit" class="secondary">儲存 insttoken</button>
+    <input type="password" id="insttoken" name="insttoken" size="40" autocomplete="off" placeholder="{{ insttoken_status }}">
+    <button type="submit" class="secondary">儲存</button>
   </form>
 </section>
 
@@ -61,17 +60,29 @@
     <select id="self_citation_strategy" name="self_citation_strategy">
       {% for k, v in strategy_choices.items() %}<option value="{{ k }}" {% if k == strategy %}selected{% endif %}>{{ v }}</option>{% endfor %}
     </select></div>
+  <div class="field"><label for="selfcite_method">組內互引查詢方式</label>
+    <select id="selfcite_method" name="selfcite_method">
+      {% for k, v in selfcite_method_choices.items() %}<option value="{{ k }}" {% if k == selfcite_method %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select></div>
 </section>
 
 <button type="submit">儲存設定</button>
 </form>
 
 <section class="card danger-zone">
-  <h2>清除所有資料</h2>
-  <p>刪除對照表、教師數、所有分析結果與產出檔、API 快取與額度紀錄，並清空 .env 中的 API Key 與 insttoken；上方參數回到預設值。此動作無法復原。</p>
+  <h2>參考文獻快取</h2>
+  <p>已存 {{ "{:,}".format(refs_count) }} 篇・{{ "%.1f"|format(refs_mb) }} MB</p>
+  <form method="post" action="/settings/refs-cache/clear">
+    <button type="submit" class="danger" {% if not refs_count %}disabled{% endif %}
+      onclick="return confirm('確定要清除 {{ refs_count }} 篇論文的參考文獻快取？之後要重新花 Abstract Retrieval 額度取得，無法復原。')">清除參考文獻快取</button>
+  </form>
+</section>
+
+<section class="card danger-zone">
+  <h2>重設系統</h2>
   <form method="post" action="/settings/reset">
     <button type="submit" class="danger"
-      onclick="return confirm('確定要清除所有資料？包含 API Key、對照表、教師數與所有分析結果，無法復原。')">清除所有資料</button>
+      onclick="return confirm('確定要重設系統？包含 API Key、對照表、教師數與所有分析結果，無法復原。（參考文獻快取保留）')">重設系統</button>
   </form>
 </section>
 {% endblock %}

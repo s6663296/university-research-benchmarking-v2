@@ -10,8 +10,7 @@
   {% endif %}
   {% if not polling and (run.status in ("interrupted", "stopped", "failed") or unfinished) %}
   <form method="post" action="/runs/{{ run.id }}/resume">
-    <button type="submit">{{ "重新抓取所有未完成單位" if run.status == "done" else "從中斷處繼續" }}</button>
-    <span class="muted">只抓未完成的單位，已抓到的部分會使用快取</span></form>
+    <button type="submit">{{ "重新抓取所有未完成單位" if run.status == "done" else "從中斷處繼續" }}</button></form>
   {% endif %}
   <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>

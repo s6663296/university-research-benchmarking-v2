@@ -5,21 +5,18 @@
 {% if warnings %}<div class="notice">已匯入，但有 {{ warnings | length }} 列略過：{{ warnings[:10] | join("；") }}{% if warnings | length > 10 %}……{% endif %}</div>{% endif %}
 
 <section class="card">
-  <h2>匯入經分表</h2>
+  <h2>匯入</h2>
   <form method="post" action="/funding/import" enctype="multipart/form-data">
     <input type="file" name="file" accept=".xlsx" required>
     <button type="submit">上傳</button>
     <a class="button secondary" href="/funding/template.xlsx">下載空白範本</a>
   </form>
-  <p class="muted">上傳計畫管理系統匯出的「計畫基本資料」xlsx（格式見空白範本：第 1 列為區塊標題、第 2 列為欄位名稱，橘底為必要欄位、藍底為系統會讀取的欄位）。可以分年度上傳多個檔案，同一年度以最後匯入的檔案為準。
-    國科會 = 計畫主類「{{ nstc | join("、") }}」，產學 = 「{{ industry | join("、") }}」，以計畫主持人主聘單位歸屬系所；
-    簡報第 I 部分的年平均 = 分析期間內各年度加總 ÷ 有資料的年度數。</p>
-  {% if not imports %}<p class="muted">尚未匯入經分表。每次啟動程式都需要重新匯入，匯入後才能開始分析。</p>{% endif %}
+  {% if not imports %}<p class="muted">尚未匯入</p>{% endif %}
 </section>
 
 {% if imports %}
 <section class="card">
-  <h2>已匯入的檔案</h2>
+  <h2>已匯入</h2>
   <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>
     <tr><th>檔名</th><th>年度</th><th class="num">計畫數</th><th>報表產製時間</th><th>匯入時間</th><th>採用年度</th><th></th></tr>
@@ -41,11 +38,9 @@
 <section class="card">
   <h2>各系所經費</h2>
   <form method="get" action="/funding">
-    學院
-    <select name="college" onchange="this.form.submit()">
+    <select name="college" onchange="this.form.submit()" aria-label="學院">
       {% for c in colleges %}<option value="{{ c }}" {% if c == college %}selected{% endif %}>{{ c }}</option>{% endfor %}
     </select>
-    <span class="muted">依計畫主持人主聘單位</span>
   </form>
   <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>

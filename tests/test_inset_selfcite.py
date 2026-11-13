@@ -133,6 +133,7 @@ async def test_filter_then_fetch_only_citers(respx_mock):
     assert result == truth
     assert sorted(fake.abstract_calls) == sorted({im[0], im[2], im[3]})   # 只查引用了單位論文的 3 篇
     assert fake.openalex_calls == [] and counter.fetched == 3
+    assert counter.refs_done == counter.refs_total == 3   # 首頁流程圖的細部進度
 
 
 async def test_scopus_only_when_abstract_quota_exhausted(respx_mock):
@@ -159,6 +160,37 @@ async def test_cached_references_need_only_the_filter(respx_mock, session_factor
     fake = FakeElsevier(refs=refs)
     result, counter = await count_im(fake, respx_mock, cache)
     assert result == truth and fake.abstract_calls == [] and counter.fetched == 0
+
+
+async def test_scopus_only_setting_never_downloads_references(respx_mock):
+    im, refs, truth = im_case()
+    fake = FakeElsevier(refs=refs)
+    result, counter = await count_im(fake, respx_mock, counter=InSetSelfCitations(client(), scopus_only=True))
+    assert result == truth   # 與逐篇查參考文獻的結果相同
+    assert fake.abstract_calls == [] and fake.openalex_calls and counter.searches > 0
+    assert counter.refs_total == 0 and not counter.abstract_exhausted
+
+
+async def test_scopus_only_still_uses_cached_references(respx_mock, session_factory):
+    im, refs, truth = im_case()
+    cache = ApiCache(session_factory, cache_days=1)
+    await count_im(FakeElsevier(refs=refs), respx_mock, cache)
+    fake = FakeElsevier(refs=refs)
+    result, counter = await count_im(fake, respx_mock, cache,
+                                     InSetSelfCitations(client(cache), scopus_only=True))
+    # 引用者的參考文獻都在永久快取：不花額度，也不必逐篇查 Scopus
+    assert result == truth and fake.abstract_calls == [] and fake.openalex_calls == []
+    assert counter.refs_done == counter.refs_total == 3
+
+
+async def test_run_uses_selfcite_method_setting(session, session_factory, respx_mock):
+    set_setting(session, "selfcite_method", "scopus")
+    fake = FakeElsevier()
+    fake.install(respx_mock)
+    run = make_run(session)
+    live = {}
+    await execute_run(run.id, session_factory, fake_client(), live=live)
+    assert fake.abstract_calls == [] and live == {}   # 結束後移除進度物件
 
 
 def test_ref_groups_keep_queries_short():

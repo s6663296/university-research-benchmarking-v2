@@ -10,6 +10,7 @@ from app.elsevier.client import make_client
 from app.runs.manager import RunManager, mark_interrupted
 from app.runs.renumber import renumber_runs
 from app.teachers.moe_fetch import MoeFetcher
+from app.web import live
 from app.web.deps import WEB_DIR
 from app.web.routes import (
     funding,
@@ -51,11 +52,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
     app.include_router(home.router)
+    app.include_router(live.router)
     app.include_router(settings_routes.router)
     app.include_router(mapping.router)
     app.include_router(teachers.router)
     app.include_router(funding.router)
     app.include_router(report_text.router)
-    app.include_router(history.router)  # /runs/compare 要在 /runs/{run_id} 之前
+    app.include_router(history.router)
     app.include_router(runs.router)
     return app

@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Anomaly, Export, Run, RunUnit
+from app.elsevier.inset_selfcite import InSetSelfCitations
 from app.elsevier.selfcite import get_strategy
 from app.funding.service import effective_imports, imports as funding_imports
 from app.mapping.service import error_count, latest_version, recheck_mapping
@@ -72,7 +73,7 @@ def _funding(session: Session) -> Stage:
     label = "計畫經費統計表檢查"
     files = funding_imports(session)  # 新的在前
     if not files:
-        return Stage("funding", label, "todo", "尚未匯入", "/funding")
+        return Stage("funding", label, "todo", "略過", "/funding")
     years = list(effective_imports(session))
     return Stage("funding", label, "done", f"{years[0]}～{years[-1]} 年度" if years else "", "/funding", files[0].filename)
 
@@ -108,8 +109,21 @@ def _fetch_stage(run: Run, rus: list[RunUnit], running: bool) -> Stage:
     return stage("warn", HALTED.get(run.status, "已中斷"))
 
 
-def _selfcite_stage(run: Run, rus: list[RunUnit], running: bool) -> Stage:
-    """SciVal 取完指標後，各單位減去組內互引；設定為不排除時略過。"""
+def _selfcite_detail(live: InSetSelfCitations | None) -> tuple[str, ...]:
+    """單位內的細部進度：大單位要抓上千篇參考文獻，只看完成的單位數會以為卡住。"""
+    if live is None:
+        return ()
+    lines = []
+    if live.refs_total:
+        lines.append(f"參考文獻 {live.refs_done:,}／{live.refs_total:,} 篇")
+    if live.scopus_only or live.abstract_exhausted:
+        lines.append(f"Scopus 查詢 {live.searches:,} 次")
+    return tuple(lines)
+
+
+def _selfcite_stage(run: Run, rus: list[RunUnit], running: bool,
+                    live: InSetSelfCitations | None = None) -> Stage:
+    """SciVal 取完指標後，各單位減去組內互引；設定為不排除時略過。live：執行中的細部進度。"""
     href = f"/runs/{run.id}/fetch"
     if not get_strategy(run.self_citation_strategy).in_set:
         return Stage("selfcite", SELFCITE_LABEL, "done", "設定為不排除", href)
@@ -118,7 +132,7 @@ def _selfcite_stage(run: Run, rus: list[RunUnit], running: bool) -> Stage:
     failed = sum(1 for ru in rus if _selfcite_failed(ru))
     # 在前面步驟失敗的單位不會走到這一步，不算在等待中
     waiting = total - finished - failed - sum(1 for ru in rus if ru.status == "failed" and not _selfcite_failed(ru))
-    progress = (f"{finished}／{total}",)
+    progress = (f"單位 {finished}／{total}",) + (_selfcite_detail(live) if running else ())
 
     def stage(state: str, summary: str = "") -> Stage:
         return Stage("selfcite", SELFCITE_LABEL, state, summary, href, progress=progress)
@@ -147,12 +161,12 @@ def _review_stage(session: Session, run: Run, rus: list[RunUnit], running: bool)
     open_count = session.scalar(select(func.count()).select_from(Anomaly).where(
         Anomaly.run_id == run.id, Anomaly.status != "confirmed"))
     return Stage("review", REVIEW_LABEL, "warn" if open_count else "done",
-                 f"{open_count} 項待確認" if open_count else "無待確認", f"{detail}?ind=anomalies")
+                 f"{open_count} 項待確認" if open_count else "", f"{detail}?ind=anomalies")
 
 
-def _run_stages(session: Session, run: Run, running: bool) -> list[Stage]:
+def _run_stages(session: Session, run: Run, running: bool, selfcite: InSetSelfCitations | None) -> list[Stage]:
     rus = list(session.scalars(select(RunUnit).where(RunUnit.run_id == run.id)))
-    out = [_fetch_stage(run, rus, running), _selfcite_stage(run, rus, running),
+    out = [_fetch_stage(run, rus, running), _selfcite_stage(run, rus, running, selfcite),
            _review_stage(session, run, rus, running)]
     if running or run.status != "done":
         return out + [Stage("output", "產出", "todo")]
@@ -163,16 +177,17 @@ def _run_stages(session: Session, run: Run, running: bool) -> list[Stage]:
 
 
 def pipeline(session: Session, run_id: int | None = None, running: bool = False,
-             moe_running: bool = False) -> list[Stage]:
+             moe_running: bool = False, selfcite: InSetSelfCitations | None = None) -> list[Stage]:
     """流程的 8 個步驟，進度一律以背景程式的狀態為準：
-    run_id 是背景程式最後啟動的分析、running 是它是否仍在執行、moe_running 是否正從教育部下載教師資料
+    run_id 是背景程式最後啟動的分析、running 是它是否仍在執行、moe_running 是否正從教育部下載教師資料、
+    selfcite 是這個分析排除自我引用的細部進度
     （服務重啟後背景沒有任何分析，儀表板就回到尚未執行，舊分析仍可在歷史頁查看）。"""
     stages = [_mapping(session), _teachers(session, moe_running), _funding(session)]
     run = session.get(Run, run_id) if run_id is not None else None
     if run is None:
-        return stages + [Stage("run", "建立分析", "todo", "前往分析設定", "/runs/new")] + [
+        return stages + [Stage("run", "建立分析", "todo", "", "/runs/new")] + [
             Stage(k, label, "todo") for k, label in (("fetch", FETCH_LABEL), ("selfcite", SELFCITE_LABEL),
                                                      ("review", REVIEW_LABEL), ("output", "產出"))]
     depts = "、".join(RunConfig.from_json(run.scope_json).ncu_depts)
     stages.append(Stage("run", "建立分析", "done", f"#{run.id} {depts}", f"/runs/{run.id}"))
-    return stages + _run_stages(session, run, running)
+    return stages + _run_stages(session, run, running, selfcite)
