@@ -3,7 +3,7 @@
 <h1>分析設定</h1>
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
 {% if not ready %}
-<p class="notice">請先匯入 <a href="/mapping">對標學校資料表</a>、<a href="/teachers">教師人數統計表</a> 與 <a href="/funding">計畫經費統計表</a>。每次啟動程式都需要重新匯入。</p>
+<p class="notice">請先匯入 <a href="/mapping">對標學校資料表</a>、<a href="/teachers">教師人數統計表</a> 與 <a href="/funding">計畫經費統計表</a>。匯入過的資料重開程式後仍會保留。</p>
 {% else %}
 <form method="post" action="/runs" id="run-form">
 <section class="card">

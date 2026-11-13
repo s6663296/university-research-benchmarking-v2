@@ -7,7 +7,6 @@ from app.ai.claude import ClaudeWriter
 from app.ai.jobs import AiJobManager
 from app.config import Settings
 from app.db.settings_store import get_setting
-from app.db.import_session import retire_current_imports
 from app.db.session import init_db, make_engine, make_session_factory
 from app.elsevier.client import make_client
 from app.runs.manager import RunManager, mark_interrupted
@@ -40,7 +39,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with session_factory() as s:
             mark_interrupted(s)
             renumber_runs(s, settings.data_dir)  # 啟動時沒有任何分析在跑，順便補上先前刪除留下的空號
-            retire_current_imports(s)  # 三份匯入資料每次啟動都要重新手動匯入
 
         def client_factory():
             with session_factory() as s:

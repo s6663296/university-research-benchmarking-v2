@@ -65,7 +65,7 @@ def parse_moe(data: bytes) -> list[MoeRow]:
 
 
 def latest_import(session: Session) -> TeacherImport | None:
-    """目前使用的匯入；啟動程式後尚未重新匯入時為 None。"""
+    """目前使用的匯入；尚未匯入時為 None。"""
     return session.scalars(select(TeacherImport).where(TeacherImport.retired_at.is_(None))
                            .order_by(TeacherImport.id.desc()).limit(1)).first()
 

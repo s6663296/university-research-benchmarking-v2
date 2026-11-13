@@ -1,4 +1,4 @@
-"""每次啟動程式後，三份匯入資料都要重新手動匯入；舊資料只供過去的分析使用。"""
+"""三份匯入資料：重開程式後仍然有效；被停用（舊版資料庫）的舊資料只供過去的分析使用。"""
 
 from datetime import datetime, timedelta
 
@@ -108,16 +108,44 @@ def test_past_run_keeps_old_funding_but_new_run_does_not_see_it(session):
     assert list(effective_imports(session, [113, 114])) == [114]
 
 
-def test_each_start_requires_reimport_but_keeps_history(settings):
+def test_imports_are_remembered_after_restart(settings):
     with TestClient(create_app(settings)) as first:
         first.post("/mapping", files={"file": ("m.xlsx", sample_mapping(), XLSX)})
         first.post("/teachers/import", files={"file": ("moe.xlsx", sample_moe(), XLSX)})
         first.post("/funding/import", files={"file": ("f.xlsx", sample_funding(), XLSX)})
         assert first.get("/pipeline").text.count(">尚未匯入<") == 0
     with TestClient(create_app(settings)) as second:
-        assert second.get("/pipeline").text.count(">尚未匯入<") == 3
+        assert second.get("/pipeline").text.count(">尚未匯入<") == 0
         with second.app.state.session_factory() as s:
+            assert latest_version(s) is not None and latest_import(s) is not None and imports(s)
             assert count(s, MappingVersion) == 1 and count(s, TeacherImport) == 1 and count(s, FundingImport) == 1
+
+
+def test_upgrade_restores_imports_retired_at_last_start(tmp_path):
+    """舊版每次啟動都會停用三份匯入資料；升級時把最後一次被停用的那批恢復成目前資料。"""
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy.orm import Session as OrmSession
+
+    from app.db.session import ALEMBIC_DIR, init_db, make_engine
+
+    engine = make_engine(tmp_path / "app.db")
+    cfg = Config()
+    cfg.set_main_option("script_location", str(ALEMBIC_DIR))
+    with engine.begin() as conn:
+        cfg.attributes["connection"] = conn
+        command.upgrade(cfg, "0008_ai_summaries")
+    with OrmSession(engine) as s:
+        import_funding(s, "old.xlsx", funding_file(112))
+        retire_current_imports(s)                       # 更早一次啟動
+        seed(s)
+        import_funding(s, "new.xlsx", funding_file(113))
+        retire_current_imports(s)                       # 最後一次啟動
+        assert latest_version(s) is None and imports(s) == []
+    init_db(engine)
+    with OrmSession(engine) as s:
+        assert latest_version(s) is not None and latest_import(s) is not None
+        assert [f.filename for f in imports(s)] == ["new.xlsx"]   # 更早被停用的不恢復
 
 
 @pytest.fixture

@@ -29,7 +29,7 @@ class MappingDiff:
 
 
 def latest_version(session: Session) -> MappingVersion | None:
-    """目前使用的版本；啟動程式後尚未重新匯入時為 None。"""
+    """目前使用的版本；尚未匯入時為 None。"""
     return session.scalars(select(MappingVersion).where(MappingVersion.retired_at.is_(None))
                            .order_by(MappingVersion.id.desc()).limit(1)).first()
 
