@@ -1,9 +1,10 @@
+import json
 from decimal import Decimal
 
 import pytest
 from sqlalchemy import select
 
-from app.db.models import Result, Unit
+from app.db.models import Result, Run, Unit
 from app.runs.compare import compare_runs
 from app.runs.executor import execute_run
 from tests.run_helpers import FakeElsevier, fake_client, make_run
@@ -53,23 +54,50 @@ async def test_compare_unit_only_in_one(session, two_runs):
     assert row.a is None and row.b is not None and row.delta is None
 
 
-def test_history_and_compare_pages(client, web_done_run, respx_mock):
+def test_history_page_lists_runs_without_ab_compare(client, web_done_run):
     import asyncio
     factory = client.app.state.session_factory
     with factory() as s:
         second = make_run(s).id
     asyncio.run(execute_run(second, factory, fake_client()))
-    with factory() as s:
-        set_value(s, web_done_run, "中央", "benchmark", "q1", Decimal("1.10"))
-        set_value(s, second, "中央", "benchmark", "q1", Decimal("1.20"))
     text = client.get("/runs").text
     assert f"/runs/{web_done_run}" in text and f"/runs/{second}" in text
-    compare = client.get("/runs/compare", params={"a": web_done_run, "b": second}).text
-    assert "0.10" in compare and "資訊管理學系" in compare
-    # 每列 A、B、差異都可查；這裡直接改了存檔值，所以 A、B 會標出與重算值不符
-    assert compare.count('<template class="ev-body"') == 3 and "1.20 − 1.10 = +0.10" in compare
-    assert "⚠ 重算值與存檔值不符（存檔 1.10" in compare and f"/runs/{second}/evidence?" in compare
+    assert 'name="a"' not in text and "/runs/compare" not in text
+    assert client.get("/runs/compare", params={"a": web_done_run, "b": second}).status_code in (404, 422)
     assert f"#{second}" in client.get("/").text
+
+
+async def test_run_records_api_usage_and_accumulates(session, session_factory, respx_mock):
+    FakeElsevier().install(respx_mock)
+    run = make_run(session)
+    client = fake_client()
+    await execute_run(run.id, session_factory, client)
+    session.expire_all()
+    usage = json.loads(session.get(Run, run.id).api_usage_json)
+    assert set(usage) == {"scopus", "abstract", "scival"}
+    assert usage == {api: client.usage[api] for api in usage} and usage["scopus"] > 0 and usage["scival"] > 0
+    # 重抓不走快取：用量累加在同一個分析上
+    again = fake_client()
+    await execute_run(run.id, session_factory, again, use_cache=False)
+    session.expire_all()
+    total = json.loads(session.get(Run, run.id).api_usage_json)
+    assert total == {api: usage[api] + again.usage[api] for api in usage}
+
+
+def test_history_shows_api_usage_column(client, web_done_run):
+    factory = client.app.state.session_factory
+    with factory() as s:
+        s.get(Run, web_done_run).api_usage_json = json.dumps({"scopus": 1234, "abstract": 0, "scival": 56})
+        old = make_run(s)
+        old.api_usage_json = "{}"
+        s.commit()
+        old_id = old.id
+    text = client.get("/runs").text
+    assert "<th>API 使用</th>" in text
+    assert "Scopus Search <span class=\"num\">1,234</span>" in text and "SciVal <span class=\"num\">56</span>" in text
+    assert "Abstract Retrieval" not in text  # 沒用到的 API 不列
+    assert "這個分析建立時尚未記錄 API 用量" in text  # old_id 的舊分析
+    assert f"/runs/{old_id}" in text
 
 
 def test_delete_run_removes_it_and_its_data(client, web_done_run):

@@ -121,6 +121,21 @@ async def test_quota_tracked_per_api(respx_mock):
     assert seen == [("scopus", 19990), ("scival", 3700)]
 
 
+async def test_usage_counts_successful_requests_per_api(respx_mock, session_factory):
+    respx_mock.get(url__regex=SCOPUS).mock(return_value=httpx.Response(200, json={}))
+    c = make(cache=ApiCache(session_factory))
+    await c.get_json("/content/search/scopus", {"q": 1})
+    await c.get_json("/content/search/scopus", {"q": 1})   # 快取命中不花額度
+    await c.get_json("/content/search/scopus", {"q": 2})
+    assert c.usage == {"scopus": 2}
+
+
+async def test_abstract_retrieval_gets_more_concurrent_requests():
+    c = make(max_concurrency=4)
+    # 大型合作論文的 Abstract Retrieval 回應很大，同時多送幾個；其他 API 照設定
+    assert c._slots_of("abstract")._value == 12 and c._slots_of("scival")._value == 4
+
+
 def test_quota_store_keeps_latest_per_api(session_factory):
     store = QuotaStore(session_factory)
     store.record("scival", Quota(5000, 3800, None))

@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -13,6 +13,7 @@ from app.db.models import Anomaly, Result, Run, RunPublication, RunUnit
 from app.db.settings_store import get_setting
 from app.elsevier.client import ElsevierClient, ElsevierError
 from app.elsevier.inset_selfcite import InSetSelfCitations
+from app.elsevier.quota import API_LABELS
 from app.elsevier.scival import MetricsFetcher, PubMetrics, scival_year_ranges
 from app.elsevier.scopus import search_docs
 from app.elsevier.selfcite import get_strategy
@@ -22,8 +23,10 @@ from app.metrics.indicators import INDICATORS, importance_note
 from app.runs.anomaly import detect
 from app.runs.scope import RunConfig, build_groups
 
-# 單位抓取中的狀態：先 Scopus 取 EID，再 SciVal 取指標（"fetching" 為舊版資料庫的狀態）
-FETCHING = ("scopus", "scival", "fetching")
+# 單位抓取中的狀態：先 Scopus 取 EID，再 SciVal 取指標，最後排除自我引用（"fetching" 為舊版資料庫的狀態）
+FETCHING = ("scopus", "scival", "selfcite", "fetching")
+# 排除自我引用這一步失敗時，錯誤訊息的開頭（儀表板據此把失敗歸到「排除自我引用」這一步）
+SELFCITE_ERROR = "排除自我引用："
 PUB_FIELDS = ("year", "q1", "top1", "top10", "intl_collab", "citations", "self_citations")
 
 
@@ -95,7 +98,8 @@ def _write_notes(session: Session, run: Run, data_source: dict) -> None:
 
 async def execute_run(run_id: int, session_factory: sessionmaker[Session], client: ElsevierClient, *,
                       only_unfinished: bool = False, unit_ids: set[int] | None = None,
-                      use_cache: bool | None = None) -> None:
+                      use_cache: bool | None = None, live: dict[int, InSetSelfCitations] | None = None) -> None:
+    """live：執行期間把排除自我引用的進度物件放在 live[run_id]，首頁流程圖讀它顯示細部進度。"""
     with session_factory() as s:
         run = s.get(Run, run_id)
         cfg = RunConfig.from_json(run.scope_json)
@@ -117,6 +121,7 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
         _, cite_range = scival_year_ranges(run.period_from, run.period_to, run.created_at.year)
         # 一次只處理幾個單位：全校分析時不會所有單位同時湧入，進度也會逐一完成而不是全部卡在半途
         units_at_once = asyncio.Semaphore(max(int(get_setting(s, "max_concurrency")), 1))
+        scopus_only = get_setting(s, "selfcite_method") == "scopus"
         s.commit()
     if use_cache is None:
         use_cache = only_unfinished or not cfg.force_refresh
@@ -124,7 +129,19 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
     # 所以整批改用 cite_range，被引數與其他指標同一次請求。SciVal 逐篇指標忽略 includeSelfCitations，
     # 一律取含自我引用的數字，需要排除時再減去組內互引
     fetcher = MetricsFetcher(client, year_range=cite_range, include_self="true", use_cache=use_cache)
-    in_set = InSetSelfCitations(client) if strategy.in_set else None
+    in_set = InSetSelfCitations(client, use_cache=use_cache, scopus_only=scopus_only) if strategy.in_set else None
+    if live is not None and in_set is not None:
+        live[run_id] = in_set
+    saved_usage = Counter(client.usage)  # 已寫入這次分析的部分；同一個 client 之前的用量不算
+
+    def save_usage(s: Session) -> None:
+        """把 client 新增的請求數累加到分析的 api_usage_json（接續、重抓會一直累加）。"""
+        run = s.get(Run, run_id)
+        usage = Counter(json.loads(run.api_usage_json or "{}"))
+        usage.update(client.usage - saved_usage)
+        run.api_usage_json = json.dumps({api: usage[api] for api in API_LABELS})
+        saved_usage.clear()
+        saved_usage.update(client.usage)
 
     def update(ru_ids: list[int], **fields) -> None:
         with session_factory() as s:
@@ -142,6 +159,7 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
             update(ru_ids, status="scival", error=None)
         else:
             update(ru_ids, status="scopus", error=None, eid_count=None)
+        prefix = ""
         try:
             docs = await search_docs(client, query, use_cache=use_cache)  # 接續時由快取取回 EID 清單
             ids = [d.scopus_id for d in docs]
@@ -149,18 +167,21 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
             update(ru_ids, status="scival", eid_count=len(docs))
             metrics = await fetcher.fetch(ids)
             if in_set is not None:
+                prefix = SELFCITE_ERROR
+                update(ru_ids, status="selfcite")
                 # SciVal Publication Set 只含 SciVal 有收錄的論文，組內互引也只算這些論文之間的引用
                 selfs = await in_set.count([i for i in ids if i in metrics],
-                                           {i: m.citations for i, m in metrics.items()})
+                                           {i: m.citations for i, m in metrics.items()},
+                                           query=query, dois={d.scopus_id: d.doi for d in docs if d.doi})
                 for i, m in metrics.items():
                     if m.citations is not None:
                         m.self_citations = selfs.get(i, 0)
                         m.citations = max(m.citations - m.self_citations, 0)
         except ElsevierError as e:
-            update(ru_ids, status="failed", error=e.message)
+            update(ru_ids, status="failed", error=prefix + e.message)
             return
         except Exception as e:  # 單一單位的非預期錯誤不影響其他單位
-            update(ru_ids, status="failed", error=f"非預期錯誤：{type(e).__name__}: {e}")
+            update(ru_ids, status="failed", error=f"{prefix}非預期錯誤：{type(e).__name__}: {e}")
             return
         with session_factory() as s:
             for ru in s.scalars(select(RunUnit).where(RunUnit.id.in_(ru_ids))):
@@ -171,6 +192,7 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
                     s.add(RunPublication(run_id=run_id, unit_id=ru.unit_id, scopus_id=d.scopus_id, eid=d.eid,
                                          metrics_json=pub_to_json(m, d.scopus_id in metrics)))
                 ru.status, ru.eid_count, ru.fetched_at, ru.error = "done", len(docs), datetime.now(), None
+            save_usage(s)
             s.commit()
 
     try:
@@ -185,4 +207,10 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
         with session_factory() as s:
             run = s.get(Run, run_id)
             run.status, run.error = "failed", f"{type(e).__name__}: {e}"
+            s.commit()
+    finally:  # 暫停（取消）、失敗也要記下已用掉的額度
+        if live is not None and live.get(run_id) is in_set:
+            del live[run_id]
+        with session_factory() as s:
+            save_usage(s)
             s.commit()

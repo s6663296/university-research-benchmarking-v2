@@ -2,7 +2,6 @@
 {% block content %}
 <h1>簡報目錄與備註</h1>
 {% if saved %}<div class="notice ok">已儲存，下次下載簡報就會套用</div>{% endif %}
-<p class="muted">從左側選擇要改的項目。這裡的設定會套用到所有系所的簡報：藍色標籤會依各系所自動帶入，備註清空則該頁不顯示。</p>
 
 <form method="post" action="/report-text" class="report-text">
   <input type="hidden" name="active_key" value="">
@@ -15,7 +14,6 @@
         </li>
         {% endfor %}
       </ol>
-      <p class="report-nav-legend"><span>●</span> 已修改</p>
     </nav>
     <div>
       {% for item in pages %}
@@ -23,20 +21,19 @@
       <section class="card" id="{{ page.key }}" data-report-page data-variables="{{ item.variables|join(',') }}">
         <div class="report-page-head">
           <h2>{{ page.label }}</h2>
-          {% if item.customized %}<button type="submit" class="secondary" name="reset_key" value="{{ page.key }}" formnovalidate>恢復此項預設</button>{% endif %}
+          {% if item.customized %}<button type="submit" class="secondary" name="reset_key" value="{{ page.key }}" formnovalidate>恢復預設</button>{% endif %}
         </div>
-        <h3>目錄</h3>
-        <div class="field"><label for="{{ page.key }}-name">目錄名稱</label>
+                <div class="field"><label for="{{ page.key }}-name">目錄名稱</label>
           <input type="text" id="{{ page.key }}-name" name="{{ page.key }}.name" value="{{ item.current.name }}" maxlength="60" required data-variable-text
                  data-toc-name data-default-name="{{ page.name }}" data-default-title="{{ page.title }}" data-title-prefix="{{ page.title_prefix }}"></div>
-        {% if page.title %}<p class="muted">連動的頁面標題：<strong data-title-preview></strong></p>{% endif %}
+        {% if page.title %}<p class="muted">頁面標題：<strong data-title-preview></strong></p>{% endif %}
         {% if not page.is_chapter %}
-        <div class="field"><label for="{{ page.key }}-tag">括號標註（只出現在目錄）</label>
+        <div class="field"><label for="{{ page.key }}-tag">目錄括號標註</label>
           <input type="text" id="{{ page.key }}-tag" name="{{ page.key }}.tag" value="{{ item.current.tag }}" maxlength="60" data-variable-text></div>
         {% endif %}
         {% if page.title %}
         <h3>備註</h3>
-        <div class="field"><label for="{{ page.key }}-subtitle">標題下方（※ 標示）</label>
+        <div class="field"><label for="{{ page.key }}-subtitle">標題下方 ※</label>
           <input type="text" id="{{ page.key }}-subtitle" name="{{ page.key }}.subtitle" value="{{ item.current.subtitle }}" maxlength="90" data-variable-text></div>
         <div class="field"><label for="{{ page.key }}-formula">計算方式</label>
           <textarea id="{{ page.key }}-formula" name="{{ page.key }}.formula" rows="3" data-variable-text>{{ item.current.formula }}</textarea></div>

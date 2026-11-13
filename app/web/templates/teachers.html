@@ -4,7 +4,7 @@
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
 
 <section class="card">
-  <h2>匯入教育部檔案</h2>
+  <h2>匯入</h2>
   <form method="post" action="/teachers/import" enctype="multipart/form-data">
     <input type="file" name="file" accept=".xlsx" required>
     <button type="submit">上傳</button>
@@ -12,12 +12,12 @@
       onclick="document.getElementById('moe-dialog').showModal()">從教育部下載</button>
   </form>
   <dialog id="moe-dialog" class="dialog" onclose="if (this.querySelector('[data-imported]')) location.reload()">
-    <div id="moe-fetch"><p class="muted">正在向教育部網站取得學年度清單…</p></div>
+    <div id="moe-fetch"><p class="muted">載入中…</p></div>
   </dialog>
   {% if imp %}
-  <p>目前資料：{{ imp.source_filename }}（{{ years[0] }}～{{ years[-1] }} 學年度，匯入時間 {{ imp.imported_at.strftime("%Y/%m/%d %H:%M") }}）</p>
+  <p>{{ imp.source_filename }}・{{ years[0] }}～{{ years[-1] }} 學年度・{{ imp.imported_at.strftime("%Y/%m/%d %H:%M") }}</p>
   {% else %}
-  <p class="muted">尚未匯入教育部檔案。</p>
+  <p class="muted">尚未匯入</p>
   {% endif %}
 </section>
 
@@ -26,7 +26,6 @@
 {% if unmatched %}
 <section class="card">
   <h2>未對應的單位（{{ unmatched | length }}）</h2>
-  <p class="muted">從該校的教育部單位清單中挑選，可以選多個（人數相加）。已對應但代碼不在目前教育部資料中的單位也列在這裡，需重新對應。</p>
   <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
   <table>
     <tr><th>學校</th><th>系所</th><th>中大系所</th><th>教育部單位</th></tr>

@@ -8,7 +8,7 @@
   <div class="quota-meta">{% if q.reset_at %}<span>{{ q.reset_at.strftime("%m/%d %H:%M") }} 重置</span>{% endif %}<span>{{ q.observed_at.strftime("%m/%d %H:%M") }} 更新</span></div>
 </div>
 {% else %}
-<p class="muted">尚無額度資料：按「檢查連線」或執行分析後會顯示</p>
+<p class="muted">尚無額度資料</p>
 {% endfor %}
 {% if check %}
 <p id="api-check" hx-swap-oob="true" class="{{ 'ok' if check.ok else 'error' }}">{{ check.message }}</p>

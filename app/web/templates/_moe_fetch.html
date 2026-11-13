@@ -5,14 +5,14 @@
     <button type="button" class="secondary" aria-label="關閉" onclick="this.closest('dialog').close()">✕</button>
   </div>
   <form hx-post="/teachers/fetch" hx-target="#moe-fetch" hx-swap="outerHTML">
-    <p>學年度（可多選）</p>
+    <p>學年度</p>
     <div class="year-grid">
       {% for y in years | reverse %}
       <label><input type="checkbox" name="years" value="{{ y }}" {% if loop.first %}checked{% endif %}
         {% if fetcher.running %}disabled{% endif %}> {{ y }}</label>
       {% endfor %}
     </div>
-    <p class="muted">下載後會取代目前的教師數資料並清除所有人工修改，需要多個學年度請一次勾選。</p>
+    <p class="warning">會取代目前資料並清除人工修改</p>
     <button type="submit" {% if fetcher.running or not years %}disabled{% endif %}>
       {{ "下載中…" if fetcher.running else "開始下載" }}</button>
   </form>
@@ -26,5 +26,5 @@
     {% elif job.status == "failed" %}失敗：{{ job.error }}{% endif %}
   </div>
   {% endif %}
-  <p class="muted">資料來源：<a href="{{ source_url }}" target="_blank" rel="noopener">{{ source_name }}</a></p>
+  <p class="muted small"><a href="{{ source_url }}" target="_blank" rel="noopener">{{ source_name }}</a></p>
 </div>

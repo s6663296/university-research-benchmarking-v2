@@ -2,30 +2,33 @@
 {% block content %}
 <h1>版本紀錄</h1>
 {% if not runs %}
-<p class="muted">尚無分析。<a href="/runs/new">前往分析設定</a></p>
+<p class="muted">尚無分析</p>
 {% else %}
-<form method="get" action="/runs/compare">
 <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
 <table class="runs">
-  <tr><th>比較</th><th>分析</th><th>建立時間</th><th>期間</th><th>系所</th><th>比較範圍</th><th>狀態</th><th class="num">待確認</th><th>下載</th><th></th></tr>
+  <tr><th>分析</th><th>期間</th><th>系所</th><th>比較範圍</th><th>狀態</th><th>API 使用</th><th></th></tr>
   {% for x in runs %}
   <tr>
-    <td><label><input type="radio" name="a" value="{{ x.run.id }}">A</label><label><input type="radio" name="b" value="{{ x.run.id }}">B</label></td>
-    <td><a href="/runs/{{ x.run.id }}">#{{ x.run.id }}</a></td>
-    <td>{{ x.run.created_at.strftime("%Y/%m/%d %H:%M") }}</td>
+    <td><a href="/runs/{{ x.run.id }}" class="run-id">#{{ x.run.id }}</a>
+      <div class="muted small">{{ x.run.created_at.strftime("%Y/%m/%d %H:%M") }}</div></td>
     <td>{{ x.run.period_from }}–{{ x.run.period_to }}</td>
-    <td class="wrap">{% include "_departments.html" %}</td>
+    <td title="{{ x.depts | join('、') }}">{{ x.depts | length }} 個系所</td>
     <td>{{ x.comparisons }}</td>
-    <td><a href="/runs/{{ x.run.id }}">{{ x.status }}</a></td>
-    <td class="num">{{ x.open }}</td>
-    <td>{% if x.run.status == "done" %}<a href="/runs/{{ x.run.id }}/xlsx">xlsx</a>・<a href="/runs/{{ x.run.id }}/pptx.zip">pptx</a>{% endif %}</td>
-    <td><button type="submit" class="secondary" formmethod="post" formaction="/runs/{{ x.run.id }}/delete" formnovalidate
-      onclick="return confirm('確定要刪除分析 #{{ x.run.id }}？相關結果與產出檔會一併刪除，無法復原。')">刪除</button></td>
+    <td>{{ x.status }}{% if x.open %}<div class="small"><a href="/runs/{{ x.run.id }}?ind=anomalies">待確認 {{ x.open }}</a></div>{% endif %}</td>
+    <td class="api-usage">
+      {%- if x.usage is none %}<span class="muted" title="這個分析建立時尚未記錄 API 用量">—</span>
+      {%- elif not x.usage %}<span title="資料全部取自快取，沒有用到額度">0</span>
+      {%- else %}{% for label, n in x.usage %}<div>{{ label }} <span class="num">{{ "{:,}".format(n) }}</span></div>{% endfor %}{% endif -%}
+    </td>
+    <td class="row-actions">
+      {%- if x.run.status == "done" %}<a href="/runs/{{ x.run.id }}/xlsx">xlsx</a><a href="/runs/{{ x.run.id }}/pptx.zip">pptx</a>{% endif %}
+      {%- if x.resumable %}<form method="post" action="/runs/{{ x.run.id }}/resume?home=1" class="inline">
+      <button type="submit">▶ 繼續</button></form>{% endif %}<form method="post" action="/runs/{{ x.run.id }}/delete" class="inline"
+      onsubmit="return confirm('確定要刪除分析 #{{ x.run.id }}？相關結果與產出檔會一併刪除，無法復原。')">
+      <button type="submit" class="secondary">刪除</button></form></td>
   </tr>
   {% endfor %}
 </table>
 </div>
-<button type="submit">比較 A 與 B</button>
-</form>
 {% endif %}
 {% endblock %}

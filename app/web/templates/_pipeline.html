@@ -1,15 +1,14 @@
 <section class="card pipeline-card" id="pipeline"
-  {% if polling %}hx-get="/pipeline" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
-  <h2>自動化流程{% if polling %}<span class="muted small">　執行中，每 2 秒更新</span>{% endif %}</h2>
+  hx-get="/pipeline" hx-trigger="every {{ 2 if polling else 5 }}s" hx-swap="outerHTML">
   <ol class="pipeline">
     {% for s in stages %}
     <li class="stage {{ s.state }}">
-      {% if s.href %}<a href="{{ s.href }}" title="{{ state_labels[s.state] }}：{{ s.summary or s.progress|join('、') }}{% if s.detail %}（{{ s.detail }}）{% endif %}">{% else %}<div title="{{ state_labels[s.state] }}">{% endif %}
+      {% set info = s.summary or s.progress|join('、') %}
+      {% if s.href %}<a href="{{ s.href }}" title="{{ state_labels[s.state] }}{% if info %}：{{ info }}{% endif %}{% if s.detail %}（{{ s.detail }}）{% endif %}">{% else %}<div title="{{ state_labels[s.state] }}">{% endif %}
         <span class="stage-icon" aria-label="{{ state_labels[s.state] }}">{{ {"done": "✔", "active": "●", "error": "✖", "warn": "!", "todo": loop.index}[s.state] }}</span>
         <span class="stage-label">{{ s.label_parts[0] }}{% if s.label_parts[1] %}<span class="stage-label-tail">{{ s.label_parts[1] }}</span>{% endif %}</span>
         {% if s.progress %}<span class="stage-progress">{% for line in s.progress %}<span>{{ line }}</span>{% endfor %}</span>{% endif %}
-        {% if s.summary or not s.progress %}<span class="stage-summary">{{ s.summary or state_labels[s.state] }}</span>{% endif %}
-        {% if s.detail %}<span class="stage-detail">{{ s.detail }}</span>{% endif %}
+        {% if s.summary %}<span class="stage-summary">{{ s.summary }}</span>{% endif %}
       {% if s.href %}</a>{% else %}</div>{% endif %}
     </li>
     {% endfor %}

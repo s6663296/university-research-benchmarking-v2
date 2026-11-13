@@ -123,7 +123,7 @@ def test_settings_form_does_not_remember_last_run(seeded, respx_mock):
 def test_settings_page_renamed(seeded):
     text = seeded.get("/runs/new").text
     assert "<h1>分析設定</h1>" in text and ">開始分析</button>" in text
-    assert '<a href="/runs/new">分析設定</a>' in text  # 上方選單
+    assert '<a href="/runs/new" aria-current="page">分析設定</a>' in text  # 上方選單，目前頁
 
 
 def test_home_start_always_goes_to_settings(seeded, respx_mock):
@@ -173,7 +173,7 @@ def test_department_picker_cards(seeded):
 def test_comparison_cards(seeded):
     r = seeded.get("/runs/new")
     assert r.text.count('class="compare-card"') == 3
-    assert "簡報左邊表格" in r.text and "簡報右邊表格" in r.text
+    assert r.text.count("不含簡報") == 1
     # 自訂比較改為勾選清單（依學校分組，中大在最前），不再是多選下拉框
     assert '<select name="custom_unit_ids"' not in r.text
     assert 'type="checkbox" name="custom_unit_ids"' in r.text

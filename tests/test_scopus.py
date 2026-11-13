@@ -72,7 +72,7 @@ async def test_search_follows_cursor(respx_mock):
     assert route.calls[0].request.url.params["cursor"] == "*"
     params = route.calls[0].request.url.params
     assert params["count"] == "200"  # 只取 id 時一頁可到 200 筆（完整欄位只能 25 筆）
-    assert params["field"] == "dc:identifier,eid"
+    assert params["field"] == "dc:identifier,eid,prism:doi"
     assert {d.scopus_id for d in docs} == set(ids67())
     assert all(d.eid.startswith("2-s2.0-") and not d.scopus_id.startswith("SCOPUS_ID") for d in docs)
 

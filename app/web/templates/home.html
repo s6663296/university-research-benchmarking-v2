@@ -10,14 +10,21 @@
     <button type="button" hx-get="/status" hx-target="#api-quota" hx-disabled-elt="this">檢查連線</button>
   </section>
   <section class="card recent-card">
-    <h2>最近分析</h2>
+    <div class="card-head"><h2>最近分析</h2>{% if runs %}<a href="/runs">全部</a>{% endif %}</div>
     {% if runs %}
     <ul class="recent-list" tabindex="0" aria-label="最近分析清單">
-      {% for x in runs %}<li><a href="/runs/{{ x.run.id }}">#{{ x.run.id }}</a> {{ x.run.created_at.strftime("%m/%d %H:%M") }} {% include "_departments.html" %}（{{ x.status }}{% if x.open %}，待確認 {{ x.open }}{% endif %}）</li>{% endfor %}
+      {% for x in runs %}
+      <li><a class="recent-row" href="/runs/{{ x.run.id }}" title="{{ x.depts | join('、') }}">
+        <span class="recent-id">#{{ x.run.id }}</span>
+        <span>{{ x.depts | length }} 個系所</span>
+        <span class="recent-status">{{ x.status }}{% if x.open %}・待確認 {{ x.open }}{% endif %}</span>
+        <time class="recent-time" datetime="{{ x.run.created_at.isoformat() }}">{{ x.run.created_at.strftime("%m/%d %H:%M") }}</time>
+      </a>{% if x.resumable %}<form method="post" action="/runs/{{ x.run.id }}/resume?home=1" class="recent-resume">
+        <button type="submit" class="secondary" aria-label="繼續分析 #{{ x.run.id }}">▶ 繼續</button></form>{% endif %}</li>
+      {% endfor %}
     </ul>
-    <p><a href="/runs">全部版本紀錄</a></p>
     {% else %}
-    <p class="muted">尚無分析，<a href="/runs/new">前往分析設定</a></p>
+    <p class="muted">尚無分析</p>
     {% endif %}
   </section>
 </div>

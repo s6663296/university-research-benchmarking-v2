@@ -141,8 +141,12 @@ class MetricsFetcher:
             else:
                 self.data_source = self.data_source or entry.get("dataSource") or {}
                 self._results[sid].set_result(entry.get("result"))
-        for chunk in batches(missing, MAX_IDS):
-            await self._get_split(chunk)
+        # 各批同時送出（同時在途的數量由 client 的同時請求數上限控制）；全部結束後才拋出第一個錯誤，成功的批次照常存下
+        results = await asyncio.gather(*(self._get_split(chunk) for chunk in batches(missing, MAX_IDS)),
+                                       return_exceptions=True)
+        for r in results:
+            if isinstance(r, BaseException):
+                raise r
 
     async def _get_split(self, ids: list[str]) -> None:
         """整批失敗（逾時、5xx 等）時拆成兩半重試，直到單篇；成功的部分立即存下。
