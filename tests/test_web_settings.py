@@ -178,5 +178,5 @@ def test_save_ai_options(client):
         assert get_setting(s, "ai_tone_prompt") == "自訂語氣"
     client.post("/settings/ai", data={"ai_model": "", "ai_tone_prompt": "  "})
     with client.app.state.session_factory() as s:
-        assert get_setting(s, "ai_model") == "claude-opus-5-5"
+        assert get_setting(s, "ai_model") == "claude-sonnet-5-5"
         assert get_setting(s, "ai_tone_prompt") == DEFAULT_TONE

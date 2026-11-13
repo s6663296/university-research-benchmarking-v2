@@ -29,7 +29,7 @@ def test_claude_writer_live():
     settings = Settings()
     if not settings.anthropic_api_key:
         pytest.skip("沒有設定 ANTHROPIC_API_KEY")
-    writer = ClaudeWriter(settings.anthropic_api_key, os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5"))
+    writer = ClaudeWriter(settings.anthropic_api_key, os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"))
     draft = writer.write(system_prompt("dept", DEFAULT_TONE), PAYLOAD)
 
     assert draft.summary.strip()
