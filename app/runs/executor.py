@@ -22,8 +22,10 @@ from app.metrics.indicators import INDICATORS, importance_note
 from app.runs.anomaly import detect
 from app.runs.scope import RunConfig, build_groups
 
-# 單位抓取中的狀態：先 Scopus 取 EID，再 SciVal 取指標（"fetching" 為舊版資料庫的狀態）
-FETCHING = ("scopus", "scival", "fetching")
+# 單位抓取中的狀態：先 Scopus 取 EID，再 SciVal 取指標，最後排除自我引用（"fetching" 為舊版資料庫的狀態）
+FETCHING = ("scopus", "scival", "selfcite", "fetching")
+# 排除自我引用這一步失敗時，錯誤訊息的開頭（儀表板據此把失敗歸到「排除自我引用」這一步）
+SELFCITE_ERROR = "排除自我引用："
 PUB_FIELDS = ("year", "q1", "top1", "top10", "intl_collab", "citations", "self_citations")
 
 
@@ -142,6 +144,7 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
             update(ru_ids, status="scival", error=None)
         else:
             update(ru_ids, status="scopus", error=None, eid_count=None)
+        prefix = ""
         try:
             docs = await search_docs(client, query, use_cache=use_cache)  # 接續時由快取取回 EID 清單
             ids = [d.scopus_id for d in docs]
@@ -149,6 +152,8 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
             update(ru_ids, status="scival", eid_count=len(docs))
             metrics = await fetcher.fetch(ids)
             if in_set is not None:
+                prefix = SELFCITE_ERROR
+                update(ru_ids, status="selfcite")
                 # SciVal Publication Set 只含 SciVal 有收錄的論文，組內互引也只算這些論文之間的引用
                 selfs = await in_set.count([i for i in ids if i in metrics],
                                            {i: m.citations for i, m in metrics.items()},
@@ -158,10 +163,10 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
                         m.self_citations = selfs.get(i, 0)
                         m.citations = max(m.citations - m.self_citations, 0)
         except ElsevierError as e:
-            update(ru_ids, status="failed", error=e.message)
+            update(ru_ids, status="failed", error=prefix + e.message)
             return
         except Exception as e:  # 單一單位的非預期錯誤不影響其他單位
-            update(ru_ids, status="failed", error=f"非預期錯誤：{type(e).__name__}: {e}")
+            update(ru_ids, status="failed", error=f"{prefix}非預期錯誤：{type(e).__name__}: {e}")
             return
         with session_factory() as s:
             for ru in s.scalars(select(RunUnit).where(RunUnit.id.in_(ru_ids))):

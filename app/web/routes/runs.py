@@ -29,7 +29,7 @@ router = APIRouter()
 
 RUN_STATUS = {"pending": "等待中", "running": "執行中", "done": "完成", "failed": "失敗", "interrupted": "中斷",
               "stopped": "已停止"}
-UNIT_STATUS = {"pending": "等待中", "scopus": "Scopus 查詢中", "scival": "SciVal 取指標中", "done": "完成", "failed": "失敗"}
+UNIT_STATUS = {"pending": "等待中", "scopus": "Scopus 查詢中", "scival": "SciVal 取指標中", "selfcite": "排除自我引用中", "done": "完成", "failed": "失敗"}
 
 
 def _int(value, default: int) -> int:

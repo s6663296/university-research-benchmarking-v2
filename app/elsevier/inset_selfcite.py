@@ -135,9 +135,7 @@ class InSetSelfCitations:
         if query is None or not await self._ref_usable():
             return await self._by_references(ids, ids)
         members = set(ids)
-        citers = set()
-        for group in ref_groups(query, cited):
-            citers |= await self._search(ref_query(query, group)) & members
+        citers = set().union(*await _all(self._search(ref_query(query, g)) for g in ref_groups(query, cited))) & members
         if not citers:
             return {}
         if not self.abstract_exhausted:
@@ -207,9 +205,10 @@ class InSetSelfCitations:
         counts = {p: len(c & members) for p, c in zip(hinted, found) if c & members}
         # OpenAlex 沒指出的（包括 OpenAlex 找不到的論文）整組檢查，有結果才拆開查
         rest = [p for p in cited if p not in hinted_set]
-        for group in ref_groups(query, rest):
-            counts |= await self._split(query, group, await self._search(ref_query(query, group)) & members,
-                                        members)
+        groups = ref_groups(query, rest)
+        found = await _all(self._search(ref_query(query, g)) for g in groups)
+        for part in await _all(self._split(query, g, c & members, members) for g, c in zip(groups, found)):
+            counts |= part
         return counts
 
     async def _split(self, query: str, group: list[str], citers: set[str], members: set[str]) -> dict[str, int]:

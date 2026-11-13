@@ -6,16 +6,19 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Anomaly, Export, Run, RunUnit
+from app.elsevier.selfcite import get_strategy
 from app.funding.service import effective_imports, imports as funding_imports
 from app.mapping.service import error_count, latest_version, recheck_mapping
+from app.runs.executor import SELFCITE_ERROR
 from app.runs.scope import RunConfig
 from app.teachers.moe import import_years, latest_import
 from app.teachers.service import check_links
 
 STATE_LABELS = {"done": "完成", "active": "進行中", "error": "錯誤", "warn": "需處理", "todo": "尚未開始"}
 FETCH_LABEL = "Scopus／SciVal 取指標"
+SELFCITE_LABEL = "排除自我引用"
 REVIEW_LABEL = "計算與異常確認"
-LABEL_TAILS = ("檢查", "取指標", "確認")  # 這些結尾固定放第二行
+LABEL_TAILS = ("檢查", "取指標", "自我引用", "確認")  # 這些結尾固定放第二行
 
 
 @dataclass(frozen=True)
@@ -77,12 +80,17 @@ def _funding(session: Session) -> Stage:
 HALTED = {"stopped": "已停止", "failed": "分析失敗"}  # 其餘未在背景執行的狀態都視為中斷
 
 
+def _selfcite_failed(ru: RunUnit) -> bool:
+    return ru.status == "failed" and (ru.error or "").startswith(SELFCITE_ERROR)
+
+
 def _fetch_stage(run: Run, rus: list[RunUnit], running: bool) -> Stage:
     """Scopus 取 EID 與 SciVal 取指標合併成一步；running：背景程式是否正在執行這次分析。"""
     href = f"/runs/{run.id}/fetch"
     total = len(rus)
-    finished = sum(1 for ru in rus if ru.status == "done")
-    failed = sum(1 for ru in rus if ru.status == "failed")
+    # 已過 SciVal：正在或已完成排除自我引用，或在排除自我引用這一步失敗
+    finished = sum(1 for ru in rus if ru.status in ("selfcite", "done") or _selfcite_failed(ru))
+    failed = sum(1 for ru in rus if ru.status == "failed" and not _selfcite_failed(ru))
     waiting = total - finished - failed
     # eid_count 在 Scopus 完成時寫入（暫停退回 pending 也保留），以它判斷單位是否已過 Scopus 這一步
     past_scopus = sum(1 for ru in rus if ru.eid_count is not None)
@@ -97,6 +105,31 @@ def _fetch_stage(run: Run, rus: list[RunUnit], running: bool) -> Stage:
         return stage("done")
     if running:
         return stage("active")
+    return stage("warn", HALTED.get(run.status, "已中斷"))
+
+
+def _selfcite_stage(run: Run, rus: list[RunUnit], running: bool) -> Stage:
+    """SciVal 取完指標後，各單位減去組內互引；設定為不排除時略過。"""
+    href = f"/runs/{run.id}/fetch"
+    if not get_strategy(run.self_citation_strategy).in_set:
+        return Stage("selfcite", SELFCITE_LABEL, "done", "設定為不排除", href)
+    total = len(rus)
+    finished = sum(1 for ru in rus if ru.status == "done")
+    failed = sum(1 for ru in rus if _selfcite_failed(ru))
+    # 在前面步驟失敗的單位不會走到這一步，不算在等待中
+    waiting = total - finished - failed - sum(1 for ru in rus if ru.status == "failed" and not _selfcite_failed(ru))
+    progress = (f"{finished}／{total}",)
+
+    def stage(state: str, summary: str = "") -> Stage:
+        return Stage("selfcite", SELFCITE_LABEL, state, summary, href, progress=progress)
+
+    if failed:
+        return stage("error", f"{failed} 個失敗")
+    if not waiting:
+        return stage("done")
+    if running:
+        started = finished or any(ru.status == "selfcite" for ru in rus)
+        return stage("active" if started else "todo")
     return stage("warn", HALTED.get(run.status, "已中斷"))
 
 
@@ -119,7 +152,8 @@ def _review_stage(session: Session, run: Run, rus: list[RunUnit], running: bool)
 
 def _run_stages(session: Session, run: Run, running: bool) -> list[Stage]:
     rus = list(session.scalars(select(RunUnit).where(RunUnit.run_id == run.id)))
-    out = [_fetch_stage(run, rus, running), _review_stage(session, run, rus, running)]
+    out = [_fetch_stage(run, rus, running), _selfcite_stage(run, rus, running),
+           _review_stage(session, run, rus, running)]
     if running or run.status != "done":
         return out + [Stage("output", "產出", "todo")]
     exports = session.scalar(select(func.count()).select_from(Export).where(Export.run_id == run.id))
@@ -130,15 +164,15 @@ def _run_stages(session: Session, run: Run, running: bool) -> list[Stage]:
 
 def pipeline(session: Session, run_id: int | None = None, running: bool = False,
              moe_running: bool = False) -> list[Stage]:
-    """流程的 7 個步驟，進度一律以背景程式的狀態為準：
+    """流程的 8 個步驟，進度一律以背景程式的狀態為準：
     run_id 是背景程式最後啟動的分析、running 是它是否仍在執行、moe_running 是否正從教育部下載教師資料
     （服務重啟後背景沒有任何分析，儀表板就回到尚未執行，舊分析仍可在歷史頁查看）。"""
     stages = [_mapping(session), _teachers(session, moe_running), _funding(session)]
     run = session.get(Run, run_id) if run_id is not None else None
     if run is None:
         return stages + [Stage("run", "建立分析", "todo", "前往分析設定", "/runs/new")] + [
-            Stage(k, label, "todo") for k, label in (("fetch", FETCH_LABEL), ("review", REVIEW_LABEL),
-                                                     ("output", "產出"))]
+            Stage(k, label, "todo") for k, label in (("fetch", FETCH_LABEL), ("selfcite", SELFCITE_LABEL),
+                                                     ("review", REVIEW_LABEL), ("output", "產出"))]
     depts = "、".join(RunConfig.from_json(run.scope_json).ncu_depts)
     stages.append(Stage("run", "建立分析", "done", f"#{run.id} {depts}", f"/runs/{run.id}"))
     return stages + _run_stages(session, run, running)

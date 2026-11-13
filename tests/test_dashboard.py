@@ -22,19 +22,19 @@ def set_units(session, run_id, *statuses, eid_count=None):
     rus = session.scalars(select(RunUnit).where(RunUnit.run_id == run_id).order_by(RunUnit.id)).all()
     for ru, st in zip(rus, statuses):
         ru.status = st
-        ru.eid_count = eid_count if st in ("scival", "failed") else (10 if st == "done" else None)
+        ru.eid_count = eid_count if st in ("scival", "failed") else (10 if st in ("selfcite", "done") else None)
     session.commit()
     return rus
 
 
 def test_empty_database(session):
     s = stages(session)
-    assert list(s) == ["mapping", "teachers", "funding", "run", "fetch", "review", "output"]
+    assert list(s) == ["mapping", "teachers", "funding", "run", "fetch", "selfcite", "review", "output"]
     assert s["mapping"].state == "todo" and s["mapping"].href == "/mapping"
     assert s["teachers"].state == "todo" and s["teachers"].href == "/teachers"
     assert s["funding"].state == "todo" and s["funding"].summary == "尚未匯入" and s["funding"].href == "/funding"
     assert s["run"].state == "todo" and s["run"].href == "/runs/new"
-    assert all(s[k].state == "todo" and s[k].href is None for k in ("fetch", "review", "output"))
+    assert all(s[k].state == "todo" and s[k].href is None for k in ("fetch", "selfcite", "review", "output"))
 
 
 def test_funding_stage_shows_years_and_latest_file(session):
@@ -236,3 +236,45 @@ def test_home_has_start_button_and_settings_icon(client):
     text = client.get("/").text
     assert 'action="/runs/start"' in text and ">▶ 開始分析</button>" in text
     assert 'href="/runs/new?reuse=1"' in text and 'title="分析設定"' in text
+
+
+def test_selfcite_stage_has_its_own_progress(session):
+    run = make_run(session)
+    session.get(Run, run.id).status = "running"
+    rus = set_units(session, run.id, "done", "selfcite", "scival", eid_count=5)
+    s = stages(session)
+    n = len(rus)
+    assert s["fetch"].progress == (f"Scopus 3／{n}", f"SciVal 2／{n}")   # 正在排除自我引用的單位已過 SciVal
+    assert s["selfcite"].label_parts == ("排除", "自我引用")
+    assert s["selfcite"].state == "active" and s["selfcite"].progress == (f"1／{n}",)
+    assert s["selfcite"].href == f"/runs/{run.id}/fetch"
+
+
+def test_selfcite_waits_until_a_unit_gets_there(session):
+    run = make_run(session)
+    session.get(Run, run.id).status = "running"
+    set_units(session, run.id, "scival", "scopus", eid_count=5)
+    assert stages(session)["selfcite"].state == "todo"
+
+
+def test_selfcite_failure_is_shown_on_its_own_stage(session):
+    from app.runs.executor import SELFCITE_ERROR
+    run = make_run(session)
+    session.get(Run, run.id).status = "running"
+    rus = set_units(session, run.id, *["done"] * 20)
+    rus[0].status, rus[0].error = "failed", SELFCITE_ERROR + "Scopus Search API 的額度已用完"
+    session.commit()
+    s = stages(session)
+    n = len(rus)
+    assert s["fetch"].state == "done" and s["fetch"].progress == (f"Scopus {n}／{n}", f"SciVal {n}／{n}")
+    assert s["selfcite"].state == "error" and s["selfcite"].summary == "1 個失敗"
+
+
+def test_selfcite_stage_skipped_when_not_excluding(session):
+    from app.db.settings_store import set_setting
+    set_setting(session, "self_citation_strategy", "none")
+    run = make_run(session)
+    session.get(Run, run.id).status = "running"
+    set_units(session, run.id, "scival")
+    s = stages(session)["selfcite"]
+    assert (s.state, s.summary) == ("done", "設定為不排除")

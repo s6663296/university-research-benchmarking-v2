@@ -17,12 +17,12 @@ router = APIRouter()
 
 # (欄位, 名稱, 型別, 最小值)
 NUMERIC_FIELDS = [
-    ("rate_per_sec", "每秒請求數", float, 0.01),
+    ("rate_per_sec", "每支 API 每秒請求數（超過官方上限時以上限為準）", float, 0.01),
     ("max_retries", "重試次數", int, 0),
     ("backoff_base_sec", "重試等待基準秒數", float, 0),
     ("timeout_sec", "逾時秒數", int, 1),
     ("cache_days", "快取有效天數", int, 0),
-    ("max_concurrency", "同時請求數上限", int, 1),
+    ("max_concurrency", "每支 API 同時請求數上限", int, 1),
     ("rate_limit_retries", "遇到限速（HTTP 429）的重試次數", int, 0),
     ("max_backoff_sec", "限速時單次等待上限秒數", float, 1),
     ("anomaly_change_threshold", "篇數變化門檻", float, 0.01),

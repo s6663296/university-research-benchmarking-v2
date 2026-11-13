@@ -54,7 +54,7 @@ async def test_429_has_its_own_retry_budget(respx_mock):
     route = respx_mock.get(url__regex=SCOPUS).mock(side_effect=[httpx.Response(429)] * 3 + [
         httpx.Response(200, json={"ok": 1})])
     c = make(max_retries=1, rate_limit_retries=5)
-    c._limiter.MAX_INTERVAL = 0.01
+    c.limiter("scopus").MAX_INTERVAL = 0.01
     assert await c.get_json("/content/search/scopus", {}, use_cache=False) == {"ok": 1}
     assert route.call_count == 4
 
@@ -62,7 +62,7 @@ async def test_429_has_its_own_retry_budget(respx_mock):
 async def test_429_gives_up_with_clear_message(respx_mock):
     respx_mock.get(url__regex=SCOPUS).mock(return_value=httpx.Response(429))
     c = make(rate_limit_retries=2)
-    c._limiter.MAX_INTERVAL = 0.01
+    c.limiter("scopus").MAX_INTERVAL = 0.01
     with pytest.raises(ElsevierError) as e:
         await c.get_json("/content/search/scopus", {}, use_cache=False)
     assert "繼續" in e.value.message and e.value.status == 429
@@ -142,3 +142,33 @@ async def test_run_processes_limited_units_at_once(session, session_factory, res
     monkeypatch.setattr(executor, "search_docs", tracking)
     await executor.execute_run(run.id, session_factory, fake_client())
     assert peak == expected
+
+
+async def test_each_api_has_its_own_concurrency(respx_mock):
+    """Scopus 與 SciVal 的限制各自獨立：一支 API 塞滿時，另一支不必排隊。"""
+    in_flight = {"scopus": 0, "scival": 0}
+    peak = 0
+
+    def slow(api):
+        async def handler(request):
+            nonlocal peak
+            in_flight[api] += 1
+            peak = max(peak, sum(in_flight.values()))
+            assert in_flight[api] <= 1
+            await asyncio.sleep(0.02)
+            in_flight[api] -= 1
+            return httpx.Response(200, json={})
+        return handler
+
+    respx_mock.get(url__regex=SCOPUS).mock(side_effect=slow("scopus"))
+    respx_mock.get(url__regex=SCIVAL).mock(side_effect=slow("scival"))
+    c = make(max_concurrency=1)
+    await asyncio.gather(*(c.get_json(path, {"q": i}, use_cache=False) for i in range(4)
+                           for path in ("/content/search/scopus", "/analytics/scival/publication/metrics")))
+    assert peak == 2
+
+
+def test_official_limits_cap_each_api():
+    c = make(rate_per_sec=6, api_max_rate={"scival": 5.0, "scopus": 8.0})
+    assert c.limiter("scival").base_interval == pytest.approx(1 / 5)
+    assert c.limiter("scopus").base_interval == pytest.approx(1 / 6)

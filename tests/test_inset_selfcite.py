@@ -166,3 +166,16 @@ def test_ref_groups_keep_queries_short():
     groups = ref_groups(IM_QUERY, ids)
     assert sum(groups, []) == ids and len(groups) > 1
     assert all(len(ref_query(IM_QUERY, g)) <= MAX_QUERY for g in groups)
+
+
+async def test_run_marks_failures_in_the_selfcite_step(session, session_factory, respx_mock):
+    from app.runs.executor import SELFCITE_ERROR
+    # REF 不可用、Abstract Retrieval 又沒有額度：排除自我引用這一步失敗
+    FakeElsevier(refs={ids67()[1]: [ids67()[0]]}, ref_search=False, abstract_quota=0).install(respx_mock)
+    run = make_run(session)
+    await execute_run(run.id, session_factory, fake_client())
+    session.expire_all()
+    failed = session.scalars(select(RunUnit).where(RunUnit.run_id == run.id, RunUnit.status == "failed")).all()
+    assert failed and all(ru.error.startswith(SELFCITE_ERROR + "Scopus Abstract Retrieval API 的額度已用完")
+                          for ru in failed)
+    assert all(ru.eid_count is not None for ru in failed)   # Scopus、SciVal 都已完成
