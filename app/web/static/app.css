@@ -113,17 +113,16 @@ button.danger { border-color: var(--danger); background: var(--danger); }
 .notice.ok { border-color: var(--ok); background: var(--ok-soft); }
 .notice.error { border-color: var(--danger); background: var(--danger-soft); }
 .small { font-size: 12px; }
-.quota { margin-bottom: 1rem; }
+.card-head button { font-size: 13px; padding: .2rem .7rem; }
+.quota + .quota { margin-top: .7rem; }
+#api-check { margin: 0 0 .5rem; font-size: 13px; }
 #api-check:empty { display: none; }
-.quota-head { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
-.quota-percent { font-size: 13px; color: var(--ok); font-variant-numeric: tabular-nums; }
-.quota.low .quota-percent { color: var(--danger); }
-.quota-figures { display: flex; align-items: baseline; gap: .4rem; margin: .1rem 0 .3rem; font-variant-numeric: tabular-nums; }
-.quota-left { font-size: 1.5rem; line-height: 1.2; font-weight: 700; color: var(--ok); }
+.quota-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 .5rem; }
+.quota-figures { font-size: 13px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.quota-left { font-size: 1.05rem; font-weight: 700; color: var(--ok); }
 .quota.low .quota-left { color: var(--danger); }
-.quota-total { font-size: 13px; color: var(--muted); }
 .quota-meta { display: flex; flex-wrap: wrap; gap: 0 1rem; font-size: 12px; color: var(--muted); }
-.quota-bar { height: 6px; margin: 0 0 .35rem; background: var(--subtle); border-radius: 3px; overflow: hidden; }
+.quota-bar { height: 5px; margin: .2rem 0 .2rem; background: var(--subtle); border-radius: 3px; overflow: hidden; }
 .quota-bar > span { display: block; height: 100%; background: var(--ok); }
 .quota.low .quota-bar > span { background: var(--danger); }
 .pipeline { list-style: none; display: flex; margin: 0; padding: 0; gap: 1.4rem; }

@@ -1,10 +1,7 @@
 {% for q in quotas %}
 <div class="quota{% if q.low %} low{% endif %}">
-  <div class="quota-head"><strong>{{ q.label }}</strong>{% if q.limit and q.remaining is not none %}<span class="quota-percent">剩 {{ q.percent }}%</span>{% endif %}</div>
-  {% if q.remaining is not none %}
-  <div class="quota-figures"><b class="quota-left">{{ "{:,}".format(q.remaining) }}</b>{% if q.limit %}<span class="quota-total">/ {{ "{:,}".format(q.limit) }} 次・每週</span>{% else %}<span class="quota-total">次</span>{% endif %}</div>
-  {% if q.limit %}<div class="quota-bar"><span style="width: {{ q.percent }}%"></span></div>{% endif %}
-  {% endif %}
+  <div class="quota-head"><strong>{{ q.label }}</strong>{% if q.remaining is not none %}<span class="quota-figures"><b class="quota-left">{{ "{:,}".format(q.remaining) }}</b>{% if q.limit %} / {{ "{:,}".format(q.limit) }} 次/週{% else %} 次{% endif %}</span>{% endif %}</div>
+  {% if q.limit and q.remaining is not none %}<div class="quota-bar" title="剩 {{ q.percent }}%"><span style="width: {{ q.percent }}%"></span></div>{% endif %}
   <div class="quota-meta">{% if q.reset_at %}<span>{{ q.reset_at.strftime("%m/%d %H:%M") }} 重置</span>{% endif %}<span>{{ q.observed_at.strftime("%m/%d %H:%M") }} 更新</span></div>
 </div>
 {% else %}
