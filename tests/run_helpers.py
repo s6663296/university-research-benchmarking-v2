@@ -12,7 +12,7 @@ from app.runs.scope import RunConfig
 from app.runs.service import create_run
 from app.teachers.moe import import_moe
 from app.teachers.service import auto_link
-from tests.elsevier_fixtures import SCIVAL_URL, SCOPUS_URL, ids67, scival_handler
+from tests.elsevier_fixtures import ABSTRACT_URL, SCIVAL_URL, SCOPUS_URL, abstract_full, ids67, scival_handler
 from tests.mapping_builder import sample_mapping
 from tests.moe_builder import sample_moe
 
@@ -45,10 +45,12 @@ def seed(session) -> None:
 
 @dataclass
 class FakeElsevier:
-    """依查詢字串回傳論文；fail 中的關鍵字回傳指定的 HTTP 狀態。"""
+    """依查詢字串回傳論文；fail 中的關鍵字回傳指定的 HTTP 狀態；refs 是論文 → 它引用的 Scopus ID。"""
     papers: dict = field(default_factory=lambda: dict(PAPERS))
     fail: dict = field(default_factory=dict)
+    refs: dict = field(default_factory=dict)
     scopus_calls: list = field(default_factory=list)
+    abstract_calls: list = field(default_factory=list)
 
     def scopus(self, request: httpx.Request) -> httpx.Response:
         query = request.url.params["query"]
@@ -68,8 +70,14 @@ class FakeElsevier:
         return httpx.Response(200, json={"search-results": {
             "opensearch:totalResults": str(len(ids)), "cursor": {"@next": "END"}, "entry": entries}})
 
+    def abstract(self, request: httpx.Request) -> httpx.Response:
+        sid = request.url.path.rsplit("/", 1)[-1]
+        self.abstract_calls.append(sid)
+        return httpx.Response(200, json=abstract_full(self.refs.get(sid, [])))
+
     def install(self, respx_mock) -> None:
         respx_mock.get(url__regex=SCOPUS_URL).mock(side_effect=self.scopus)
+        respx_mock.get(url__regex=ABSTRACT_URL).mock(side_effect=self.abstract)
         respx_mock.get(url__regex=SCIVAL_URL).mock(side_effect=scival_handler)
 
 

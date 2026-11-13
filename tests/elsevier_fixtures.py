@@ -9,6 +9,7 @@ import httpx
 FIXTURES = Path(__file__).parent / "fixtures" / "elsevier"
 SCOPUS_URL = r".*/content/search/scopus.*"
 SCIVAL_URL = r".*/analytics/scival/publication/metrics.*"
+ABSTRACT_URL = r".*/content/abstract/scopus_id/.*"
 
 
 @cache
@@ -45,3 +46,15 @@ def scival_handler(request: httpx.Request, drop: set[str] = frozenset()) -> http
             metrics = [m for m in r["metrics"] + cites[sid] if m["metricType"] in types]
             results.append({**r, "metrics": metrics})
     return httpx.Response(200, json={"dataSource": data["dataSource"], "results": results})
+
+
+def abstract_full(refs: list[str]) -> dict:
+    """Abstract Retrieval view=FULL 的回應骨架：參考文獻在 item.bibrecord.tail.bibliography.reference。
+
+    每筆參考文獻另附一個非 SGR 的 itemid，確認只取 Scopus ID；只有一筆時 Scopus 回傳物件而非清單。
+    """
+    items = [{"ref-info": {"refd-itemidlist": {"itemid": [{"@idtype": "DOI", "$": f"10.1/{r}"},
+                                                         {"@idtype": "SGR", "$": r}]}}} for r in refs]
+    reference = items[0] if len(items) == 1 else items
+    return {"abstracts-retrieval-response": {"item": {"bibrecord": {"tail": {"bibliography": {
+        "@refcount": str(len(refs)), "reference": reference}}}}}}

@@ -2,7 +2,7 @@
 
 國立中央大學研發處「產製員額小組論文資料」的自動化工具。系統依人工維護的系所對照表（mapping 表），透過 Elsevier 官方 API 取得中大各系所與對標學校的論文資料，計算師均等指標並排名，再產出簡報與表格。
 
-> **目前狀態：第一版已實作（管理學院試辦）。** 排除自我引用的 API 參數尚待驗證，報告上會標示「待驗證」。設計細節見 [docs/superpowers/specs/2026-10-30-research-benchmarking-design.md](docs/superpowers/specs/2026-10-30-research-benchmarking-design.md)。
+> **目前狀態：第一版已實作（管理學院試辦）。** 排除自我引用的結果已驗證與 SciVal 網頁一致。設計細節見 [docs/superpowers/specs/2026-10-30-research-benchmarking-design.md](docs/superpowers/specs/2026-10-30-research-benchmarking-design.md)。
 
 ## 功能
 
@@ -87,7 +87,8 @@
 
 - Scopus 查詢限定 Country/territory = Taiwan，包含所有文獻類型
 - Q1 指 CiteScore 期刊排名前 25%
-- 排除自我引用的作法與 SciVal 網頁相同：Citation Count 取消勾選「Include self-citations」。API 目前使用 `includeSelfCitations=false`，實測與包含自我引用時數字相同，尚待驗證；可在「設定」切換策略
+- 排除自我引用的結果與 SciVal 網頁相同：以單位論文建立 Publication Set、Citation Count 取消勾選「Include self-citations」時，SciVal 只排除「這組論文彼此之間的引用」。系統先取得含自我引用的被引數，再減去單位論文之間的互相引用（每篇論文的參考文獻由 Scopus Abstract Retrieval 取得，每篇 1 次請求、永久快取）
+  - SciVal API 的 `includeSelfCitations=false` 對逐篇指標沒有作用（已驗證），所以不使用；「設定」可改為不排除自我引用
 - 期間不可包含今年，起始年不可早於 10 年前（SciVal API 的限制）
 - 教師數使用單一年度的人數，不是 5 年總和
 - 所有數字四捨五入到小數第二位
@@ -97,7 +98,7 @@
 ```
 app/          主程式（mapping、teachers、elsevier、metrics、runs、reports、web）
 templates/    簡報範本（由 scripts/make_report_template.py 從範例報告產生）
-scripts/      開發用工具（產生簡報範本、把錄下的 API 回應轉成測試資料）
+scripts/      開發用工具（產生簡報範本、把錄下的 API 回應轉成測試資料、check_pubset_selfcite 核對排除自我引用與 SciVal 網頁是否相同）
 alembic/      資料庫 migration
 tests/        自動化測試
 api_test/     Elsevier API 連線測試工具（可單獨執行 run_api_test.bat）

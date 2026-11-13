@@ -106,7 +106,7 @@ async def test_pending_banner_and_missing_teacher(session, done_run, tmp_path):
 
 async def test_self_citation_footnote(session, done_run, tmp_path):
     p = build(session, done_run, tmp_path)
-    assert "待驗證" in texts_on(p.slides[7])
+    assert "排除單位論文之間的互相引用" in texts_on(p.slides[7])
     assert "114學年度" in texts_on(p.slides[4])
 
 

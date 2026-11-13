@@ -229,7 +229,16 @@ FastAPI
 
 **備案**：Scopus Citation Overview API 提供排除自我引用的參數（`citation=exclude-self`）。這支 API 需要另外申請授權；它對自我引用的定義也要再和 SciVal 比對，數字可能不完全相同。
 
-**設計**：做成策略介面 `SelfCitationStrategy`，可以選用「SciVal 參數」、「Scopus Citation Overview」或「不排除」三種策略。結果頁與報告註腳會標示目前使用的策略。驗證結果出來後只需要切換策略，其他模組不受影響。
+**驗證結果（2026-11-10）**：
+
+- API：`scripts/verify_self_citation.py` 找出 7 篇確定被共同作者引用的論文，`includeSelfCitations` 為 `true`／`false` 時被引數完全相同 → SciVal Publication Metrics API 忽略這個參數
+- 網頁：以這 7 篇建立 Publication Set，Citation Count 含自我引用 44（與 API 相同）、排除後 40。少掉的 4 次恰好是這 7 篇之間的互相引用，逐年也吻合（2021 14→13、2022 11→8、2023 14→14、2024 5→5）；由這 7 篇以外、共同作者發表的論文所做的 8 次引用沒有排除
+- 結論：SciVal 對 Publication Set 的自我引用 = 組內論文彼此之間的引用，不是 Scopus「任一作者」的定義
+- 系所驗證（2026-11-11，中央財金 2021–2025 共 145 篇）：網頁含 2,217、排除後 2,117，排除 100 次；系統組內互引 98 次 + 參考文獻列了自己的 2 篇 = 100 次，完全一致（含自我引用的 2,216 與網頁差 1，是 API 與網頁資料更新日不同）。所以論文引用自己也要算進組內互引
+
+**現行作法（策略 `scival_pubset`，預設）**：SciVal 取含自我引用的被引數，再減去單位論文（SciVal 有收錄者）之間的互相引用；參考文獻以 Abstract Retrieval `view=FULL` 逐篇取得、永久快取（`app/elsevier/inset_selfcite.py`）。
+
+**設計**：策略 `SelfCitationStrategy` 只保留「組內互引」（預設）與「不排除」兩種，在設定頁切換；結果頁與報告註腳標示使用的策略。「SciVal 參數」（驗證無效）與「Scopus Citation Overview」（沒有授權）已移除，舊分析仍顯示原本的策略名稱，設定中存著舊策略時改用預設策略。
 
 ## 8. 異常處理
 
