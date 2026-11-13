@@ -1,6 +1,7 @@
 """AI 總結：分頁、背景產生、人工修改、前期設定與全院總結下載。"""
 
 import zipfile
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
@@ -22,28 +23,53 @@ KIND_LABELS = {"dept": "系所", "college": "學院"}
 NEED_SUMMARY = "請先產生並確認全院總結"
 
 
-def _back(run_id: int) -> RedirectResponse:
-    return RedirectResponse(f"/runs/{run_id}?ind=ai", status_code=303)
+# 清單上的狀態：(簡短標籤, 樣式)
+STATUS = {"none": ("未產生", "none"), "fresh": ("已產生", "ok"), "edited": ("已修改", "ok"), "stale": ("過時", "stale")}
+STALE_TEXT = "資料已更新，總結可能過時"
 
 
-def ai_context(session: Session, run: Run) -> dict:
+def _sel(kind: str, key: str) -> str:
+    return f"{kind}:{quote(key)}"
+
+
+def _back(run_id: int, kind: str | None = None, key: str | None = None) -> RedirectResponse:
+    """回到 AI 總結分頁；有指定對象時停在同一份。"""
+    url = f"/runs/{run_id}?ind=ai" + (f"&sel={_sel(kind, key)}" if kind else "")
+    return RedirectResponse(url, status_code=303)
+
+
+def bullets(text: str | None) -> list[str]:
+    """每行一點；去掉開頭的項目符號，網頁上用清單顯示。"""
+    return [line.strip().lstrip("・-•*").strip() for line in (text or "").splitlines() if line.strip()]
+
+
+def ai_context(session: Session, run: Run, sel: str = "") -> dict:
     saved = {(r.kind, r.key): r for r in session.scalars(select(AiSummary).where(AiSummary.run_id == run.id))}
+    targets = service.targets(session, run)
+    targets = [t for t in targets if t[0] == "college"] + [t for t in targets if t[0] != "college"]  # 學院在前
     rows = []
-    for kind, key in service.targets(session, run):
+    for kind, key in targets:
         row = saved.get((kind, key))
         if row is None:
-            status = "未產生"
+            state = "none"
         elif not service.is_fresh(session, row):
-            status = "資料已更新，總結可能過時"
+            state = "stale"
         else:
-            status = "已修改" if row.edited else "已產生"
-        base, diffs = None, []
-        if kind == "dept":
-            base = baseline_for(session, run, key)
-            diffs = basis_differences(run, base, key) if base else []
-        rows.append(dict(kind=kind, key=key, kind_label=KIND_LABELS[kind], row=row, status=status,
-                         stale=status.startswith("資料已更新"), base=base, diffs=diffs))
-    return dict(ai_rows=rows, baseline_options=baseline_choices(session, run))
+            state = "edited" if row.edited else "fresh"
+        label, css = STATUS[state]
+        rows.append(dict(kind=kind, key=key, kind_label=KIND_LABELS[kind], row=row, state=state,
+                         status=label, css=css, stale=state == "stale", sel=_sel(kind, key)))
+    current = next((r for r in rows if r["sel"] == quote(sel, safe=":")), rows[0] if rows else None)
+    if current is not None:  # 只為顯示中的那份查前期，清單不必每列都查
+        kind, key = current["kind"], current["key"]
+        current["title"] = f"{key}全院總結" if kind == "college" else f"{key}總結與建議"
+        current["base"] = baseline_for(session, run, key) if kind == "dept" else None
+        current["diffs"] = basis_differences(run, current["base"], key) if current["base"] else []
+        row = current["row"]
+        current["summary"] = bullets(row.summary if row else None)
+        current["comparison"] = bullets(row.comparison if row else None)
+    return dict(ai_rows=rows, ai_current=current, ai_stale_text=STALE_TEXT,
+                baseline_options=baseline_choices(session, run))
 
 
 def ai_progress_context(request: Request, run: Run) -> dict:
@@ -75,7 +101,7 @@ async def generate_one(request: Request, run_id: int, kind: str, key: str, sessi
     if (kind, key) not in service.targets(session, run):
         raise HTTPException(404, "找不到這個總結對象")
     request.app.state.ai_jobs.start(run_id, only=(kind, key))
-    return _back(run_id)
+    return _back(run_id, kind, key)
 
 
 @router.post("/runs/{run_id}/ai/summaries/{summary_id}")
@@ -90,7 +116,7 @@ async def save_summary(request: Request, run_id: int, summary_id: int, session: 
         raise HTTPException(400, "總結不能是空白")
     service.save_edit(session, summary_id, text,
                       str(form.get("comparison", "")).strip() or None)
-    return _back(run_id)
+    return _back(run_id, row.kind, row.key)
 
 
 @router.post("/runs/{run_id}/ai/baseline")

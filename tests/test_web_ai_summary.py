@@ -158,3 +158,49 @@ def test_save_empty_summary_rejected(client, run_id, value):
     assert r.status_code == 400
     with client.app.state.session_factory() as s:
         assert s.get(AiSummary, sid).summary == old
+
+
+def sel(kind, key):
+    from urllib.parse import quote
+    return f"sel={kind}:{quote(key)}"
+
+
+def test_ai_tab_is_list_and_preview(client, run_id):
+    generate(client, run_id)
+    college = college_of(client, run_id)
+    html = client.get(f"/runs/{run_id}?ind=ai").text
+    # 左邊清單：學院在前、每一份都能點選；預設顯示學院的全院總結
+    assert 'class="ai-list"' in html and html.index(sel("college", college)) < html.index(sel("dept", DEPT))
+    assert f"{college}全院總結" in html
+    html = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text
+    assert f"{DEPT}總結與建議" in html and 'class="ai-slide"' in html
+    assert '<li>' in html.split('class="ai-slide"')[1]          # 條列顯示，不是文字框
+    assert 'id="ai-edit"' in html and "hidden" in html.split('id="ai-edit"')[1][:40]   # 編輯框預設收起
+
+
+def test_ungenerated_selection_offers_generate(client, run_id):
+    html = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text
+    assert "尚未產生" in html and "產生這一份" in html and 'id="ai-edit"' not in html
+
+
+def test_unknown_selection_falls_back_to_first(client, run_id):
+    assert client.get(f"/runs/{run_id}?ind=ai&sel=dept:不存在").status_code == 200
+
+
+def test_actions_return_to_the_same_selection(client, run_id):
+    generate(client, run_id)
+    with client.app.state.session_factory() as s:
+        sid = s.scalars(select(AiSummary.id).where(AiSummary.key == DEPT)).first()
+    r = client.post(f"/runs/{run_id}/ai/summaries/{sid}", data={"summary": "改過", "comparison": ""},
+                    follow_redirects=False)
+    assert sel("dept", DEPT) in r.headers["location"]
+    client.app.state.ai_jobs.writer_factory = lambda: FakeWriter()
+    r = client.post(f"/runs/{run_id}/ai/generate/dept/{DEPT}", follow_redirects=False)
+    assert sel("dept", DEPT) in r.headers["location"]
+    wait_job(client, run_id)
+
+
+def test_no_baseline_note_is_not_repeated(client, run_id):
+    generate(client, run_id)   # FakeWriter 的比較說明是「無前期資料可比較」，本系也沒有前期
+    html = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text
+    assert html.split('class="ai-slide"')[1].split('class="ai-actions"')[0].count("無前期資料可比較") == 1

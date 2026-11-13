@@ -202,7 +202,7 @@ def fetch_status(request: Request, run_id: int, session: Session = Depends(get_s
     return render(request, "run_fetch.html", **progress_context(request, session, get_run(session, run_id)))
 
 
-def result_context(session: Session, run: Run, ind: str) -> dict:
+def result_context(session: Session, run: Run, ind: str, sel: str = "") -> dict:
     from app.web.routes.ai_summary import ai_context  # ai_summary 也用到本檔的 get_run，延後匯入避免循環
 
     explainer = Explainer(session, run.id)
@@ -235,18 +235,18 @@ def result_context(session: Session, run: Run, ind: str) -> dict:
         if ind == "funding" else [],
         money=money, count_text=count_text,
         college_names=run_colleges(session, run),
-        **(ai_context(session, run) if ind == "ai" else {}),
+        **(ai_context(session, run, sel) if ind == "ai" else {}),
     )
 
 
 @router.get("/runs/{run_id}")
-def run_detail(request: Request, run_id: int, ind: str = "summary", busy: int = 0, hl: int = 0,
+def run_detail(request: Request, run_id: int, ind: str = "summary", busy: int = 0, hl: int = 0, sel: str = "",
                session: Session = Depends(get_session)):
     run = get_run(session, run_id)
     ctx = progress_context(request, session, run)
     ctx["busy"], ctx["hl"] = bool(busy), hl
     if run.status == "done":
-        ctx.update(result_context(session, run, ind))
+        ctx.update(result_context(session, run, ind, sel))
         if ind == "ai":
             from app.web.routes.ai_summary import ai_progress_context
 

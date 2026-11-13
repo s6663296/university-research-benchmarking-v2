@@ -1,42 +1,82 @@
-<p class="muted">由 Claude 依本次分析的數字撰寫，請逐項確認後再下載簡報。資料更新後過時的總結不會放進簡報。</p>
+<div class="ai-toolbar">
+  <form method="post" action="/runs/{{ run.id }}/ai/baseline" class="ai-baseline">
+    <label for="ai-baseline">比較基準</label>
+    <select id="ai-baseline" name="baseline" onchange="this.form.requestSubmit()"
+      title="更換後，既有總結會變成過時，需重新產生">
+      <option value="">自動（上一期）</option>
+      {% for r in baseline_options %}<option value="{{ r.id }}"{% if run.ai_baseline_run_id == r.id %} selected{% endif %}>分析 #{{ r.id }}（{{ r.period_from }}–{{ r.period_to }}）</option>{% endfor %}
+    </select>
+    <noscript><button type="submit" class="secondary">套用</button></noscript>
+  </form>
+  <form method="post" action="/runs/{{ run.id }}/ai/generate">
+    <button type="submit"{% if ai_polling %} disabled{% endif %}
+      onclick="return confirm('會重新產生所有學院與系所的總結，並覆蓋已修改的文字。確定產生？')">產生 AI 總結</button>
+  </form>
+</div>
 
 {% include "_ai_progress.html" %}
 
-<form method="post" action="/runs/{{ run.id }}/ai/generate" class="inline">
-  <button type="submit"{% if ai_polling %} disabled{% endif %}>產生 AI 總結</button>
-  <span class="muted">會重新產生所有系所與學院，並覆蓋已修改的文字</span>
-</form>
+{% if ai_current %}
+<div class="ai-layout">
+  <nav class="ai-list" aria-label="總結對象">
+    {% for r in ai_rows %}
+    <a href="?ind=ai&sel={{ r.sel }}" class="ai-item{% if r.sel == ai_current.sel %} current{% endif %}"
+      {% if r.sel == ai_current.sel %}aria-current="page"{% endif %}{% if r.stale %} title="{{ ai_stale_text }}"{% endif %}>
+      <span class="ai-name">{{ r.key }}</span>
+      <span class="ai-state {{ r.css }}"><span class="dot" aria-hidden="true"></span>{{ r.status }}</span>
+    </a>
+    {% endfor %}
+  </nav>
 
-<form method="post" action="/runs/{{ run.id }}/ai/baseline" class="inline">
-  <label for="ai-baseline">與前期比較</label>
-  <select id="ai-baseline" name="baseline">
-    <option value="">自動（上一期）</option>
-    {% for r in baseline_options %}<option value="{{ r.id }}"{% if run.ai_baseline_run_id == r.id %} selected{% endif %}>分析 #{{ r.id }}（{{ r.period_from }}–{{ r.period_to }}）</option>{% endfor %}
-  </select>
-  <button type="submit" class="secondary">套用</button>
-  <span class="muted">更換前期後，既有總結會顯示為過時，需重新產生</span>
-</form>
+  {% set c = ai_current %}
+  <section class="ai-detail">
+    {% if c.stale %}<div class="notice">{{ ai_stale_text }}。這份不會放進簡報，請重新產生。</div>{% endif %}
 
-{% for r in ai_rows %}
-<section class="card">
-  <h3>{{ r.key }}（{{ r.kind_label }}）<span class="{{ 'pending' if r.stale else 'muted' }}">{{ r.status }}</span></h3>
-  {% if r.kind == "dept" %}
-  <p class="muted">
-    {% if r.base %}比較前期：分析 #{{ r.base.id }}（{{ r.base.period_from }}–{{ r.base.period_to }}）{% if r.diffs %}；計算基準不同：{{ r.diffs | join("、") }}{% endif %}
-    {% else %}無前期資料可比較{% endif %}
-  </p>
-  {% endif %}
-  {% if r.row %}
-  <form method="post" action="/runs/{{ run.id }}/ai/summaries/{{ r.row.id }}">
-    <div class="field"><label for="s{{ r.row.id }}">總結</label><textarea id="s{{ r.row.id }}" name="summary" rows="6">{{ r.row.summary }}</textarea></div>
-    <div class="field"><label for="c{{ r.row.id }}">與前期比較</label><textarea id="c{{ r.row.id }}" name="comparison" rows="4">{{ r.row.comparison or "" }}</textarea></div>
-    <button type="submit">儲存</button>
-    <button type="submit" class="secondary" formaction="/runs/{{ run.id }}/ai/generate/{{ r.kind }}/{{ r.key | urlencode }}"{% if ai_polling %} disabled{% endif %}>重新產生</button>
-  </form>
-  {% else %}
-  <form method="post" action="/runs/{{ run.id }}/ai/generate/{{ r.kind }}/{{ r.key | urlencode }}">
-    <button type="submit" class="secondary"{% if ai_polling %} disabled{% endif %}>產生</button>
-  </form>
-  {% endif %}
-</section>
-{% endfor %}
+    <div class="ai-slide">
+      <div class="ai-kicker">{{ "全院總結" if c.kind == "college" else "總結與建議" }}</div>
+      <h2 class="ai-title">{{ c.title }}</h2>
+      {% if c.kind == "dept" %}
+      <p class="ai-meta">
+        {% if c.base %}比較前期：分析 #{{ c.base.id }}（{{ c.base.period_from }}–{{ c.base.period_to }}）{% if c.diffs %}；計算基準不同：{{ c.diffs | join("、") }}{% endif %}
+        {% else %}無前期資料可比較{% endif %}
+      </p>
+      {% endif %}
+
+      {% if c.row %}
+      <ul class="ai-points">{% for p in c.summary %}<li>{{ p }}</li>{% endfor %}</ul>
+      {% if c.comparison and (c.kind == "college" or c.base) %}{# 沒有前期時上方已註明，不重複 #}
+      <h3 class="ai-sub">與前期比較</h3>
+      <ul class="ai-points">{% for p in c.comparison %}<li>{{ p }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% else %}
+      <p class="ai-empty">尚未產生</p>
+      {% endif %}
+    </div>
+
+    <div class="ai-actions">
+      {% if c.row %}
+      <button type="button" class="secondary" aria-controls="ai-edit" aria-expanded="false"
+        onclick="const f=document.getElementById('ai-edit');f.hidden=!f.hidden;this.setAttribute('aria-expanded',!f.hidden);if(!f.hidden)f.querySelector('textarea').focus()">編輯</button>
+      {% endif %}
+      <form method="post" action="/runs/{{ run.id }}/ai/generate/{{ c.kind }}/{{ c.key | urlencode }}">
+        <button type="submit" class="{{ 'secondary' if c.row and not c.stale }}"{% if ai_polling %} disabled{% endif %}>{{ "重新產生" if c.row else "產生這一份" }}</button>
+      </form>
+      {% if c.kind == "college" and c.row and not c.stale %}
+      <a class="button secondary" href="/runs/{{ run.id }}/college-summary/{{ c.key | urlencode }}">下載全院總結簡報</a>
+      {% endif %}
+      {% if c.row %}<span class="muted small">{% if c.row.edited %}已人工修改{% else %}由 Claude 撰寫{% endif %}，請確認後再下載簡報</span>{% endif %}
+    </div>
+
+    {% if c.row %}
+    <form method="post" action="/runs/{{ run.id }}/ai/summaries/{{ c.row.id }}" id="ai-edit" class="ai-edit" hidden>
+      <div class="field"><label for="ai-s">總結（一行一點）</label>
+        <textarea id="ai-s" name="summary" rows="6">{{ c.row.summary }}</textarea></div>
+      <div class="field"><label for="ai-c">與前期比較（一行一點，可留空）</label>
+        <textarea id="ai-c" name="comparison" rows="4">{{ c.row.comparison or "" }}</textarea></div>
+      <button type="submit">儲存</button>
+      <button type="button" class="secondary" onclick="this.form.hidden=true">取消</button>
+    </form>
+    {% endif %}
+  </section>
+</div>
+{% endif %}
