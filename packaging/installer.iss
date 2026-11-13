@@ -11,6 +11,8 @@
 AppId={{6F0B3A52-4C1E-4E8B-9A57-2D6C1B7E9F41}
 AppName={#AppName}
 AppVersion={#AppVersion}
+; 視窗標題與「應用程式」清單只顯示名稱，不加版本號
+AppVerName={#AppName}
 AppPublisher=國立中央大學研究發展處
 DefaultDirName={autopf}\ResearchBenchmarking
 DisableDirPage=no
