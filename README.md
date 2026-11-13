@@ -18,12 +18,22 @@
 
 ## 系統需求
 
-- Windows 10 / 11
-- Python 3.11 以上
+- Windows 10 / 11（64 位元）
+- 用安裝檔安裝不需要 Python；從原始碼執行需要 Python 3.11 以上
 - **校內網路或學校 VPN**（Elsevier API 只能從校內使用）
 - Elsevier API Key（開發階段使用小組的測試帳號，正式使用時改用承辦人的個人帳號）
 
 ## 安裝與啟動
+
+### 承辦人：用安裝檔
+
+1. 執行 `ResearchBenchmarking-Setup-<版本>.exe`，可以自選安裝目錄，不需要系統管理員權限。Windows 若顯示「已保護您的電腦」，按「其他資訊」→「仍要執行」
+2. 從開始功能表或桌面捷徑開啟「員額小組論文指標自動化系統」，瀏覽器會自動開啟系統頁面。使用期間請保留跳出的黑色視窗，關閉它就會結束系統
+3. 到「設定」頁填入 Elsevier API Key
+
+資料庫、API Key 和產出檔存放在 `%LOCALAPPDATA%\ResearchBenchmarking`，不在安裝目錄裡。更新版本時直接執行新版安裝檔即可，資料會保留；解除安裝也不會刪除這些資料。之前用 `start.bat` 執行過的電腦，把專案目錄裡的 `.env` 和 `data` 資料夾搬到上述位置，就能沿用原本的資料。
+
+### 開發者：從原始碼執行
 
 1. 複製設定檔範本，填入 API Key：
 
@@ -104,6 +114,7 @@
 
 ```
 app/          主程式（mapping、teachers、elsevier、metrics、runs、reports、web）
+packaging/    安裝檔打包設定（PyInstaller、Inno Setup）
 templates/    簡報範本（由 scripts/make_report_template.py 從範例報告產生）
 scripts/      開發用工具（產生簡報範本、把錄下的 API 回應轉成測試資料、check_pubset_selfcite 核對排除自我引用與 SciVal 網頁是否相同）
 alembic/      資料庫 migration
@@ -131,6 +142,16 @@ pytest tests/live -v
 Claude 的實際呼叫測試是 `tests/live/test_live_claude.py`，另外需要在 `.env` 或環境變數設定 `ANTHROPIC_API_KEY`。
 
 直接錄下的 Elsevier 回應含有 API Key，只能用 `python scripts/sanitize_fixture.py <輸入> <輸出>` 轉成測試資料，不要直接複製。
+
+### 製作安裝檔
+
+需要 [Inno Setup 6](https://jrsoftware.org/isinfo.php)（`winget install JRSoftware.InnoSetup`）。執行：
+
+```
+packaging\build.bat
+```
+
+會在 `build\venv` 建立獨立的打包環境，先用 PyInstaller 把程式和 Python 打包到 `dist\ResearchBenchmarking\`，再產生 `dist\ResearchBenchmarking-Setup-<版本>.exe`。版本號取自 `pyproject.toml`。程式用 `Path(__file__)` 讀取的檔案（網頁樣板、簡報範本、migration）要列在 `packaging/research_benchmarking.spec` 的 `datas` 中，否則打包後會找不到。
 
 ## 計畫經費（經分表）
 
