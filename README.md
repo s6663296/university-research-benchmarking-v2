@@ -108,7 +108,6 @@ templates/    簡報範本（由 scripts/make_report_template.py 從範例報告
 scripts/      開發用工具（產生簡報範本、把錄下的 API 回應轉成測試資料、check_pubset_selfcite 核對排除自我引用與 SciVal 網頁是否相同）
 alembic/      資料庫 migration
 tests/        自動化測試
-api_test/     Elsevier API 連線測試工具（可單獨執行 run_api_test.bat）
 data/         資料庫、快取與產出檔（不進版控）
 docs/         原始資料、範例報告與設計文件
 ```
@@ -131,7 +130,7 @@ pytest tests/live -v
 
 Claude 的實際呼叫測試是 `tests/live/test_live_claude.py`，另外需要在 `.env` 或環境變數設定 `ANTHROPIC_API_KEY`。
 
-`api_test/output/` 中錄下的回應含有 API Key，只能用 `python scripts/sanitize_fixture.py <輸入> <輸出>` 轉成測試資料，不要直接複製。
+直接錄下的 Elsevier 回應含有 API Key，只能用 `python scripts/sanitize_fixture.py <輸入> <輸出>` 轉成測試資料，不要直接複製。
 
 ## 計畫經費（經分表）
 
