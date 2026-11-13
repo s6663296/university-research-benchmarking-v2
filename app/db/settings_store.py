@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.ai.prompts import DEFAULT_TONE
 from app.db.models import AppSetting
 
 DEFAULT_SETTINGS: dict[str, Any] = {
@@ -22,6 +23,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "self_citation_strategy": "scival_pubset",
     "selfcite_method": "references",      # 組內互引的查法：references 逐篇抓參考文獻、scopus 只用 Scopus Search
     "rank_highlight_top": 2,              # 排名總表中名次 ≤ 2 標紅（範例第 4 頁）
+    "ai_model": "claude-sonnet-5-5",        # AI 摘要使用的 Claude 模型
+    "ai_tone_prompt": DEFAULT_TONE,       # AI 摘要的語氣提示
     "report_text": {},                    # 簡報目錄名稱與備註的修改（只存與預設不同的欄位）
 }
 

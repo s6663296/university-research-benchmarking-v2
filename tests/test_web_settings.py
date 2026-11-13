@@ -131,7 +131,7 @@ def test_reset_clears_data_key_and_settings(client, tmp_path, web_done_run):
 
     r = client.post("/settings/reset", follow_redirects=True)
 
-    assert r.status_code == 200 and "系統已重設" in r.text
+    assert r.status_code == 200 and "所有資料已清除" in r.text
     with client.app.state.session_factory() as s:
         for table in Base.metadata.sorted_tables:
             if table.name != ApiCache.__tablename__:
@@ -174,3 +174,53 @@ def test_refs_cache_shown_and_cleared_separately(client):
 def test_refs_cache_clear_refused_while_run_is_fetching(client):
     client.app.state.run_manager.any_running = lambda: True
     assert client.post("/settings/refs-cache/clear").status_code == 409
+
+
+def test_reset_refused_while_ai_job_runs(client):
+    client.app.state.ai_jobs.any_running = lambda: True
+    assert client.post("/settings/reset").status_code == 409
+
+
+def test_save_ai_key_masks_and_writes_env(keyed_client, tmp_path):
+    keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-secret7777"})
+    assert "ANTHROPIC_API_KEY=sk-ant-secret7777" in (tmp_path / ".env").read_text(encoding="utf-8")
+    text = keyed_client.get("/settings").text
+    # 和 Elsevier API Key 同樣的遮罩：保留前後各 4 碼
+    assert "sk-a********7777" in text and "secret" not in text
+    keyed_client.post("/settings/reset")
+    assert "ANTHROPIC_API_KEY=\n" in (tmp_path / ".env").read_text(encoding="utf-8")
+    assert keyed_client.app.state.settings.anthropic_api_key == ""
+
+
+def test_ai_key_shown_like_elsevier_keys_with_delete(keyed_client, tmp_path):
+    text = keyed_client.get("/settings").text
+    assert "尚未設定 Claude API Key" in text
+    keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-first1111"})
+    keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-second2222"})   # 新的取代舊的
+    text = keyed_client.get("/settings").text
+    assert "sk-a********2222" in text and "1111" not in text
+    assert 'action="/settings/ai-key/delete"' in text and 'class="api-keys"' in text
+    keyed_client.post("/settings/ai-key/delete")
+    assert "ANTHROPIC_API_KEY=\n" in (tmp_path / ".env").read_text(encoding="utf-8")
+    assert keyed_client.app.state.settings.anthropic_api_key == ""
+    assert "尚未設定 Claude API Key" in keyed_client.get("/settings").text
+
+
+def test_blank_ai_key_keeps_existing(keyed_client):
+    keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-keep3333"})
+    keyed_client.post("/settings/ai-key", data={"ai_key": "  "})
+    assert keyed_client.app.state.settings.anthropic_api_key == "sk-ant-keep3333"
+
+
+def test_save_ai_options(client):
+    from app.ai.prompts import DEFAULT_TONE
+    from app.db.settings_store import get_setting
+
+    client.post("/settings/ai", data={"ai_model": "claude-sonnet-5-5", "ai_tone_prompt": "自訂語氣"})
+    with client.app.state.session_factory() as s:
+        assert get_setting(s, "ai_model") == "claude-sonnet-5-5"
+        assert get_setting(s, "ai_tone_prompt") == "自訂語氣"
+    client.post("/settings/ai", data={"ai_model": "", "ai_tone_prompt": "  "})
+    with client.app.state.session_factory() as s:
+        assert get_setting(s, "ai_model") == "claude-sonnet-5-5"
+        assert get_setting(s, "ai_tone_prompt") == DEFAULT_TONE

@@ -5,9 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.ai.prompts import DEFAULT_TONE
 from app.config import parse_api_keys, save_env
 from app.db.session import clear_all_data, clear_refs_cache, refs_cache_stats
-from app.db.settings_store import get_setting, set_setting
+from app.db.settings_store import DEFAULT_SETTINGS, get_setting, set_setting
 from app.elsevier.selfcite import usable_strategy_id
 from app.elsevier.client import ConnectionStatus, make_client
 from app.elsevier.quota import quota_rows
@@ -45,10 +46,12 @@ def mask_key(key: str) -> str:
 
 
 def mask_api_key(key: str) -> str:
-    """保留開頭與結尾各 4 碼，中間以 * 取代；太短的 Key 全部遮住。"""
+    """保留開頭與結尾各 4 碼，中間固定 8 個 *（不透露長度、清單也對齊）；太短的 Key 全部遮住。"""
+    if not key:
+        return ""
     if len(key) <= 8:
-        return "*" * len(key)
-    return key[:4] + "*" * (len(key) - 8) + key[-4:]
+        return "*" * 8
+    return key[:4] + "*" * 8 + key[-4:]
 
 
 def _int_param(request: Request, name: str) -> int:
@@ -68,6 +71,8 @@ def _context(session: Session, request: Request, **extra) -> dict:
         selfcite_method=get_setting(session, "selfcite_method"), selfcite_method_choices=SELFCITE_METHOD_CHOICES,
         masked_keys=[mask_api_key(k) for k in request.app.state.settings.elsevier_api_keys],
         insttoken_status=mask_key(request.app.state.settings.elsevier_insttoken),
+        ai_masked_key=mask_api_key(request.app.state.settings.anthropic_api_key),
+        ai_model=get_setting(session, "ai_model"), ai_tone=get_setting(session, "ai_tone_prompt"),
         errors=[], saved=False, reset=request.query_params.get("reset") == "1",
         keys_added=_int_param(request, "added"),
         keys_dup=[int(n) for n in request.query_params.get("dup", "").split(",") if n.isdigit()],
@@ -114,7 +119,7 @@ def _save_credentials(request: Request, keys: list[str], insttoken: str) -> Redi
     """寫回 .env 並更新記憶體中的設定。多組 Key 以逗號分隔存在同一行。"""
     settings = request.app.state.settings
     api_key = ",".join(keys)
-    save_env(settings.env_path, api_key, insttoken)
+    save_env(settings.env_path, {"ELSEVIER_API_KEY": api_key, "ELSEVIER_INSTTOKEN": insttoken})
     request.app.state.settings = settings.model_copy(
         update={"elsevier_api_key": api_key, "elsevier_insttoken": insttoken})
     return RedirectResponse("/settings", status_code=303)
@@ -154,16 +159,48 @@ async def save_insttoken(request: Request):
     return _save_credentials(request, settings.elsevier_api_keys, str(form.get("insttoken", "")).strip())
 
 
+def _save_ai_key(request: Request, key: str) -> RedirectResponse:
+    settings = request.app.state.settings
+    save_env(settings.env_path, {"ANTHROPIC_API_KEY": key})
+    request.app.state.settings = settings.model_copy(update={"anthropic_api_key": key})
+    return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/ai-key")
+async def save_ai_key(request: Request):
+    """Claude 只用一組 Key：貼上新的就取代舊的，留空表示不變。"""
+    form = await request.form()
+    key = str(form.get("ai_key", "")).strip() or request.app.state.settings.anthropic_api_key
+    return _save_ai_key(request, key)
+
+
+@router.post("/settings/ai-key/delete")
+async def delete_ai_key(request: Request):
+    return _save_ai_key(request, "")
+
+
+@router.post("/settings/ai")
+async def save_ai_options(request: Request, session: Session = Depends(get_session)):
+    """模型與語氣提示；留空就回到預設值。"""
+    form = await request.form()
+    set_setting(session, "ai_model", str(form.get("ai_model", "")).strip() or DEFAULT_SETTINGS["ai_model"])
+    set_setting(session, "ai_tone_prompt", str(form.get("ai_tone_prompt", "")).strip() or DEFAULT_TONE)
+    return RedirectResponse("/settings", status_code=303)
+
+
 @router.post("/settings/reset")
 def reset_all(request: Request):
     """重設系統：清除資料庫（參考文獻快取除外）、產出檔與 .env 中的 API Key；設定回到預設值。"""
     if request.app.state.run_manager.any_running():
-        raise HTTPException(409, "仍有分析在抓取中，請等它結束後再重設")
+        raise HTTPException(409, "仍有分析在抓取中，請等它結束後再清除")
+    if request.app.state.ai_jobs.any_running():
+        raise HTTPException(409, "AI 總結仍在產生中，請等它結束後再清除")
     settings = request.app.state.settings
     clear_all_data(request.app.state.engine)
     shutil.rmtree(settings.data_dir / "exports", ignore_errors=True)
-    save_env(settings.env_path, "", "")
-    request.app.state.settings = settings.model_copy(update={"elsevier_api_key": "", "elsevier_insttoken": ""})
+    save_env(settings.env_path, {"ELSEVIER_API_KEY": "", "ELSEVIER_INSTTOKEN": "", "ANTHROPIC_API_KEY": ""})
+    request.app.state.settings = settings.model_copy(
+        update={"elsevier_api_key": "", "elsevier_insttoken": "", "anthropic_api_key": ""})
     return RedirectResponse("/settings?reset=1", status_code=303)
 
 

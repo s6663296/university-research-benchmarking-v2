@@ -110,12 +110,14 @@ def test_create_runs_in_background(seeded, respx_mock):
     assert "every 1s" not in seeded.get(f"/runs/{run_id}").text
 
 
-def test_reuse_last_config(seeded, respx_mock):
+def test_settings_form_does_not_remember_last_run(seeded, respx_mock):
+    """分析設定每次都從預設開始重選，不帶入上一次分析的選擇。"""
     FakeElsevier().install(respx_mock)
     seeded.post("/runs", data={**FORM, "schools": ["台大"]}, follow_redirects=False)
     wait_done(seeded, latest_run_id(seeded))
-    text = seeded.get("/runs/new", params={"reuse": 1}).text
-    assert checked(text, "資訊管理學系::台大") and not checked(text, "資訊管理學系::政治")
+    for params in ({}, {"reuse": 1}):
+        text = seeded.get("/runs/new", params=params).text
+        assert checked(text, "資訊管理學系::台大") and checked(text, "資訊管理學系::政治")
 
 
 def test_settings_page_renamed(seeded):
@@ -124,21 +126,15 @@ def test_settings_page_renamed(seeded):
     assert '<a href="/runs/new" aria-current="page">分析設定</a>' in text  # 上方選單，目前頁
 
 
-def test_home_start_without_previous_run_goes_to_settings(seeded):
+def test_home_start_always_goes_to_settings(seeded, respx_mock):
+    """首頁「開始分析」不沿用上一次設定，一律先到分析設定重選。"""
     r = seeded.post("/runs/start", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/runs/new" and run_count(seeded) == 0
-
-
-def test_home_start_reuses_last_settings(seeded, respx_mock):
     FakeElsevier().install(respx_mock)
     seeded.post("/runs", data={**FORM, "schools": ["台大"]}, follow_redirects=False)
     wait_done(seeded, latest_run_id(seeded))
     r = seeded.post("/runs/start", follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/" and run_count(seeded) == 2
-    wait_done(seeded, latest_run_id(seeded))
-    with seeded.app.state.session_factory() as s:
-        first, second = s.scalars(select(Run).order_by(Run.id)).all()
-        assert first.scope_json == second.scope_json
+    assert r.status_code == 303 and r.headers["location"] == "/runs/new" and run_count(seeded) == 1
 
 
 def test_home_start_blocked_while_running(seeded):
@@ -211,8 +207,6 @@ def test_each_department_has_its_own_schools(seeded, respx_mock):
     groups = _groups(seeded)
     assert groups[("benchmark", "資訊管理學系")] == [("中央", "資訊管理學系"), ("政治", "資訊管理學系")]
     assert groups[("benchmark", "財務金融學系")] == [("中央", "財務金融學系"), ("台大", "財務金融學系")]
-    text = seeded.get("/runs/new", params={"reuse": 1}).text
-    assert checked(text, "資訊管理學系::政治") and not checked(text, "資訊管理學系::台大")
 
 
 def test_department_with_no_schools_compares_only_itself(seeded, respx_mock):
@@ -227,8 +221,6 @@ def test_college_comparison_members(seeded, respx_mock):
     seeded.post("/runs", data=form, follow_redirects=False)
     # 只勾財金，但本次分析的資管一定納入；會計所沒勾所以不在院內比較
     assert _groups(seeded)[("college", "管理學院")] == [("中央", "財務金融學系"), ("中央", "資訊管理學系")]
-    text = seeded.get("/runs/new", params={"reuse": 1}).text
-    assert checked(text, "管理學院::財務金融學系") and not checked(text, "管理學院::會計研究所")
 
 
 def test_old_config_without_new_fields_keeps_behavior():

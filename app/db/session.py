@@ -2,12 +2,15 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, create_engine, delete, event, func, select
+from sqlalchemy import Engine, create_engine, delete, event, func, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import REFS_ENDPOINT, ApiCache, Base
 
 ALEMBIC_DIR = Path(__file__).resolve().parents[2] / "alembic"
+# 合併 main 時重新編號的 migration：舊版號 → 它原本接在後面的版本。資料庫停在舊版號時先退回，
+# 再一路升級（重新編號的 migration 本身可重複執行）。
+RENUMBERED = {"0008_run_api_usage": "0007_import_retired_at"}
 
 
 def make_engine(db_path: Path) -> Engine:
@@ -29,6 +32,10 @@ def init_db(engine: Engine) -> None:
     cfg = Config()
     cfg.set_main_option("script_location", str(ALEMBIC_DIR))
     with engine.begin() as conn:
+        if inspect(conn).has_table("alembic_version"):
+            for old, base in RENUMBERED.items():
+                conn.execute(text("UPDATE alembic_version SET version_num = :base WHERE version_num = :old"),
+                             {"base": base, "old": old})
         cfg.attributes["connection"] = conn
         command.upgrade(cfg, "head")
 

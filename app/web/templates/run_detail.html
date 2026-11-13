@@ -18,6 +18,7 @@
   <a href="?ind=summary" class="{{ 'active' if ind == 'summary' }}">排名總表</a>
   {% for i in indicators %}<a href="?ind={{ i.id }}" class="{{ 'active' if ind == i.id }}">{{ i.label }}</a>{% endfor %}
   <a href="?ind=funding" class="{{ 'active' if ind == 'funding' }}">計畫經費</a>
+  <a href="?ind=ai" class="{{ 'active' if ind == 'ai' }}">AI 總結</a>
   <a href="?ind=anomalies" class="{{ 'active' if ind == 'anomalies' }}{{ ' has-pending' if open_anomalies }}">待確認（{{ open_anomalies }}）</a>
   <a href="?ind=notes" class="{{ 'active' if ind == 'notes' }}">版本備註</a>
   <a href="?ind=downloads" class="{{ 'active' if ind == 'downloads' }}">下載</a>
@@ -112,6 +113,9 @@
   <p class="muted">這次分析沒有選到任何學院。</p>
   {% endfor %}
 
+{% elif ind == "ai" %}
+  {% include "_ai_summary.html" %}
+
 {% elif ind == "anomalies" %}
   {% if not anomalies %}<p class="ok">沒有待確認的項目。</p>{% endif %}
   <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
@@ -155,6 +159,11 @@
     {% for dept in report_depts %}<li><a href="/runs/{{ run.id }}/pptx/{{ dept }}">{{ dept }}</a></li>{% endfor %}
   </ul>
   <p><a class="button" href="/runs/{{ run.id }}/pptx.zip">下載全部簡報（zip）</a></p>
+  <h3>全院總結簡報（AI）</h3>
+  <ul>
+    {% for college in college_names %}<li><a href="/runs/{{ run.id }}/college-summary/{{ college | urlencode }}">{{ college }}</a></li>{% endfor %}
+  </ul>
+  <p><a class="button" href="/runs/{{ run.id }}/college-summary.zip">下載全院總結簡報（zip）</a></p>
   <h3>Excel</h3>
   <p><a class="button" href="/runs/{{ run.id }}/xlsx">下載 xlsx</a></p>
 {% endif %}

@@ -263,7 +263,7 @@ def test_home_cards_moved_into_pipeline(client):
 def test_home_has_start_button_and_settings_icon(client):
     text = client.get("/").text
     assert 'action="/runs/start"' in text and ">▶ 開始分析</button>" in text
-    assert 'href="/runs/new?reuse=1"' in text and 'title="分析設定"' in text
+    assert 'href="/runs/new"' in text and "reuse" not in text and 'title="分析設定"' in text
 
 
 def test_selfcite_stage_has_its_own_progress(session):

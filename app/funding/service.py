@@ -68,7 +68,7 @@ def delete_import(session: Session, import_id: int) -> None:
 
 
 def imports(session: Session) -> list[FundingImport]:
-    """目前使用的匯入（新的在前）；啟動程式後尚未重新匯入時為空。"""
+    """目前使用的匯入（新的在前）；尚未匯入時為空。"""
     return list(session.scalars(select(FundingImport).where(FundingImport.retired_at.is_(None))
                                 .order_by(FundingImport.id.desc())))
 

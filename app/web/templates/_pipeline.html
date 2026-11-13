@@ -25,6 +25,6 @@
     <form method="post" action="/runs/{{ control_run_id }}/stop" class="inline"
       onsubmit="return confirm('停止後首頁會結束這次分析，可開始新的分析；已抓到的資料會保留，之後仍可到該分析頁面繼續補抓。確定停止？')"><button type="submit" class="danger stop-button"><span class="stop-icon" aria-hidden="true"></span>停止</button></form>
     {% endif %}
-    <a class="icon-button" href="/runs/new?reuse=1" title="分析設定" aria-label="分析設定">⚙</a>
+    <a class="icon-button" href="/runs/new" title="分析設定" aria-label="分析設定">⚙</a>
   </div>
 </section>

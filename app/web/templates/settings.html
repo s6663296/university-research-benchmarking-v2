@@ -3,7 +3,7 @@
 <h1>設定</h1>
 {% for e in errors %}<div class="notice error">{{ e }}</div>{% endfor %}
 {% if saved %}<div class="notice ok">設定已儲存</div>{% endif %}
-{% if reset %}<div class="notice ok">系統已重設，設定已回到預設值（參考文獻快取保留）</div>{% endif %}
+{% if reset %}<div class="notice ok">所有資料已清除，設定已回到預設值（參考文獻快取保留）</div>{% endif %}
 {% if refs_cleared is not none %}<div class="notice ok">已清除 {{ "{:,}".format(refs_cleared) }} 篇論文的參考文獻快取</div>{% endif %}
 
 <section class="card">
@@ -45,6 +45,43 @@
   </form>
 </section>
 
+<section class="card">
+  <h2>Claude（AI 摘要）</h2>
+  <h3>API Key</h3>
+  {% if ai_masked_key %}
+  <p class="muted small">產生 AI 總結時使用；貼上新的 Key 會取代目前這組。</p>
+  <table class="api-keys">
+    <tbody>
+      <tr>
+        <td class="api-key-no">目前使用</td>
+        <td><code>{{ ai_masked_key }}</code></td>
+        <td class="api-key-action">
+          <form method="post" action="/settings/ai-key/delete">
+            <button type="submit" class="secondary" onclick="return confirm('確定要刪除 Claude API Key？')">刪除</button>
+          </form>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  {% else %}
+  <p class="warning">尚未設定 Claude API Key</p>
+  {% endif %}
+  <form method="post" action="/settings/ai-key" class="api-key-add">
+    <label for="ai_key" class="sr-only">Claude API Key</label>
+    <input type="password" id="ai_key" name="ai_key" size="40" autocomplete="off" placeholder="貼上新的 Claude API Key" required>
+    <button type="submit">{% if ai_masked_key %}更換{% else %}新增{% endif %}</button>
+  </form>
+
+  <h3>模型與語氣</h3>
+  <form method="post" action="/settings/ai">
+    <div class="field"><label for="ai_model">模型（留空使用預設）</label>
+      <input type="text" id="ai_model" name="ai_model" size="40" value="{{ ai_model }}"></div>
+    <div class="field"><label for="ai_tone_prompt">語氣提示（留空回到預設）</label>
+      <textarea id="ai_tone_prompt" name="ai_tone_prompt" rows="8" cols="60">{{ ai_tone }}</textarea></div>
+    <button type="submit">儲存模型與語氣</button>
+  </form>
+</section>
+
 <form method="post" action="/settings">
 <section class="card">
   <h2>抓取與計算</h2>
@@ -79,10 +116,10 @@
 </section>
 
 <section class="card danger-zone">
-  <h2>重設系統</h2>
+  <h2>清除所有資料</h2>
   <form method="post" action="/settings/reset">
     <button type="submit" class="danger"
-      onclick="return confirm('確定要重設系統？包含 API Key、對照表、教師數與所有分析結果，無法復原。（參考文獻快取保留）')">重設系統</button>
+      onclick="return confirm('確定要清除所有資料？包含 API Key、對照表、教師數與所有分析結果，無法復原。（參考文獻快取保留）')">清除所有資料</button>
   </form>
 </section>
 {% endblock %}
