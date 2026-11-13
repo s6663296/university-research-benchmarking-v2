@@ -28,7 +28,7 @@
 ### 承辦人：用安裝檔
 
 1. 執行 `ResearchBenchmarking-Setup-<版本>.exe`，可以自選安裝目錄，不需要系統管理員權限。Windows 若顯示「已保護您的電腦」，按「其他資訊」→「仍要執行」
-2. 從開始功能表或桌面捷徑開啟「員額小組論文指標自動化系統」，瀏覽器會自動開啟系統頁面。使用期間請保留跳出的黑色視窗，關閉它就會結束系統
+2. 從開始功能表或桌面捷徑開啟「員額小組論文指標自動化系統」，瀏覽器會自動開啟系統頁面。系統在背景執行，右下角系統匣會出現它的圖示；要結束時在圖示上按右鍵選「結束」
 3. 到「設定」頁填入 Elsevier API Key
 
 資料庫、API Key 和產出檔存放在 `%LOCALAPPDATA%\ResearchBenchmarking`，不在安裝目錄裡。更新版本時直接執行新版安裝檔即可，資料會保留；解除安裝也不會刪除這些資料。之前用 `start.bat` 執行過的電腦，把專案目錄裡的 `.env` 和 `data` 資料夾搬到上述位置，就能沿用原本的資料。
@@ -144,6 +144,8 @@ Claude 的實際呼叫測試是 `tests/live/test_live_claude.py`，另外需要�
 直接錄下的 Elsevier 回應含有 API Key，只能用 `python scripts/sanitize_fixture.py <輸入> <輸出>` 轉成測試資料，不要直接複製。
 
 ### 製作安裝檔
+
+圖示 `app/web/static/app.ico` 由 `packaging/make_icon.py` 產生。
 
 需要 [Inno Setup 6](https://jrsoftware.org/isinfo.php)（`winget install JRSoftware.InnoSetup`）。執行：
 

@@ -28,8 +28,10 @@ a = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],
     pathex=[str(ROOT)],
     datas=datas,
-    # uvicorn 以字串載入事件迴圈與協定；migration 檔不在分析範圍內，它們用到的模組也要列出
-    hiddenimports=collect_submodules("uvicorn") + collect_submodules("app") + ["alembic.op", "sqlalchemy"],
+    # uvicorn 以字串載入事件迴圈與協定、pystray 依作業系統動態載入後端；
+    # migration 檔不在分析範圍內，它們用到的模組也要列出
+    hiddenimports=collect_submodules("uvicorn") + collect_submodules("app")
+    + ["pystray._win32", "alembic.op", "sqlalchemy"],
     excludes=["tkinter", "pytest", "respx"],
 )
 pyz = PYZ(a.pure)
@@ -39,7 +41,8 @@ exe = EXE(
     [("X utf8", None, "OPTION")],
     exclude_binaries=True,
     name="ResearchBenchmarking",
-    console=True,  # 伺服器在這個視窗裡執行，關閉視窗即結束系統
+    console=False,  # 不開終端機視窗；伺服器在背景執行，從系統匣圖示結束（app/desktop.py）
+    icon=str(ROOT / "app" / "web" / "static" / "app.ico"),
     upx=False,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="ResearchBenchmarking", upx=False)

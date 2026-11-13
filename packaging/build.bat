@@ -14,7 +14,7 @@ if not exist "%PY%" (
     if errorlevel 1 goto fail
 )
 "%PY%" -m pip install --quiet --upgrade pip
-"%PY%" -m pip install --quiet . pyinstaller
+"%PY%" -m pip install --quiet ".[desktop]" pyinstaller
 if errorlevel 1 goto fail
 
 "%PY%" -m PyInstaller --noconfirm --clean --distpath dist --workpath build\pyinstaller packaging\research_benchmarking.spec

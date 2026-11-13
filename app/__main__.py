@@ -1,9 +1,7 @@
 """python -m app：啟動伺服器並開啟瀏覽器。"""
 
 import socket
-import sys
 import threading
-import traceback
 import webbrowser
 
 from app.config import Settings
@@ -29,16 +27,6 @@ def main() -> None:
     print(f"系統已啟動：{url}\n關閉這個視窗即結束系統。\n")
     threading.Timer(1.5, webbrowser.open, args=[url]).start()
     uvicorn.run(create_app(settings), host=settings.host, port=settings.port)
-
-
-def run_frozen() -> None:
-    """安裝版的進入點（packaging/launcher.py）：出錯時視窗會直接關掉，先留住錯誤訊息。"""
-    try:
-        main()
-    except Exception:
-        traceback.print_exc()
-        input("\n系統發生錯誤，請把上面的訊息複製給開發人員。按 Enter 關閉視窗。")
-        sys.exit(1)
 
 
 if __name__ == "__main__":

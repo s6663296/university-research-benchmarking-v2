@@ -1,5 +1,5 @@
 """安裝版（PyInstaller）的進入點。"""
 
-from app.__main__ import run_frozen
+from app.desktop import run
 
-run_frozen()
+run()

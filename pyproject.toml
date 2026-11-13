@@ -23,6 +23,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio", "respx"]
+# 安裝版的系統匣圖示（packaging/build.bat 會安裝）
+desktop = ["pystray"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
