@@ -33,8 +33,11 @@ def test_parse_api_keys_splits_on_commas_and_newlines_and_dedupes():
 
 
 def test_mask_api_key_keeps_head_and_tail():
-    assert mask_api_key("abcd1234567890wxyz") == "abcd" + "*" * 10 + "wxyz"
-    assert mask_api_key("short") == "*****"
+    # 中間固定 8 個 *，不論 Key 多長，清單才會對齊
+    assert mask_api_key("abcd1234567890wxyz") == "abcd********wxyz"
+    assert mask_api_key("abcd" + "x" * 60 + "wxyz") == "abcd********wxyz"
+    assert mask_api_key("short") == "********"   # 太短的全部遮住，也看不出長度
+    assert mask_api_key("") == ""
 
 
 async def test_switches_to_next_key_when_quota_exhausted(respx_mock):
@@ -71,7 +74,7 @@ def multi_client(tmp_path):
 def test_settings_page_shows_key_count_and_masked_keys(multi_client):
     text = multi_client.get("/settings").text
     assert "已設定 2 組" in text
-    assert "aaaa" + "*" * 10 + "zzzz" in text and "bbbb" + "*" * 10 + "yyyy" in text
+    assert "aaaa" + "*" * 8 + "zzzz" in text and "bbbb" + "*" * 8 + "yyyy" in text
     assert "1111111111" not in text and "2222222222" not in text
 
 

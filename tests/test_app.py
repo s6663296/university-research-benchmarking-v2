@@ -19,7 +19,7 @@ def test_subpages_offer_back_navigation(client):
 def test_save_env_keeps_other_lines(tmp_path):
     env = tmp_path / ".env"
     env.write_text("FOO=1\nELSEVIER_API_KEY=old\n", encoding="utf-8")
-    save_env(env, "new", "tok")
+    save_env(env, {"ELSEVIER_API_KEY": "new", "ELSEVIER_INSTTOKEN": "tok"})
     text = env.read_text(encoding="utf-8")
     assert "FOO=1" in text and "ELSEVIER_API_KEY=new" in text and "ELSEVIER_INSTTOKEN=tok" in text
     assert "old" not in text

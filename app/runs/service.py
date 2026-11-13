@@ -94,6 +94,3 @@ def create_run(session: Session, cfg: RunConfig, today: date | None = None) -> R
     return run
 
 
-def last_config(session: Session) -> RunConfig | None:
-    run = session.scalars(select(Run).order_by(Run.id.desc()).limit(1)).first()
-    return RunConfig.from_json(run.scope_json) if run else None

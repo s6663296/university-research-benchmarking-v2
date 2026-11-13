@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.db.models import RunUnit, Unit
 from app.mapping.service import import_mapping
 from app.runs.scope import RunConfig
-from app.runs.service import create_run, last_config, preview_run
+from app.runs.service import create_run, preview_run
 from app.teachers.moe import import_moe
 from app.teachers.service import add_override, auto_link
 from tests.mapping_builder import sample_mapping
@@ -85,13 +85,6 @@ def test_unit_shared_by_groups_created_once(seeded):
 def test_create_run_raises_on_blocking_error(session):
     with pytest.raises(ValueError):
         create_run(session, cfg(), today=TODAY)
-
-
-def test_last_config_roundtrip(seeded):
-    assert last_config(seeded) is None
-    c = cfg(schools=("台大",))
-    create_run(seeded, c, today=TODAY)
-    assert last_config(seeded) == c
 
 
 def run_units(session, run_id):

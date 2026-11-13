@@ -18,6 +18,7 @@ dependencies = [
     "openpyxl",
     "python-pptx",
     "pydantic-settings",
+    "anthropic>=2.8",
 ]
 
 [project.optional-dependencies]

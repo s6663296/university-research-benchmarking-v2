@@ -1,0 +1,14 @@
+<div id="ai-progress"
+  {% if ai_polling %}hx-get="/runs/{{ run.id }}/ai/progress" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  {% if ai_state and not ai_state.finished %}
+  <div class="ai-progress" role="status">
+    <progress max="{{ ai_state.total }}" value="{{ ai_state.done }}"></progress>
+    <span>產生中 {{ ai_state.done }}／{{ ai_state.total }}</span>
+  </div>
+  {% endif %}
+  {% if ai_errors %}
+  <div class="notice error">有 {{ ai_errors | length }} 項沒有產生成功，原本的文字不受影響：
+    <ul>{% for kind_label, key, msg in ai_errors %}<li>{{ key }}（{{ kind_label }}）：{{ msg }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+</div>
