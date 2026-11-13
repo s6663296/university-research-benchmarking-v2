@@ -47,6 +47,7 @@ def basis_differences(run: Run, base: Run, dept: str) -> list[str]:
 
 
 def baseline_choices(session: Session, run: Run) -> list[Run]:
-    """下拉選單：其他所有已完成分析，新到舊。"""
+    """下拉選單：其他已完成的分析，新到舊；同期間重跑的不算前期，不列入。"""
+    same_period = (Run.period_from == run.period_from) & (Run.period_to == run.period_to)
     return list(session.scalars(
-        select(Run).where(Run.status == "done", Run.id != run.id).order_by(Run.id.desc())))
+        select(Run).where(Run.status == "done", Run.id != run.id, ~same_period).order_by(Run.id.desc())))

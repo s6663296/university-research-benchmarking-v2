@@ -4,7 +4,7 @@
     <select id="ai-baseline" name="baseline" onchange="this.form.requestSubmit()"
       title="更換後，既有總結會變成過時，需重新產生">
       <option value="">自動（上一期）</option>
-      {% for r in baseline_options %}<option value="{{ r.id }}"{% if run.ai_baseline_run_id == r.id %} selected{% endif %}>分析 #{{ r.id }}（{{ r.period_from }}–{{ r.period_to }}）</option>{% endfor %}
+      {% for r in baseline_options %}<option value="{{ r.id }}"{% if run.ai_baseline_run_id == r.id %} selected{% endif %}>分析 #{{ r.id }}（{{ r.period_from }}–{{ r.period_to }}，{{ r.created_at.strftime('%Y/%m/%d %H:%M') }}）</option>{% endfor %}
     </select>
     <noscript><button type="submit" class="secondary">套用</button></noscript>
   </form>

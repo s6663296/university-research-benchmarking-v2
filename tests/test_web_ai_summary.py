@@ -98,10 +98,14 @@ def test_baseline_override_marks_stale(client, run_id):
     factory = client.app.state.session_factory
     with factory() as s:
         run = s.get(Run, run_id)
-        other = Run(**{c.name: getattr(run, c.name) for c in Run.__table__.columns if c.name != "id"})
-        s.add(other)
+        copies = []
+        for back in (1, 2):   # 自動會挑較近的前一期；手動改選更早的那一期才算換了前期
+            other = Run(**{c.name: getattr(run, c.name) for c in Run.__table__.columns if c.name != "id"})
+            other.period_from, other.period_to = run.period_from - back, run.period_to - back
+            s.add(other)
+            copies.append(other)
         s.commit()
-        other_id = other.id
+        other_id = copies[1].id
     generate(client, run_id)
     assert STALE not in client.get(f"/runs/{run_id}?ind=ai").text
     r = client.post(f"/runs/{run_id}/ai/baseline", data={"baseline": str(other_id)}, follow_redirects=False)
@@ -204,3 +208,27 @@ def test_no_baseline_note_is_not_repeated(client, run_id):
     generate(client, run_id)   # FakeWriter 的比較說明是「無前期資料可比較」，本系也沒有前期
     html = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text
     assert html.split('class="ai-slide"')[1].split('class="ai-actions"')[0].count("無前期資料可比較") == 1
+
+
+def test_baseline_options_show_date(client, run_id):
+    factory = client.app.state.session_factory
+    with factory() as s:
+        run = s.get(Run, run_id)
+        other = Run(**{c.name: getattr(run, c.name) for c in Run.__table__.columns if c.name != "id"})
+        other.period_from, other.period_to = run.period_from - 1, run.period_to - 1
+        s.add(other)
+        s.commit()
+        label = f"分析 #{other.id}（{other.period_from}–{other.period_to}，{other.created_at:%Y/%m/%d %H:%M}）"
+    assert label in client.get(f"/runs/{run_id}?ind=ai").text
+
+
+def test_same_period_run_cannot_be_chosen(client, run_id):
+    factory = client.app.state.session_factory
+    with factory() as s:
+        run = s.get(Run, run_id)
+        twin = Run(**{c.name: getattr(run, c.name) for c in Run.__table__.columns if c.name != "id"})
+        s.add(twin)
+        s.commit()
+        twin_id = twin.id
+    assert f'value="{twin_id}"' not in client.get(f"/runs/{run_id}?ind=ai").text
+    assert client.post(f"/runs/{run_id}/ai/baseline", data={"baseline": str(twin_id)}).status_code == 400

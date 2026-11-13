@@ -76,3 +76,11 @@ def test_basis_differences_years_and_choices(session):
     cur = mk(session, (2021, 2025))
     assert basis_differences(cur, base, DEPT) == ["分析年數不同"]
     assert [r.id for r in baseline_choices(session, cur)] == [base.id]
+
+
+def test_choices_leave_out_same_period_reruns(session):
+    seed(session)
+    older = mk(session, (2020, 2024))
+    mk(session, (2021, 2025))          # 同期間重跑，不能當前期
+    cur = mk(session, (2021, 2025))
+    assert [r.id for r in baseline_choices(session, cur)] == [older.id]
