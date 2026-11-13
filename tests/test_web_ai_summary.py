@@ -47,7 +47,7 @@ def college_of(client, run_id):
 
 def test_ai_tab_lists_targets(client, run_id):
     html = client.get(f"/runs/{run_id}?ind=ai").text
-    assert DEPT in html and "管理學院" in html and "產生 AI 總結" in html
+    assert DEPT in html and "管理學院" in html and ">全部產生<" in html
     assert "自動（上一期）" in html
 
 
