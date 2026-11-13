@@ -87,7 +87,10 @@
 
 - Scopus 查詢限定 Country/territory = Taiwan，包含所有文獻類型
 - Q1 指 CiteScore 期刊排名前 25%
-- 排除自我引用的結果與 SciVal 網頁相同：以單位論文建立 Publication Set、Citation Count 取消勾選「Include self-citations」時，SciVal 只排除「這組論文彼此之間的引用」。系統先取得含自我引用的被引數，再減去單位論文之間的互相引用（每篇論文的參考文獻由 Scopus Abstract Retrieval 取得，每篇 1 次請求、永久快取）
+- 排除自我引用的結果與 SciVal 網頁相同：以單位論文建立 Publication Set、Citation Count 取消勾選「Include self-citations」時，SciVal 只排除「這組論文彼此之間的引用」。系統先取得含自我引用的被引數，再減去單位論文之間的互相引用：
+  - 先用 Scopus Search 篩出「引用了單位論文」的論文（約每 100 篇 1 次請求），只對它們用 Abstract Retrieval 取參考文獻（永久快取）。中央財金 145 篇只需查 47 篇
+  - Abstract Retrieval 額度用完時，改用只花 Scopus Search 的做法：OpenAlex（免費）指出可能被引用的論文，再由 Scopus 逐篇確認、整組檢查有無遺漏。OpenAlex 只決定查詢順序，數字一律來自 Scopus
+  - 這個篩選用到 Scopus 查詢 `REF(<Scopus ID>)`，官方文件沒有記載；每次分析會先檢查它是否仍可用，不可用時改回逐篇查參考文獻（數字一樣精確，只是較慢）
   - SciVal API 的 `includeSelfCitations=false` 對逐篇指標沒有作用（已驗證），所以不使用；「設定」可改為不排除自我引用
 - 期間不可包含今年，起始年不可早於 10 年前（SciVal API 的限制）
 - 教師數使用單一年度的人數，不是 5 年總和

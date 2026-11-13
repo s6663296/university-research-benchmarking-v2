@@ -124,7 +124,7 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
     # 所以整批改用 cite_range，被引數與其他指標同一次請求。SciVal 逐篇指標忽略 includeSelfCitations，
     # 一律取含自我引用的數字，需要排除時再減去組內互引
     fetcher = MetricsFetcher(client, year_range=cite_range, include_self="true", use_cache=use_cache)
-    in_set = InSetSelfCitations(client) if strategy.in_set else None
+    in_set = InSetSelfCitations(client, use_cache=use_cache) if strategy.in_set else None
 
     def update(ru_ids: list[int], **fields) -> None:
         with session_factory() as s:
@@ -151,7 +151,8 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
             if in_set is not None:
                 # SciVal Publication Set 只含 SciVal 有收錄的論文，組內互引也只算這些論文之間的引用
                 selfs = await in_set.count([i for i in ids if i in metrics],
-                                           {i: m.citations for i, m in metrics.items()})
+                                           {i: m.citations for i, m in metrics.items()},
+                                           query=query, dois={d.scopus_id: d.doi for d in docs if d.doi})
                 for i, m in metrics.items():
                     if m.citations is not None:
                         m.self_citations = selfs.get(i, 0)

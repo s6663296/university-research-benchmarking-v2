@@ -238,6 +238,14 @@ FastAPI
 
 **現行作法（策略 `scival_pubset`，預設）**：SciVal 取含自我引用的被引數，再減去單位論文（SciVal 有收錄者）之間的互相引用；參考文獻以 Abstract Retrieval `view=FULL` 逐篇取得、永久快取（`app/elsevier/inset_selfcite.py`）。
 
+**節省額度（2026-11-13）**：全校分析約 5 萬篇，逐篇查參考文獻要用掉約 5 週的 Abstract Retrieval 額度（每週 1 萬次）。改成：
+
+1. 篩選：Scopus Search `(單位查詢) AND (REF(P1) OR … OR REF(Pk))` 取回「引用了單位論文的單位論文」，查詢長度上限約 2,500 字（約 100 篇一組）
+2. 只對篩出的論文查參考文獻（中央財金 145 篇只需 47 篇），已快取的不再查
+3. Abstract Retrieval 額度用完時：OpenAlex 指出可能被引用的論文 P，逐篇 `(單位查詢) AND REF(P)` 取得精確的引用者；其餘 P 整組檢查，有結果才拆半直到單篇。數字一律來自 Scopus
+
+中央財金驗證：兩種做法的組內互引都是 100 次，與 SciVal 網頁的差額一致，逐篇也與參考文獻算出的結果相同。`REF(<Scopus ID>)` 不在官方文件中（`REFEID` 對這把 Key 不開放），每次分析先以已知引用關係檢查，不符時改回逐篇查參考文獻。
+
 **設計**：策略 `SelfCitationStrategy` 只保留「組內互引」（預設）與「不排除」兩種，在設定頁切換；結果頁與報告註腳標示使用的策略。「SciVal 參數」（驗證無效）與「Scopus Citation Overview」（沒有授權）已移除，舊分析仍顯示原本的策略名稱，設定中存著舊策略時改用預設策略。
 
 ## 8. 異常處理

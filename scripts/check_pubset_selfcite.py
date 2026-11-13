@@ -2,7 +2,8 @@
 
 做法與系統執行分析時相同：
   1. SciVal 取含自我引用的被引數（includeSelfCitations=true）
-  2. Abstract Retrieval 取各篇參考文獻，數出這組論文彼此之間的引用（組內互引）
+  2. 數出這組論文彼此之間的引用（組內互引）：先用 Scopus Search 篩出引用了組內論文的論文，
+     只對它們用 Abstract Retrieval 取參考文獻（--scopus-only：只用 Scopus Search，由 OpenAlex 決定查詢順序）
   3. 排除後 = 含自我引用 − 組內互引
 把結果和 SciVal 網頁上同一組論文的 Citation Count（含／excl. self-citations）比對。
 
@@ -10,7 +11,7 @@
   第一步：不帶參數，用 2026-11-10 在 SciVal 網頁測過的 7 篇，預期 含 44、排除後 40（約 8 次請求）
     .venv\\Scripts\\python.exe -X utf8 scripts\\check_pubset_selfcite.py
   第二步：整個系所。用與系統相同的 Scopus 查詢找出論文、存成 EID 檔（匯入 SciVal 建立 Publication Set 用），
-  算完後輸入 SciVal 網頁上的兩個數字比對（每篇論文約 1 次 Abstract Retrieval）
+  算完後輸入 SciVal 網頁上的兩個數字比對
     .venv\\Scripts\\python.exe -X utf8 scripts\\check_pubset_selfcite.py --dept "Department of Finance, National Central University"
   其他論文清單：EID 或 Scopus ID，直接列出或放在文字檔（一行一個）；--web 直接帶入網頁數字
     .venv\\Scripts\\python.exe -X utf8 scripts\\check_pubset_selfcite.py --file eids.txt --web 1234 1200
@@ -37,6 +38,7 @@ OUTDIR = Path(__file__).resolve().parent.parent / "api_test" / "output"
 SAMPLE_IDS = ["85120042660", "85141566632", "85144826309", "85170429613", "85150390837", "85178007617",
               "85093682401"]
 SAMPLE_WEB = (44, 40)
+MAX_EID_QUERY = 30   # 用 EID 組成查詢的篇數上限（查詢還要放 REF 條件，不能太長）
 
 
 def scopus_id(text: str) -> str:
@@ -88,6 +90,7 @@ async def run(args) -> int:
     year_from, year_to = args.years or (today.year - 5, today.year - 1)
     _, cite_range = scival_year_ranges(year_from, year_to, today.year)
     ids = read_ids(args)
+    query, dois = None, {}
     web = tuple(args.web) if args.web else None
     if not ids and not args.dept:
         ids, web = SAMPLE_IDS, web or SAMPLE_WEB
@@ -99,6 +102,7 @@ async def run(args) -> int:
             print(f"0/2 Scopus 搜尋論文（與系統相同的查詢）：{query}")
             docs = await search_docs(client, query, use_cache=False)
             ids = [d.scopus_id for d in docs]
+            dois = {d.scopus_id: d.doi for d in docs if d.doi}
             OUTDIR.mkdir(parents=True, exist_ok=True)
             path = Path(args.save) if args.save else OUTDIR / f"eids_{re.sub(r'\W+', '_', args.dept).strip('_')}.txt"
             path.write_text("".join(f"{d.eid}\n" for d in docs), encoding="utf-8")
@@ -113,9 +117,12 @@ async def run(args) -> int:
         if missing:
             print(f"    SciVal 沒有收錄 {len(missing)} 篇，不列入（SciVal 網頁的 Publication Set 也不會有）："
                   + ", ".join(missing[:20]) + (" …" if len(missing) > 20 else ""))
-        print("2/2 Abstract Retrieval 取參考文獻，計算組內互引（已查過的論文從快取讀取）")
-        counter = InSetSelfCitations(client)
-        selfs = await counter.count([i for i in ids if i in metrics], cites)
+        if query is None and len(ids) <= MAX_EID_QUERY:   # 論文清單不多時，用 EID 組成查詢，才能先篩選
+            query = " OR ".join(f"EID(2-s2.0-{i})" for i in ids)
+        print("2/2 計算組內互引（已查過的參考文獻從快取讀取）")
+        counter = InSetSelfCitations(client, use_cache=False)
+        counter.abstract_exhausted = args.scopus_only
+        selfs = await counter.count([i for i in ids if i in metrics], cites, query=query, dois=dois)
     except ElsevierError as e:
         print(f"\n請求失敗：{e.message}")
         return 2
@@ -138,7 +145,9 @@ async def run(args) -> int:
         f"{y} {c}→{c - n}" for y, (c, n) in sorted(by_year.items(), key=lambda kv: kv[0] or 0)))
     total, inset = sum(v or 0 for v in cites.values()), sum(selfs.values())
     print(f"合計：{len(rows)} 篇（SciVal 網頁的 Scholarly Output 應相同），含自我引用 {total}，組內互引 {inset}，"
-          f"排除後 {total - inset}（Abstract Retrieval 實際請求 {counter.fetched} 次）")
+          f"排除後 {total - inset}")
+    print(f"排除自我引用用到的請求：Scopus Search {counter.searches} 次、Abstract Retrieval {counter.fetched} 次"
+          + ("（Abstract Retrieval 額度用完或指定 --scopus-only，改用 Scopus Search）" if counter.abstract_exhausted else ""))
 
     if web is None and sys.stdin.isatty():
         print("\n請把 EID 清單匯入 SciVal 建立 Publication Set，看 Overall 欄的兩個指標（不是 Scholarly Output 篇數）：\n"
@@ -170,6 +179,8 @@ def main() -> None:
     p.add_argument("--file", help="EID／Scopus ID 清單的文字檔，一行一個")
     p.add_argument("--web", type=int, nargs=2, metavar=("INCL", "EXCL"),
                    help="SciVal 網頁上的 Citation Count：含自我引用、excl. self-citations（Overall）")
+    p.add_argument("--scopus-only", action="store_true",
+                   help="不用 Abstract Retrieval，只用 Scopus Search（與額度用完時的做法相同）")
     p.add_argument("--show", type=int, default=30, help="篇數超過這個數量時，只逐篇列出有組內互引的論文")
     sys.exit(asyncio.run(run(p.parse_args())))
 
