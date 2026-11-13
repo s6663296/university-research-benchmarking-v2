@@ -52,7 +52,7 @@ async def test_system_prompt_has_tone_and_rules(session, done_run):
     system, payload = writer.calls[0]
     assert "自訂語氣XYZ" in system and "只能引用提供的數字" in system
     assert "待人工確認" in system and "只談這個系所" in system
-    assert "無前期資料可比較" in system and "比較基準不同" in system
+    assert "comparison 回傳 null" in system and "比較基準不同" in system
     assert payload["系所"] == DEPT
     assert "只談這個系所" not in system_prompt("college", "x")
 
@@ -179,18 +179,46 @@ def test_claude_writer_parses_output_and_sends_expected_request():
 
     def create(**kw):
         seen.update(kw)
-        return response(json.dumps({"summary": "整體穩定", "comparison": None}, ensure_ascii=False))
+        return response(json.dumps({"summary": ["整體穩定"], "comparison": None}, ensure_ascii=False))
 
     draft = ClaudeWriter("key", "claude-test", client=fake_client(create)).write("系統", {"系所": "資管"})
-    assert draft == SummaryDraft("整體穩定", None)
+    assert draft == SummaryDraft("・整體穩定", None)
     assert seen["model"] == "claude-test" and seen["system"] == "系統"
     assert "temperature" not in seen and "thinking" not in seen
     assert seen["output_config"]["effort"] == "medium"
     assert seen["output_config"]["format"]["type"] == "json_schema"
-    assert seen["output_config"]["format"]["schema"]["properties"]["comparison"] == {
-        "anyOf": [{"type": "string"}, {"type": "null"}]}
     assert seen["fallbacks"] == "default" and seen["betas"] == ["server-side-fallback-2026-07-01"]
     assert "資管" in seen["messages"][0]["content"]
+
+
+def test_claude_writer_asks_for_bullets_and_joins_them():
+    seen = {}
+
+    def create(**kw):
+        seen.update(kw)
+        return response(json.dumps({"summary": ["Q1 師均居對標第 1", "・國際合著仍有成長空間"],
+                                    "comparison": ["- FWCI 由 1.10 提升至 1.20"]}, ensure_ascii=False))
+
+    draft = ClaudeWriter("key", "m", client=fake_client(create)).write("s", {})
+    assert draft == SummaryDraft("・Q1 師均居對標第 1\n・國際合著仍有成長空間", "・FWCI 由 1.10 提升至 1.20")
+    props = seen["output_config"]["format"]["schema"]["properties"]
+    assert props["summary"] == {"type": "array", "items": {"type": "string"}}
+    assert props["comparison"] == {"anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "null"}]}
+
+
+def test_claude_writer_empty_comparison_list_is_none():
+    draft = ClaudeWriter("key", "m", client=fake_client(
+        lambda **kw: response(json.dumps({"summary": ["整體穩定"], "comparison": []}, ensure_ascii=False)))).write("s", {})
+    assert draft == SummaryDraft("・整體穩定", None)
+
+
+def test_system_prompt_requires_short_bullets():
+    dept, college = system_prompt("dept", DEFAULT_TONE), system_prompt("college", DEFAULT_TONE)
+    for text in (dept, college):
+        assert "條列" in text and "35" in text and "開場白" in text
+    assert "3 至 4 點" in dept and "4 至 5 點" in college
+    # 語氣欄被使用者清空或改寫時，簡報格式規則仍在
+    assert "條列" in system_prompt("dept", "請正式一點")
 
 
 async def test_fresh_text_reports_baseline(session, done_run):

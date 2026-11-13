@@ -80,6 +80,7 @@ WIDTH_SAFETY = 1.1               # 字寬估計的安全係數：實際字型略
 PT = 12700                       # EMU per point
 TEXT_INSETS = 2 * 45720          # 文字框預設的上下留白
 TEXT_MAX_PT, TEXT_MIN_PT = 18, 12             # 文字頁字級範圍
+SUMMARY_MAX_PT, SUMMARY_MIN_PT = 24, 16       # AI 總結要點：簡報給主管看，字要大
 HEAD_GAP, SECTION_GAP = 40000, 160000        # 文字頁：小標與內文、區塊之間的間距
 
 def _font(run, size=None, bold=None, color=None):
@@ -401,14 +402,15 @@ class DeckBuilder:
             _text(slide, f"{n} / {len(slides)}", SLIDE_W - MARGIN - 1100000, FOOTER_Y, 1100000, FOOTER_H, Pt(9),
                   GRAY, align=PP_ALIGN.RIGHT, anchor=MSO_ANCHOR.MIDDLE)
 
-    def text_pages(self, title: str, kicker: str, sections: list[tuple[str, str]]):
-        """文字頁：每節（小標, 內文）由上往下排；字級由 18pt 往下縮到 12pt，仍放不下就以段落為界分頁。"""
+    def text_pages(self, title: str, kicker: str, sections: list[tuple[str, str]],
+                   max_pt: float = TEXT_MAX_PT, min_pt: float = TEXT_MIN_PT):
+        """文字頁：每節（小標, 內文）由上往下排；字級由 max_pt 往下縮到 min_pt，仍放不下就以段落為界分頁。"""
         top = SUB_Y + 100000
         avail = FOOTER_RULE_Y - 100000 - top
-        size = TEXT_MAX_PT
+        size = max_pt
         while True:
             pages = _paginate(sections, size, avail)
-            if len(pages) == 1 or size <= TEXT_MIN_PT:
+            if len(pages) == 1 or size <= min_pt:
                 break
             size -= 0.5
         for i, blocks in enumerate(pages):
@@ -610,7 +612,8 @@ class ReportBuilder(DeckBuilder):
         comparison = self.ai_text.comparison or (None if self.ai_text.has_baseline else "無前期資料可比較")
         if comparison:
             sections.append(("與前期比較", comparison))
-        self.text_pages(f"{self.ncu_dept}總結與建議", f"{self.numbers['ai']}. 總結與建議", sections)
+        self.text_pages(f"{self.ncu_dept}總結與建議", f"{self.numbers['ai']}. 總結與建議", sections,
+                        SUMMARY_MAX_PT, SUMMARY_MIN_PT)
 
     def build(self, out_path: Path) -> Path:
         self.cover()

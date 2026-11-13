@@ -6,15 +6,23 @@ import anthropic
 
 from app.ai.service import AiError, SummaryDraft
 
+_BULLETS = {"type": "array", "items": {"type": "string"}}
 SCHEMA = {
     "type": "object",
     "properties": {
-        "summary": {"type": "string"},
-        "comparison": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "summary": _BULLETS,
+        "comparison": {"anyOf": [_BULLETS, {"type": "null"}]},
     },
     "required": ["summary", "comparison"],
     "additionalProperties": False,
 }
+BULLET = "・"
+
+
+def _join(items) -> str:
+    """要點陣列 → 每行一點、以「・」開頭的文字（模型自己加的項目符號先去掉，避免重複）。"""
+    lines = [str(i).strip().lstrip("・-•*").strip() for i in items or []]
+    return "\n".join(BULLET + line for line in lines if line)
 
 
 class ClaudeWriter:
@@ -31,7 +39,7 @@ class ClaudeWriter:
     def write(self, system: str, payload: dict) -> SummaryDraft:
         if not self.api_key:
             raise AiError("尚未設定 Claude API Key，請到「設定」頁填寫")
-        user = ("請依下列 JSON 資料撰寫摘要（summary）與前後期比較說明（comparison，沒有可比較時可為 null）：\n"
+        user = ("請依下列 JSON 資料，以條列要點撰寫摘要（summary）與前後期比較（comparison，沒有前期資料時為 null）：\n"
                 + json.dumps(payload, ensure_ascii=False, indent=1))
         try:
             response = self._get_client().beta.messages.create(
@@ -56,6 +64,6 @@ class ClaudeWriter:
         text = next((b.text for b in response.content if b.type == "text"), "")
         try:
             data = json.loads(text)
-            return SummaryDraft(summary=data["summary"], comparison=data.get("comparison"))
+            return SummaryDraft(summary=_join(data["summary"]), comparison=_join(data.get("comparison")) or None)
         except (ValueError, KeyError, TypeError):
             raise AiError("Claude 回覆的格式無法解讀，請重試") from None

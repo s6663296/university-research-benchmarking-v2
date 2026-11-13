@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Run
 from app.mapping.parser import NCU_SHEET
-from app.reports.pptx_report import DeckBuilder
+from app.reports.pptx_report import SUMMARY_MAX_PT, SUMMARY_MIN_PT, DeckBuilder
 
 if TYPE_CHECKING:
     from app.ai.service import SummaryDraft
@@ -27,10 +27,12 @@ class CollegeReportBuilder(DeckBuilder):
     def build(self, out_path: Path) -> Path:
         self._cover("員額小組論文資料", f"{NCU_SHEET}{self.college}",
                     f"{self.period} 論文指標全院總結\n{date.today().strftime('%Y/%m/%d')}")
-        self.text_pages("全院總結", "I. 全院總結", [("全院總結", self.ai_text.summary)])
+        self.text_pages("全院總結", "I. 全院總結", [("全院總結", self.ai_text.summary)],
+                        SUMMARY_MAX_PT, SUMMARY_MIN_PT)
         comparison = self.ai_text.comparison or (None if self.ai_text.has_baseline else "無前期資料可比較")
         if comparison:
-            self.text_pages("與前期比較", "II. 與前期比較", [("與前期比較", comparison)])
+            self.text_pages("與前期比較", "II. 與前期比較", [("與前期比較", comparison)],
+                            SUMMARY_MAX_PT, SUMMARY_MIN_PT)
         self._footer(f"{NCU_SHEET} {self.college}｜{self.period} 論文指標全院總結")
         out_path.parent.mkdir(parents=True, exist_ok=True)
         self.prs.save(out_path)

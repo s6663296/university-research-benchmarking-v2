@@ -37,3 +37,7 @@ def test_claude_writer_live():
     allowed = json.dumps(PAYLOAD, ensure_ascii=False)
     for number in re.findall(r"\d+\.\d{2}", draft.summary):
         assert number in allowed, f"出現 payload 以外的數字：{number}"
+    # 簡報用：條列 3 至 4 點，每點簡短（規則是 35 字，數字與英文較佔字數，放寬到 45）
+    points = draft.summary.split("\n")
+    assert 3 <= len(points) <= 4 and all(p.startswith("・") for p in points), points
+    assert all(len(p) <= 45 for p in points), points

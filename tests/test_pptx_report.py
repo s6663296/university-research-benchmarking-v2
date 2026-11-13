@@ -231,6 +231,15 @@ async def test_ai_page_is_last(session, done_run, tmp_path):
     assert "III. 總結與建議" in last
 
 
+async def test_ai_page_bullets_use_presentation_font(session, done_run, tmp_path):
+    draft = SummaryDraft("・Q1 師均居對標第 1\n・國際合著仍有成長空間", "・FWCI 由 1.10 提升至 1.20")
+    p = build(session, done_run, tmp_path, draft)
+    last = p.slides[-1]
+    body = next(s for s in last.shapes if s.has_text_frame and "Q1 師均居對標第 1" in s.text_frame.text)
+    sizes = {r.font.size.pt for para in body.text_frame.paragraphs for r in para.runs}
+    assert min(sizes) >= 20   # 簡報要點用大字，主管一眼看得清楚
+
+
 async def test_ai_page_without_baseline_says_so(session, done_run, tmp_path):
     p = build(session, done_run, tmp_path, SummaryDraft("本系穩定。", None))
     assert "無前期資料可比較" in texts_on(p.slides[-1])
