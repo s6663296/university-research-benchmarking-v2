@@ -41,10 +41,12 @@ def mask_key(key: str) -> str:
 
 
 def mask_api_key(key: str) -> str:
-    """保留開頭與結尾各 4 碼，中間以 * 取代；太短的 Key 全部遮住。"""
+    """保留開頭與結尾各 4 碼，中間固定 8 個 *（不透露長度、清單也對齊）；太短的 Key 全部遮住。"""
+    if not key:
+        return ""
     if len(key) <= 8:
-        return "*" * len(key)
-    return key[:4] + "*" * (len(key) - 8) + key[-4:]
+        return "*" * 8
+    return key[:4] + "*" * 8 + key[-4:]
 
 
 def _int_param(request: Request, name: str) -> int:

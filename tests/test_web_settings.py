@@ -142,7 +142,7 @@ def test_save_ai_key_masks_and_writes_env(keyed_client, tmp_path):
     assert "ANTHROPIC_API_KEY=sk-ant-secret7777" in (tmp_path / ".env").read_text(encoding="utf-8")
     text = keyed_client.get("/settings").text
     # 和 Elsevier API Key 同樣的遮罩：保留前後各 4 碼
-    assert "sk-a*********7777" in text and "secret" not in text
+    assert "sk-a********7777" in text and "secret" not in text
     keyed_client.post("/settings/reset")
     assert "ANTHROPIC_API_KEY=\n" in (tmp_path / ".env").read_text(encoding="utf-8")
     assert keyed_client.app.state.settings.anthropic_api_key == ""
@@ -154,7 +154,7 @@ def test_ai_key_shown_like_elsevier_keys_with_delete(keyed_client, tmp_path):
     keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-first1111"})
     keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-second2222"})   # 新的取代舊的
     text = keyed_client.get("/settings").text
-    assert "sk-a*********2222" in text and "1111" not in text
+    assert "sk-a********2222" in text and "1111" not in text
     assert 'action="/settings/ai-key/delete"' in text and 'class="api-keys"' in text
     keyed_client.post("/settings/ai-key/delete")
     assert "ANTHROPIC_API_KEY=\n" in (tmp_path / ".env").read_text(encoding="utf-8")
