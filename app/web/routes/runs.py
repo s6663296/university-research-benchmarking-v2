@@ -23,7 +23,7 @@ from app.reports.provenance import Explainer, columns_of, evidence_papers
 from app.reports.tables import SUMMARY_INDICATORS, fmt, indicator_table, summary_table
 from app.runs.anomaly import KIND_LABELS, resolve_anomaly
 from app.runs.scope import COMPARISON_LABELS, RunConfig, default_period
-from app.runs.service import create_run, last_config, preview_run
+from app.runs.service import create_run, preview_run
 from app.teachers.moe import import_years, latest_import
 from app.web.deps import get_session, render
 
@@ -116,8 +116,9 @@ def _form_page(request: Request, session: Session, cfg: RunConfig | None = None,
 
 
 @router.get("/runs/new")
-def new_run(request: Request, reuse: int = 0, session: Session = Depends(get_session)):
-    return _form_page(request, session, last_config(session) if reuse else None)
+def new_run(request: Request, session: Session = Depends(get_session)):
+    """分析設定每次都從預設開始重選，不帶入上一次的選擇。"""
+    return _form_page(request, session)
 
 
 @router.post("/runs/preview")
@@ -138,14 +139,11 @@ async def start_run(request: Request, session: Session = Depends(get_session)):
 
 
 @router.post("/runs/start")
-async def start_from_home(request: Request, session: Session = Depends(get_session)):
-    """首頁「開始分析」：沿用上一次分析的設定；沒有上一次就先到分析設定。"""
+def start_from_home(request: Request):
+    """首頁「開始分析」：不沿用上一次設定，一律先到分析設定重選。"""
     if request.app.state.run_manager.any_running():  # 已有分析在背景執行，不重複開始
         return RedirectResponse("/", status_code=303)
-    cfg = last_config(session)
-    if cfg is None:
-        return RedirectResponse("/runs/new", status_code=303)
-    return await _launch(request, session, cfg)
+    return RedirectResponse("/runs/new", status_code=303)
 
 
 async def _launch(request: Request, session: Session, cfg: RunConfig):
