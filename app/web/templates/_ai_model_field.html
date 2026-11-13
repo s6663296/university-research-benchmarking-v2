@@ -1,0 +1,10 @@
+{% if models %}
+<select id="ai_model" name="ai_model">
+  {% if ai_model not in models|map("first") %}<option value="{{ ai_model }}" selected>{{ ai_model }}</option>{% endif %}
+  {% for id, name in models %}<option value="{{ id }}" {% if id == ai_model %}selected{% endif %}>{{ name }}</option>{% endfor %}
+</select>
+{% else %}
+<input type="text" id="ai_model" name="ai_model" size="40" value="{{ ai_model }}"
+  {% if load_models %}hx-get="/settings/ai-models" hx-trigger="load" hx-swap="outerHTML"{% endif %}>
+{% if error %}<p class="warning">無法取得模型列表：{{ error }}</p>{% endif %}
+{% endif %}

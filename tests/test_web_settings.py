@@ -224,3 +224,56 @@ def test_save_ai_options(client):
     with client.app.state.session_factory() as s:
         assert get_setting(s, "ai_model") == "claude-sonnet-5-5"
         assert get_setting(s, "ai_tone_prompt") == DEFAULT_TONE
+
+
+def test_ai_model_field_plain_input_without_key(client):
+    text = client.get("/settings").text
+    assert 'id="ai_model"' in text and "/settings/ai-models" not in text
+
+
+def test_ai_model_list_loaded_when_key_set(keyed_client, monkeypatch):
+    from app.web.routes import settings as routes
+
+    keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-list1111"})
+    assert 'hx-get="/settings/ai-models"' in keyed_client.get("/settings").text
+    seen = []
+    monkeypatch.setattr(routes, "list_models",
+                        lambda key: seen.append(key) or [("claude-opus-5-5", "Claude Opus 5.5"),
+                                                         ("claude-sonnet-5-5", "Claude Sonnet 5.5")])
+    text = keyed_client.get("/settings/ai-models").text
+    assert seen == ["sk-ant-list1111"]
+    assert "<select" in text and '<option value="claude-sonnet-5-5" selected>Claude Sonnet 5.5</option>' in text
+
+
+def test_ai_model_list_keeps_unlisted_current_model(keyed_client, monkeypatch):
+    from app.web.routes import settings as routes
+
+    keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-list2222"})
+    keyed_client.post("/settings/ai", data={"ai_model": "claude-custom-x", "ai_tone_prompt": ""})
+    monkeypatch.setattr(routes, "list_models", lambda key: [("claude-opus-5-5", "Claude Opus 5.5")])
+    text = keyed_client.get("/settings/ai-models").text
+    assert '<option value="claude-custom-x" selected>' in text
+
+
+def test_ai_model_list_error_falls_back_to_text_input(keyed_client, monkeypatch):
+    from app.ai.service import AiError
+    from app.web.routes import settings as routes
+
+    keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-bad3333"})
+
+    def boom(key):
+        raise AiError("Claude API Key 無效")
+
+    monkeypatch.setattr(routes, "list_models", boom)
+    text = keyed_client.get("/settings/ai-models").text
+    assert 'type="text"' in text and "hx-get" not in text and "Claude API Key 無效" in text
+
+
+def test_list_models_maps_sdk_models():
+    from types import SimpleNamespace
+
+    from app.ai.claude import list_models
+
+    fake = SimpleNamespace(models=SimpleNamespace(
+        list=lambda **kw: [SimpleNamespace(id="claude-opus-5-5", display_name="Claude Opus 5.5")]))
+    assert list_models("k", client=fake) == [("claude-opus-5-5", "Claude Opus 5.5")]
