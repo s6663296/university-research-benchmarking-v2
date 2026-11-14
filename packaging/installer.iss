@@ -1,7 +1,7 @@
 ﻿; Inno Setup 安裝檔腳本，由 packaging\build.bat 編譯（需要 Inno Setup 6）
 ; 使用者資料（資料庫、.env、產出檔）放在 %LOCALAPPDATA%\ResearchBenchmarking，更新或解除安裝都不會動到。
 
-#define AppName "員額小組論文指標自動化系統"
+#define AppName "系所學術表現分析系統"
 #define AppExe "ResearchBenchmarking.exe"
 #ifndef AppVersion
   #define AppVersion "0.0.0"
@@ -24,6 +24,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
 OutputBaseFilename=ResearchBenchmarking-Setup-{#AppVersion}
+SetupIconFile=..\app\web\static\app.ico
 UninstallDisplayIcon={app}\{#AppExe}
 Compression=lzma2
 SolidCompression=yes

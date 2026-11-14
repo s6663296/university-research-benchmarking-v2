@@ -11,7 +11,7 @@ from app.__main__ import already_running
 from app.config import HOME, Settings
 from app.web.deps import WEB_DIR
 
-TITLE = "員額小組論文指標自動化系統"
+TITLE = "系所學術表現分析系統"
 LOG = HOME / "logs" / "app.log"
 
 

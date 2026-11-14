@@ -17,6 +17,9 @@ if not exist "%PY%" (
 "%PY%" -m pip install --quiet ".[desktop]" pyinstaller
 if errorlevel 1 goto fail
 
+"%PY%" packaging\make_icon.py
+if errorlevel 1 goto fail
+
 "%PY%" -m PyInstaller --noconfirm --clean --distpath dist --workpath build\pyinstaller packaging\research_benchmarking.spec
 if errorlevel 1 goto fail
 

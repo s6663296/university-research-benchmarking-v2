@@ -57,7 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         yield
         engine.dispose()
 
-    app = FastAPI(title="員額小組論文指標自動化系統", lifespan=lifespan)
+    app = FastAPI(title="系所學術表現分析系統", lifespan=lifespan)
     app.state.settings = settings
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
     app.include_router(home.router)

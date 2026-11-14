@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "research-benchmarking"
 version = "0.1.0"
-description = "員額小組論文指標自動化系統"
+description = "系所學術表現分析系統"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi",
