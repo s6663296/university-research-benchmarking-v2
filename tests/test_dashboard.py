@@ -50,7 +50,7 @@ def test_running_run_shows_fetch_progress(session):
     rus = set_units(session, run.id, "done", "scival", "scopus", eid_count=5)
     s = stages(session)
     assert s["mapping"].state == "done"
-    assert s["run"].state == "done" and s["run"].href == f"/runs/{run.id}"
+    assert s["run"].state == "done" and s["run"].href == "/runs/new"
     assert s["fetch"].state == "active" and s["fetch"].summary == ""
     assert s["fetch"].progress == (f"Scopus 2／{len(rus)}", f"SciVal 1／{len(rus)}")
     assert s["fetch"].href == f"/runs/{run.id}/fetch"
@@ -149,7 +149,7 @@ def test_shows_run_given_by_background(session):
     from tests.run_helpers import TODAY, default_config
     create_run(session, default_config(), today=TODAY)
     s = {x.key: x for x in pipeline(session, first.id)}
-    assert s["run"].href == f"/runs/{first.id}"
+    assert s["run"].href == "/runs/new" and f"#{first.id}" in s["run"].summary
 
 
 def test_no_background_run_resets_pipeline(session):
