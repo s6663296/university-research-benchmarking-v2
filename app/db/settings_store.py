@@ -10,17 +10,18 @@ from app.ai.prompts import DEFAULT_TONE
 from app.db.models import AppSetting
 
 DEFAULT_SETTINGS: dict[str, Any] = {
-    "rate_per_sec": 3.0,
+    "rate_per_sec": 8.0,                  # 每支 API 各自計算，並以官方上限為準（client.API_MAX_RATE）
     "max_retries": 3,
     "backoff_base_sec": 1.0,
     "timeout_sec": 60,
     "cache_days": 1,                      # 1 = 只用當天的快取
-    "max_concurrency": 4,                 # 同時送出的請求數上限（全校分析時避免被 SciVal 限速）
+    "max_concurrency": 4,                 # 每支 API 同時送出的請求數上限（全校分析時避免被 SciVal 限速）
     "rate_limit_retries": 8,              # 遇到 HTTP 429 時的重試次數（與一般錯誤的重試分開計算）
     "max_backoff_sec": 120,               # 限速時單次等待的上限秒數
     "anomaly_change_threshold": 0.30,
     "teacher_column": "total",            # 或 "asst_prof_plus"
     "self_citation_strategy": "scival_pubset",
+    "selfcite_method": "references",      # 組內互引的查法：references 逐篇抓參考文獻、scopus 只用 Scopus Search
     "rank_highlight_top": 2,              # 排名總表中名次 ≤ 2 標紅（範例第 4 頁）
     "ai_model": "claude-sonnet-5-5",        # AI 摘要使用的 Claude 模型
     "ai_tone_prompt": DEFAULT_TONE,       # AI 摘要的語氣提示

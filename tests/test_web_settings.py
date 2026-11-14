@@ -22,7 +22,8 @@ def form(client, **overrides):
         "rate_per_sec": "3.0", "max_retries": "3", "backoff_base_sec": "1.0", "timeout_sec": "60",
         "cache_days": "1", "anomaly_change_threshold": "0.3",
         "max_concurrency": "4", "rate_limit_retries": "8", "max_backoff_sec": "120",
-        "teacher_column": "total", "self_citation_strategy": "none", "rank_highlight_top": "2",
+        "teacher_column": "total", "self_citation_strategy": "none", "selfcite_method": "references",
+        "rank_highlight_top": "2",
     }
     data.update(overrides)
     return client.post("/settings", data=data)
@@ -38,6 +39,12 @@ def test_post_settings_updates_values(client):
     r = form(client, timeout_sec="45")
     assert r.status_code == 200
     assert 'value="45"' in client.get("/settings").text
+
+
+def test_selfcite_method_is_saved(client):
+    assert form(client, selfcite_method="scopus").status_code == 200
+    assert '<option value="scopus" selected>' in client.get("/settings").text
+    assert form(client, selfcite_method="other").status_code == 400
 
 
 def test_settings_page_has_no_name_tables(client):
@@ -99,10 +106,20 @@ def test_home_card_loads_saved_quota_and_checks(client):
     assert 'hx-get="/status/panel"' in text and 'hx-get="/status"' in text and "檢查連線</button>" in text
 
 
+def add_refs(client, *sids):
+    from app.db.models import REFS_ENDPOINT
+    from app.elsevier.cache import ApiCache
+
+    cache = ApiCache(client.app.state.session_factory)
+    for sid in sids:
+        cache.put(f"refs:{sid}", REFS_ENDPOINT, {"refs": ["85000000001"]})
+    cache.put("other", "/content/search/scopus", {"search-results": {}})
+
+
 def test_reset_clears_data_key_and_settings(client, tmp_path, web_done_run):
     from sqlalchemy import func, select
 
-    from app.db.models import AppSetting, Base
+    from app.db.models import REFS_ENDPOINT, ApiCache, AppSetting, Base
 
     form(client, timeout_sec="45")
     client.post("/settings/api-keys/add", data={"api_key": "newkey9999"})
@@ -110,12 +127,18 @@ def test_reset_clears_data_key_and_settings(client, tmp_path, web_done_run):
     (tmp_path / "exports" / str(web_done_run)).mkdir(parents=True, exist_ok=True)
     (tmp_path / ".env").write_text((tmp_path / ".env").read_text(encoding="utf-8") + "PORT=9000\n", encoding="utf-8")
 
+    add_refs(client, "1", "2")
+
     r = client.post("/settings/reset", follow_redirects=True)
 
     assert r.status_code == 200 and "所有資料已清除" in r.text
     with client.app.state.session_factory() as s:
         for table in Base.metadata.sorted_tables:
-            assert s.scalar(select(func.count()).select_from(table)) == 0, table.name
+            if table.name != ApiCache.__tablename__:
+                assert s.scalar(select(func.count()).select_from(table)) == 0, table.name
+        # 參考文獻快取保留，其他 API 快取刪除
+        assert set(s.scalars(select(ApiCache.endpoint))) == {REFS_ENDPOINT}
+        assert s.scalar(select(func.count()).select_from(ApiCache)) == 2
         assert s.get(AppSetting, "timeout_sec") is None
     assert 'value="60"' in r.text  # 回到預設值
     env = (tmp_path / ".env").read_text(encoding="utf-8")
@@ -130,6 +153,27 @@ def test_reset_refused_while_run_is_fetching(client):
     manager.any_running = lambda: True
     r = client.post("/settings/reset")
     assert r.status_code == 409
+
+
+def test_refs_cache_shown_and_cleared_separately(client):
+    from sqlalchemy import select
+
+    from app.db.models import ApiCache
+
+    assert "已存 0 篇" in client.get("/settings").text
+    add_refs(client, "1", "2", "3")
+    assert "已存 3 篇" in client.get("/settings").text
+
+    r = client.post("/settings/refs-cache/clear", follow_redirects=True)
+
+    assert r.status_code == 200 and "已清除 3 篇論文的參考文獻快取" in r.text and "已存 0 篇" in r.text
+    with client.app.state.session_factory() as s:
+        assert list(s.scalars(select(ApiCache.key))) == ["other"]   # 其他快取不受影響
+
+
+def test_refs_cache_clear_refused_while_run_is_fetching(client):
+    client.app.state.run_manager.any_running = lambda: True
+    assert client.post("/settings/refs-cache/clear").status_code == 409
 
 
 def test_reset_refused_while_ai_job_runs(client):
@@ -180,3 +224,56 @@ def test_save_ai_options(client):
     with client.app.state.session_factory() as s:
         assert get_setting(s, "ai_model") == "claude-sonnet-5-5"
         assert get_setting(s, "ai_tone_prompt") == DEFAULT_TONE
+
+
+def test_ai_model_field_plain_input_without_key(client):
+    text = client.get("/settings").text
+    assert 'id="ai_model"' in text and "/settings/ai-models" not in text
+
+
+def test_ai_model_list_loaded_when_key_set(keyed_client, monkeypatch):
+    from app.web.routes import settings as routes
+
+    keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-list1111"})
+    assert 'hx-get="/settings/ai-models"' in keyed_client.get("/settings").text
+    seen = []
+    monkeypatch.setattr(routes, "list_models",
+                        lambda key: seen.append(key) or [("claude-opus-5-5", "Claude Opus 5.5"),
+                                                         ("claude-sonnet-5-5", "Claude Sonnet 5.5")])
+    text = keyed_client.get("/settings/ai-models").text
+    assert seen == ["sk-ant-list1111"]
+    assert "<select" in text and '<option value="claude-sonnet-5-5" selected>Claude Sonnet 5.5</option>' in text
+
+
+def test_ai_model_list_keeps_unlisted_current_model(keyed_client, monkeypatch):
+    from app.web.routes import settings as routes
+
+    keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-list2222"})
+    keyed_client.post("/settings/ai", data={"ai_model": "claude-custom-x", "ai_tone_prompt": ""})
+    monkeypatch.setattr(routes, "list_models", lambda key: [("claude-opus-5-5", "Claude Opus 5.5")])
+    text = keyed_client.get("/settings/ai-models").text
+    assert '<option value="claude-custom-x" selected>' in text
+
+
+def test_ai_model_list_error_falls_back_to_text_input(keyed_client, monkeypatch):
+    from app.ai.service import AiError
+    from app.web.routes import settings as routes
+
+    keyed_client.post("/settings/ai-key", data={"ai_key": "sk-ant-bad3333"})
+
+    def boom(key):
+        raise AiError("Claude API Key 無效")
+
+    monkeypatch.setattr(routes, "list_models", boom)
+    text = keyed_client.get("/settings/ai-models").text
+    assert 'type="text"' in text and "hx-get" not in text and "Claude API Key 無效" in text
+
+
+def test_list_models_maps_sdk_models():
+    from types import SimpleNamespace
+
+    from app.ai.claude import list_models
+
+    fake = SimpleNamespace(models=SimpleNamespace(
+        list=lambda **kw: [SimpleNamespace(id="claude-opus-5-5", display_name="Claude Opus 5.5")]))
+    assert list_models("k", client=fake) == [("claude-opus-5-5", "Claude Opus 5.5")]

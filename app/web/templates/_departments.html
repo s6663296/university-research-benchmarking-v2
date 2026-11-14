@@ -1,5 +1,0 @@
-{% if x.depts|length > 3 %}
-<details class="department-list">
-  <summary>{{ x.depts[:3]|join('、') }}<span class="department-rest">、{{ x.depts[3:]|join('、') }}</span> <span class="department-expand">展開系所</span><span class="department-collapse">收合系所</span></summary>
-</details>
-{% else %}{{ x.depts|join('、') }}{% endif %}

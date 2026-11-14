@@ -8,7 +8,7 @@ from app.elsevier.client import ElsevierClient
 
 SEARCH_PATH = "/content/search/scopus"
 PAGE_SIZE = 200  # 只取 id 時一頁最多 200 筆；不指定 field 的完整欄位一頁只能 25 筆
-FIELDS = "dc:identifier,eid"
+FIELDS = "dc:identifier,eid,prism:doi"   # DOI 給排除自我引用時對照 OpenAlex 用，同一個請求取得
 
 
 # 系所名稱與校名之間允許的字數：可容納「Department of Finance, College of Management and Center for
@@ -97,6 +97,7 @@ def build_query(dept_en: str, year_from: int, year_to: int, schools: Iterable[st
 class ScopusDoc:
     scopus_id: str
     eid: str
+    doi: str | None = None
 
 
 async def search_docs(client: ElsevierClient, query: str, *, use_cache: bool) -> list[ScopusDoc]:
@@ -110,7 +111,7 @@ async def search_docs(client: ElsevierClient, query: str, *, use_cache: bool) ->
         page = [e for e in result.get("entry", []) if "eid" in e and "dc:identifier" in e]
         for e in page:
             sid = e["dc:identifier"].replace("SCOPUS_ID:", "")
-            docs.setdefault(sid, ScopusDoc(sid, e["eid"]))
+            docs.setdefault(sid, ScopusDoc(sid, e["eid"], (e.get("prism:doi") or "").lower() or None))
         next_cursor = result.get("cursor", {}).get("@next")
         if total == 0 or not page or not next_cursor or next_cursor == cursor or len(docs) >= total:
             return list(docs.values())

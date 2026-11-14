@@ -1,12 +1,10 @@
 import argparse
 from types import SimpleNamespace
 
-import httpx
-
 import scripts.check_pubset_selfcite as check
 from app.elsevier.scival import citation_count
 from app.elsevier.scopus import build_query
-from tests.elsevier_fixtures import ABSTRACT_URL, SCIVAL_URL, abstract_full, ids67, load, scival_handler
+from tests.elsevier_fixtures import ids67, load
 from tests.run_helpers import FakeElsevier, fake_client
 
 # 7 篇測試論文之間實際的引用（2026-11-10 驗證時找到）；"999…" 是組外的論文
@@ -16,7 +14,7 @@ REFS = {"85141566632": ["85120042660", "99900000001"], "85144826309": ["85120042
 
 def args(**kw):
     return argparse.Namespace(**{"ids": None, "file": None, "web": None, "dept": None, "years": None,
-                                 "save": None, "show": 30, **kw})
+                                 "save": None, "show": 30, "scopus_only": False, **kw})
 
 
 def patch_client(monkeypatch):
@@ -25,11 +23,11 @@ def patch_client(monkeypatch):
     monkeypatch.setattr(check, "mapping_schools", lambda settings: [])
 
 
-def install(respx_mock, monkeypatch):
+def install(respx_mock, monkeypatch, **kw):
     patch_client(monkeypatch)
-    respx_mock.get(url__regex=SCIVAL_URL).mock(side_effect=scival_handler)
-    respx_mock.get(url__regex=ABSTRACT_URL).mock(side_effect=lambda req: httpx.Response(
-        200, json=abstract_full(REFS.get(req.url.path.rsplit("/", 1)[-1], []))))
+    fake = FakeElsevier(refs=REFS, **kw)
+    fake.install(respx_mock)
+    return fake
 
 
 async def test_sample_matches_scival_web(respx_mock, monkeypatch, capsys):
@@ -70,3 +68,16 @@ async def test_warns_when_paper_count_entered_as_citations(respx_mock, monkeypat
     install(respx_mock, monkeypatch)
     assert await check.run(args(web=[7, 40])) == 1
     assert "可能輸入成 Scholarly Output" in capsys.readouterr().out
+
+
+async def test_sample_scopus_only_needs_no_abstract_retrieval(respx_mock, monkeypatch, capsys):
+    fake = install(respx_mock, monkeypatch)
+    assert await check.run(args(scopus_only=True)) == 0
+    assert fake.abstract_calls == []
+    assert "含自我引用 44，組內互引 4，排除後 40" in capsys.readouterr().out
+
+
+async def test_sample_fetches_only_papers_citing_the_set(respx_mock, monkeypatch, capsys):
+    fake = install(respx_mock, monkeypatch)
+    assert await check.run(args()) == 0
+    assert sorted(fake.abstract_calls) == sorted(REFS)   # 7 篇中只有 4 篇引用了組內論文

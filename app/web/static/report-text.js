@@ -206,7 +206,8 @@
   }
 
   // ---- 文字欄位 ----
-  const pages = new Map([...form.querySelectorAll('[data-report-page]')].map((page) => [page.id, page]));
+  // 區塊 id 加了 page- 前綴：網址的 #項目 不對應任何元素，瀏覽器載入時就不會自動捲走上方選單
+  const pages = new Map([...form.querySelectorAll('[data-report-page]')].map((page) => [page.dataset.reportPage, page]));
   const editors = new Map();
   pages.forEach((page) => {
     const names = page.dataset.variables.split(',');
@@ -249,7 +250,7 @@
     const empty = [...form.querySelectorAll('[data-toc-name]')].find((control) => !control.value.trim());
     if (!empty) return;
     event.preventDefault();
-    activate(empty.closest('[data-report-page]').id);
+    activate(empty.closest('[data-report-page]').dataset.reportPage);
     const editor = editors.get(empty);
     if (!editor.parentElement.querySelector('.field-error')) {
       const error = document.createElement('p');

@@ -11,7 +11,7 @@
   <form method="post" action="/runs/{{ run.id }}/ai/generate" class="ai-generate">
     <input type="hidden" name="tone_prompt">
     <button type="submit"{% if ai_polling %} disabled{% endif %}
-      onclick="return confirm('會重新產生所有學院與系所的總結，並覆蓋已修改的文字。確定產生？')">產生 AI 總結</button>
+      onclick="return confirm('會重新產生所有學院與系所的總結，並覆蓋已修改的文字。確定產生？')">全部產生</button>
   </form>
 </div>
 
@@ -48,10 +48,9 @@
 
   {% set c = ai_current %}
   <section class="ai-detail">
-    {% if c.stale %}<div class="notice">{{ ai_stale_text }}。這份不會放進簡報，請重新產生。</div>{% endif %}
+    {% if c.stale %}<div class="notice">{{ ai_stale_text }}</div>{% endif %}
 
     <div class="ai-slide">
-      <div class="ai-kicker">{{ "全院總結" if c.kind == "college" else "總結與建議" }}</div>
       <h2 class="ai-title">{{ c.title }}</h2>
       {% if c.kind == "dept" %}
       <p class="ai-meta">
@@ -81,16 +80,15 @@
         <button type="submit" class="{{ 'secondary' if c.row and not c.stale }}"{% if ai_polling %} disabled{% endif %}>{{ "重新產生" if c.row else "產生這一份" }}</button>
       </form>
       {% if c.kind == "college" and c.row and not c.stale %}
-      <a class="button secondary" href="/runs/{{ run.id }}/college-summary/{{ c.key | urlencode }}">下載全院總結簡報</a>
+      <a class="button secondary" href="/runs/{{ run.id }}/college-summary/{{ c.key | urlencode }}">下載簡報</a>
       {% endif %}
-      {% if c.row %}<span class="muted small">{% if c.row.edited %}已人工修改{% else %}由 Claude 撰寫{% endif %}，請確認後再下載簡報</span>{% endif %}
     </div>
 
     {% if c.row %}
     <form method="post" action="/runs/{{ run.id }}/ai/summaries/{{ c.row.id }}" id="ai-edit" class="ai-edit" hidden>
-      <div class="field"><label for="ai-s">總結（一行一點）</label>
+      <div class="field"><label for="ai-s">總結</label>
         <textarea id="ai-s" name="summary" rows="6">{{ c.row.summary }}</textarea></div>
-      <div class="field"><label for="ai-c">與前期比較（一行一點，可留空）</label>
+      <div class="field"><label for="ai-c">與前期比較</label>
         <textarea id="ai-c" name="comparison" rows="4">{{ c.row.comparison or "" }}</textarea></div>
       <button type="submit">儲存</button>
       <button type="button" class="secondary" onclick="this.form.hidden=true">取消</button>

@@ -18,12 +18,22 @@
 
 ## 系統需求
 
-- Windows 10 / 11
-- Python 3.11 以上
+- Windows 10 / 11（64 位元）
+- 用安裝檔安裝不需要 Python；從原始碼執行需要 Python 3.11 以上
 - **校內網路或學校 VPN**（Elsevier API 只能從校內使用）
 - Elsevier API Key（開發階段使用小組的測試帳號，正式使用時改用承辦人的個人帳號）
 
 ## 安裝與啟動
+
+### 承辦人：用安裝檔
+
+1. 執行 `ResearchBenchmarking-Setup-<版本>.exe`，可以自選安裝目錄，不需要系統管理員權限。Windows 若顯示「已保護您的電腦」，按「其他資訊」→「仍要執行」
+2. 從開始功能表或桌面捷徑開啟「員額小組論文指標自動化系統」，瀏覽器會自動開啟系統頁面。系統在背景執行，右下角系統匣會出現它的圖示；要結束時在圖示上按右鍵選「結束」
+3. 到「設定」頁填入 Elsevier API Key
+
+資料庫、API Key 和產出檔存放在 `%LOCALAPPDATA%\ResearchBenchmarking`，不在安裝目錄裡。更新版本時直接執行新版安裝檔即可，資料會保留；解除安裝也不會刪除這些資料。之前用 `start.bat` 執行過的電腦，把專案目錄裡的 `.env` 和 `data` 資料夾搬到上述位置，就能沿用原本的資料。
+
+### 開發者：從原始碼執行
 
 1. 複製設定檔範本，填入 API Key：
 
@@ -50,7 +60,7 @@
 2. **匯入教師數**：到「教師數」上傳教育部的下載檔（見下方「教師數檔案」）；對應不到的系所需要手動指定，有特殊狀況的數字可以直接修改
 3. **新增分析**：選擇期間（預設為前 5 年）、學院或系所、比較範圍，以及要納入的對標學校，預覽查詢條件後執行
 4. **確認結果**：在結果頁查看各指標的表格與排名，逐一處理「待人工確認」的項目，並補充版本備註
-5. **下載產出**：下載各系所的簡報和整份 Excel；所有歷史版本都可以在「版本紀錄」中回看
+5. **下載產出**：下載各系所的簡報和整份 Excel；所有歷史版本都可以在「版本紀錄」中回看，並列出每次分析用掉的 API 額度
 
 ## Mapping 表格式
 
@@ -90,7 +100,11 @@
 
 - Scopus 查詢限定 Country/territory = Taiwan，包含所有文獻類型
 - Q1 指 CiteScore 期刊排名前 25%
-- 排除自我引用的結果與 SciVal 網頁相同：以單位論文建立 Publication Set、Citation Count 取消勾選「Include self-citations」時，SciVal 只排除「這組論文彼此之間的引用」。系統先取得含自我引用的被引數，再減去單位論文之間的互相引用（每篇論文的參考文獻由 Scopus Abstract Retrieval 取得，每篇 1 次請求、永久快取）
+- 排除自我引用的結果與 SciVal 網頁相同：以單位論文建立 Publication Set、Citation Count 取消勾選「Include self-citations」時，SciVal 只排除「這組論文彼此之間的引用」。系統先取得含自我引用的被引數，再減去單位論文之間的互相引用：
+  - 先用 Scopus Search 篩出「引用了單位論文」的論文（約每 100 篇 1 次請求），只對它們用 Abstract Retrieval 取參考文獻（永久快取）。中央財金 145 篇只需查 47 篇
+  - 「設定」選「只用 Scopus Search」或 Abstract Retrieval 額度用完時，改用只花 Scopus Search 的做法：OpenAlex（免費）指出可能被引用的論文，再由 Scopus 逐篇確認、整組檢查有無遺漏。OpenAlex 只決定查詢順序，數字一律來自 Scopus
+  - 兩種做法的數字相同、請求數相近。逐篇抓參考文獻遇到大型合作論文（作者上千人，如物理系）時一篇要下載 5–6 MB，全校分析建議選「只用 Scopus Search」；參考文獻已在快取中的論文兩種做法都直接用快取
+  - 這個篩選用到 Scopus 查詢 `REF(<Scopus ID>)`，官方文件沒有記載；每次分析會先檢查它是否仍可用，不可用時改回逐篇查參考文獻（數字一樣精確，只是較慢）
   - SciVal API 的 `includeSelfCitations=false` 對逐篇指標沒有作用（已驗證），所以不使用；「設定」可改為不排除自我引用
 - 期間不可包含今年，起始年不可早於 10 年前（SciVal API 的限制）
 - 教師數使用單一年度的人數，不是 5 年總和
@@ -100,11 +114,11 @@
 
 ```
 app/          主程式（mapping、teachers、elsevier、metrics、runs、reports、web）
+packaging/    安裝檔打包設定（PyInstaller、Inno Setup）
 templates/    簡報範本（由 scripts/make_report_template.py 從範例報告產生）
 scripts/      開發用工具（產生簡報範本、把錄下的 API 回應轉成測試資料、check_pubset_selfcite 核對排除自我引用與 SciVal 網頁是否相同）
 alembic/      資料庫 migration
 tests/        自動化測試
-api_test/     Elsevier API 連線測試工具（可單獨執行 run_api_test.bat）
 data/         資料庫、快取與產出檔（不進版控）
 docs/         原始資料、範例報告與設計文件
 ```
@@ -127,7 +141,19 @@ pytest tests/live -v
 
 Claude 的實際呼叫測試是 `tests/live/test_live_claude.py`，另外需要在 `.env` 或環境變數設定 `ANTHROPIC_API_KEY`。
 
-`api_test/output/` 中錄下的回應含有 API Key，只能用 `python scripts/sanitize_fixture.py <輸入> <輸出>` 轉成測試資料，不要直接複製。
+直接錄下的 Elsevier 回應含有 API Key，只能用 `python scripts/sanitize_fixture.py <輸入> <輸出>` 轉成測試資料，不要直接複製。
+
+### 製作安裝檔
+
+圖示 `app/web/static/app.ico` 由 `packaging/make_icon.py` 產生。
+
+需要 [Inno Setup 6](https://jrsoftware.org/isinfo.php)（`winget install JRSoftware.InnoSetup`）。執行：
+
+```
+packaging\build.bat
+```
+
+會在 `build\venv` 建立獨立的打包環境，先用 PyInstaller 把程式和 Python 打包到 `dist\ResearchBenchmarking\`，再產生 `dist\ResearchBenchmarking-Setup-<版本>.exe`。版本號取自 `pyproject.toml`。程式用 `Path(__file__)` 讀取的檔案（網頁樣板、簡報範本、migration）要列在 `packaging/research_benchmarking.spec` 的 `datas` 中，否則打包後會找不到。
 
 ## 計畫經費（經分表）
 
@@ -150,20 +176,21 @@ Claude 的實際呼叫測試是 `tests/live/test_live_claude.py`，另外需要�
 
 一次分析很多單位時，SciVal 可能回應 HTTP 429（請求太多）。系統的緩衝做法：
 
-- **同時處理的單位與請求有上限**（設定「同時請求數上限」，預設 4），其餘排隊，不會一次湧入
-- **遇到 429 時所有請求一起暫停**：依回應的 `Retry-After` 等待（沒有時以指數退避加隨機抖動），並把速度減半；連續成功後逐步恢復到設定值
+- **每支 API 各自排隊**：Scopus Search、Abstract Retrieval、SciVal 的速率限制彼此獨立，三者同時進行、互不等待。每支 API 每秒最多送出「每支 API 每秒請求數」（預設 8）次，但不超過官方上限（Scopus Search、Abstract Retrieval 各 8 次，SciVal 5 次，已比官方的 9、9、6 保留餘裕）
+- **同時處理的單位與請求有上限**（設定「每支 API 同時請求數上限」，預設 4），其餘排隊，不會一次湧入
+- **遇到 429 時同一支 API 的請求一起暫停**：依回應的 `Retry-After` 等待（沒有時以指數退避加隨機抖動），並把速度減半；連續成功後逐步恢復到設定值
 - **429 有獨立的重試次數**（預設 8 次，單次最多等 120 秒），不會因為一般錯誤的重試次數用完就放棄
 - **額度用完時直接停止**：回應顯示額度歸零且要很久才重置時，不白白重試，直接顯示重置時間
 - **SciVal 大批次逾時或伺服器錯誤時自動拆半重試**，成功的部分立即存下
 - 仍然失敗的單位會保留已抓到的資料，稍後按「繼續」即可接著抓；已抓過的論文當天不會重複消耗額度
 
-若仍常被限速，可在「設定」調低「每秒請求數」或「同時請求數上限」。
+若仍常被限速，可在「設定」調低「每支 API 每秒請求數」或「每支 API 同時請求數上限」。
 
 ## AI 總結
 
 系統可以請 Claude 把分析結果寫成一段能直接交給長官的文字。**一定要由承辦人確認後才會放進簡報**，系統不會自動產生或自動寄出。
 
-**事前設定**：到「設定」頁的「Claude（AI 摘要）」填入 Claude API Key，按「儲存到 .env」（也可以直接寫在 `.env` 的 `ANTHROPIC_API_KEY`）。同一區可以更換模型，也可以修改語氣提示；留空會回到預設。沒有設定 Key 時，其他功能和原本的簡報下載都不受影響。
+**事前設定**：到「設定」頁的「Claude（AI 摘要）」填入 Claude API Key，按「儲存到 .env」（也可以直接寫在 `.env` 的 `ANTHROPIC_API_KEY`）。同一區可以更換模型，也可以修改提示詞；留空會回到預設。沒有設定 Key 時，其他功能和原本的簡報下載都不受影響。
 
 **產生與審閱**
 

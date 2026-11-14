@@ -22,19 +22,19 @@ def set_units(session, run_id, *statuses, eid_count=None):
     rus = session.scalars(select(RunUnit).where(RunUnit.run_id == run_id).order_by(RunUnit.id)).all()
     for ru, st in zip(rus, statuses):
         ru.status = st
-        ru.eid_count = eid_count if st in ("scival", "failed") else (10 if st == "done" else None)
+        ru.eid_count = eid_count if st in ("scival", "failed") else (10 if st in ("selfcite", "done") else None)
     session.commit()
     return rus
 
 
 def test_empty_database(session):
     s = stages(session)
-    assert list(s) == ["mapping", "teachers", "funding", "run", "fetch", "review", "output"]
+    assert list(s) == ["mapping", "teachers", "funding", "run", "fetch", "selfcite", "review", "output"]
     assert s["mapping"].state == "todo" and s["mapping"].href == "/mapping"
     assert s["teachers"].state == "todo" and s["teachers"].href == "/teachers"
-    assert s["funding"].state == "todo" and s["funding"].summary == "尚未匯入" and s["funding"].href == "/funding"
+    assert s["funding"].state == "todo" and s["funding"].summary == "略過" and s["funding"].href == "/funding"
     assert s["run"].state == "todo" and s["run"].href == "/runs/new"
-    assert all(s[k].state == "todo" and s[k].href is None for k in ("fetch", "review", "output"))
+    assert all(s[k].state == "todo" and s[k].href is None for k in ("fetch", "selfcite", "review", "output"))
 
 
 def test_funding_stage_shows_years_and_latest_file(session):
@@ -186,19 +186,47 @@ def test_resumed_run_after_restart_shows_on_home(settings, web_done_run, respx_m
         manager.current_run_id = web_done_run
         text = c.get("/").text.split('id="pipeline"')[1]
         assert f'href="/runs/{web_done_run}"' in text and f'action="/runs/{web_done_run}/stop"' in text
-        assert "每 2 秒更新" in text
+        assert 'hx-trigger="every 2s"' in text
 
 
 def test_home_shows_pipeline_and_polls_while_running(client, web_done_run):
     r = client.get("/")
     assert 'id="pipeline"' in r.text and f'href="/runs/{web_done_run}?ind=downloads"' in r.text
-    assert "hx-trigger" not in r.text.split('id="pipeline"')[1].split(">")[0]
+    # 閒置時也會慢慢更新：在別的分頁開始分析、匯入資料，首頁都會跟著變
+    assert 'hx-trigger="every 5s"' in r.text.split('id="pipeline"')[1].split(">")[0]
     with client.app.state.session_factory() as s:
         s.get(Run, web_done_run).status = "running"
         s.commit()
     client.app.state.run_manager.is_running = lambda run_id: True
     r = client.get("/pipeline")
-    assert r.status_code == 200 and 'hx-get="/pipeline"' in r.text
+    assert r.status_code == 200 and 'hx-trigger="every 2s"' in r.text
+
+
+def test_home_follows_the_running_run_not_the_last_launched(client, web_done_run):
+    """執行 #2 時對 #1 接續或重抓，#1 做完後首頁仍要顯示執行中的 #2，而不是 #1 的結果。"""
+    from tests.run_helpers import make_run
+
+    with client.app.state.session_factory() as s:
+        other = make_run(s)
+        other.status = "running"
+        s.commit()
+        other_id = other.id
+    manager = client.app.state.run_manager
+    manager.tasks = {other_id: object(), web_done_run: object()}  # 依啟動順序：先 #2，後 #1
+    manager.is_running = lambda run_id: run_id == other_id  # #1 已做完，#2 仍在跑
+    manager.current_run_id = web_done_run
+    text = client.get("/pipeline").text
+    assert f"#{other_id} " in text and f'action="/runs/{other_id}/pause"' in text
+    assert 'hx-trigger="every 2s"' in text
+
+
+def test_watch_refreshes_page_when_background_state_changes(client, web_done_run):
+    page = client.get(f"/runs/{web_done_run}").text
+    url = page.split('hx-get="/watch?')[1].split('"')[0].replace("&amp;", "&")
+    assert "HX-Refresh" not in client.get(f"/watch?{url}").headers
+    client.app.state.run_manager.is_running = lambda run_id: True  # 在別處開始重抓
+    assert client.get(f"/watch?{url}").headers.get("HX-Refresh") == "true"
+    assert 'hx-get="/watch?' in client.get("/").text and 'hx-get="/watch?' in client.get("/runs").text
 
 
 def test_fetch_stage_shows_only_scopus_and_scival_lines_when_done(client, web_done_run):
@@ -236,3 +264,62 @@ def test_home_has_start_button_and_settings_icon(client):
     text = client.get("/").text
     assert 'action="/runs/start"' in text and ">▶ 開始分析</button>" in text
     assert 'href="/runs/new"' in text and "reuse" not in text and 'title="分析設定"' in text
+
+
+def test_selfcite_stage_has_its_own_progress(session):
+    run = make_run(session)
+    session.get(Run, run.id).status = "running"
+    rus = set_units(session, run.id, "done", "selfcite", "scival", eid_count=5)
+    s = stages(session)
+    n = len(rus)
+    assert s["fetch"].progress == (f"Scopus 3／{n}", f"SciVal 2／{n}")   # 正在排除自我引用的單位已過 SciVal
+    assert s["selfcite"].label_parts == ("排除", "自我引用")
+    assert s["selfcite"].state == "active" and s["selfcite"].progress == (f"單位 1／{n}",)
+    assert s["selfcite"].href == f"/runs/{run.id}/fetch"
+
+
+def test_selfcite_stage_shows_references_and_searches_while_running(session):
+    from app.elsevier.inset_selfcite import InSetSelfCitations
+    run = make_run(session)
+    session.get(Run, run.id).status = "running"
+    rus = set_units(session, run.id, "done", "selfcite", "scival", eid_count=5)
+    live = InSetSelfCitations(None)
+    live.refs_done, live.refs_total = 1234, 2000
+    n = len(rus)
+    s = {x.key: x for x in pipeline(session, run.id, True, selfcite=live)}
+    assert s["selfcite"].progress == (f"單位 1／{n}", "參考文獻 1,234／2,000 篇")
+    live.scopus_only, live.searches = True, 56
+    s = {x.key: x for x in pipeline(session, run.id, True, selfcite=live)}
+    assert s["selfcite"].progress[-1] == "Scopus 查詢 56 次"
+    s = {x.key: x for x in pipeline(session, run.id, False, selfcite=live)}   # 沒在執行時不顯示
+    assert s["selfcite"].progress == (f"單位 1／{n}",)
+
+
+def test_selfcite_waits_until_a_unit_gets_there(session):
+    run = make_run(session)
+    session.get(Run, run.id).status = "running"
+    set_units(session, run.id, "scival", "scopus", eid_count=5)
+    assert stages(session)["selfcite"].state == "todo"
+
+
+def test_selfcite_failure_is_shown_on_its_own_stage(session):
+    from app.runs.executor import SELFCITE_ERROR
+    run = make_run(session)
+    session.get(Run, run.id).status = "running"
+    rus = set_units(session, run.id, *["done"] * 20)
+    rus[0].status, rus[0].error = "failed", SELFCITE_ERROR + "Scopus Search API 的額度已用完"
+    session.commit()
+    s = stages(session)
+    n = len(rus)
+    assert s["fetch"].state == "done" and s["fetch"].progress == (f"Scopus {n}／{n}", f"SciVal {n}／{n}")
+    assert s["selfcite"].state == "error" and s["selfcite"].summary == "1 個失敗"
+
+
+def test_selfcite_stage_skipped_when_not_excluding(session):
+    from app.db.settings_store import set_setting
+    set_setting(session, "self_citation_strategy", "none")
+    run = make_run(session)
+    session.get(Run, run.id).status = "running"
+    set_units(session, run.id, "scival")
+    s = stages(session)["selfcite"]
+    assert (s.state, s.summary) == ("done", "設定為不排除")

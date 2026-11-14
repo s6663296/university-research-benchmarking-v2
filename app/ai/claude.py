@@ -25,6 +25,19 @@ def _join(items) -> str:
     return "\n".join(BULLET + line for line in lines if line)
 
 
+def list_models(api_key: str, client=None) -> list[tuple[str, str]]:
+    """這組 Key 目前可用的模型 (id, 顯示名稱)，新的在前。"""
+    client = client or anthropic.Anthropic(api_key=api_key, max_retries=0, timeout=10)
+    try:
+        return [(m.id, m.display_name) for m in client.models.list(limit=1000, lifecycle=["active"])]
+    except anthropic.AuthenticationError:
+        raise AiError("Claude API Key 無效") from None
+    except anthropic.APIConnectionError:
+        raise AiError("無法連線到 Claude，請檢查網路") from None
+    except anthropic.APIStatusError as e:
+        raise AiError(f"Claude 服務錯誤（{e.status_code}）") from None
+
+
 class ClaudeWriter:
     def __init__(self, api_key: str, model: str, client=None):
         self.api_key = api_key

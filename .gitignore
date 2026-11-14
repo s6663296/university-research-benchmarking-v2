@@ -1,4 +1,3 @@
-api_test/output/
 data/
 .env
 .venv/
@@ -7,3 +6,5 @@ __pycache__/
 .pytest_cache/
 .superpowers/
 .playwright-cli/
+build/
+dist/

@@ -127,7 +127,8 @@ async def test_resume_after_interrupt(session, session_factory, respx_mock):
     fake.scopus_calls.clear()
     await execute_run(run.id, session_factory, fake_client(), only_unfinished=True)
     session.expire_all()
-    assert len(fake.scopus_calls) == 1 and "National Taiwan" in fake.scopus_calls[0]
+    searches = [q for q in fake.scopus_calls if "REF(" not in q]   # 不計排除自我引用的篩選查詢
+    assert len(searches) == 1 and "National Taiwan" in searches[0]
     assert session.scalar(select(func.count()).select_from(RunPublication)) == before + 20
     assert session.get(Run, run.id).status == "done"
 

@@ -73,7 +73,7 @@ def multi_client(tmp_path):
 
 def test_settings_page_shows_key_count_and_masked_keys(multi_client):
     text = multi_client.get("/settings").text
-    assert "已設定 2 組" in text
+    assert text.count('class=\"api-key-no\"') == 2
     assert "aaaa" + "*" * 8 + "zzzz" in text and "bbbb" + "*" * 8 + "yyyy" in text
     assert "1111111111" not in text and "2222222222" not in text
 
@@ -85,7 +85,7 @@ def env_text(tmp_path):
 def test_add_key_appends_to_existing(multi_client, tmp_path):
     multi_client.post("/settings/api-keys/add", data={"api_key": " cccc3333333333xxxx "})
     assert "ELSEVIER_API_KEY=aaaa1111111111zzzz,bbbb2222222222yyyy,cccc3333333333xxxx" in env_text(tmp_path)
-    assert "已設定 3 組" in multi_client.get("/settings").text
+    assert multi_client.get("/settings").text.count('class=\"api-key-no\"') == 3
 
 
 def test_add_accepts_several_pasted_keys_and_skips_duplicates(multi_client, tmp_path):
@@ -95,19 +95,19 @@ def test_add_accepts_several_pasted_keys_and_skips_duplicates(multi_client, tmp_
 
 def test_add_blank_changes_nothing(multi_client):
     multi_client.post("/settings/api-keys/add", data={"api_key": "  "})
-    assert "已設定 2 組" in multi_client.get("/settings").text
+    assert multi_client.get("/settings").text.count('class=\"api-key-no\"') == 2
 
 
 def test_delete_key_by_position(multi_client, tmp_path):
     multi_client.post("/settings/api-keys/delete", data={"index": "0"})
     assert "ELSEVIER_API_KEY=bbbb2222222222yyyy\n" in env_text(tmp_path)
     text = multi_client.get("/settings").text
-    assert "已設定 1 組" in text and "aaaa" not in text
+    assert text.count('class=\"api-key-no\"') == 1 and "aaaa" not in text
 
 
 def test_delete_out_of_range_changes_nothing(multi_client):
     assert multi_client.post("/settings/api-keys/delete", data={"index": "9"}, follow_redirects=False).status_code == 303
-    assert "已設定 2 組" in multi_client.get("/settings").text
+    assert multi_client.get("/settings").text.count('class=\"api-key-no\"') == 2
 
 
 def test_each_key_row_has_delete_button(multi_client):
@@ -133,7 +133,7 @@ def test_adding_existing_key_warns_with_its_position(multi_client, tmp_path):
     r = multi_client.post("/settings/api-keys/add", data={"api_key": "bbbb2222222222yyyy"})
     assert r.url.path == "/settings"  # 送出後回到設定頁
     assert "這組 API Key 已經在清單中（第 2 組），沒有重複新增" in r.text
-    assert "已設定 2 組" in r.text
+    assert r.text.count('class=\"api-key-no\"') == 2
     after = env_text(tmp_path) if (tmp_path / ".env").exists() else None
     assert after == before  # 沒有改寫 .env
 

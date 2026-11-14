@@ -3,6 +3,7 @@
 import asyncio
 import random
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -126,13 +127,23 @@ def _http_message(status: int) -> str:
     return f"Elsevier API 回應錯誤（HTTP {status}）"
 
 
+# 官方文件（dev.elsevier.com/api_key_settings.html）各 API 的每秒上限：Scopus Search 9、Abstract Retrieval 9、
+# SciVal 6，各自計算。保留一點餘裕；每支 API 各自排隊，彼此不必等待
+API_MAX_RATE = {"scopus": 8.0, "abstract": 8.0, "scival": 5.0}
+# 同時請求數的倍數：Abstract Retrieval 遇到大型合作論文（作者上千人）時一篇回應 5–6 MB、要 10 秒以上，
+# 同時只送 4 個會讓每秒完成不到 1 篇；2026-11-13 實測 8 個並行下載仍全部成功、整體快 3 倍以上。
+# 每秒請求數仍受 API_MAX_RATE 限制
+API_CONCURRENCY_FACTOR = {"abstract": 3}
+
+
 class ElsevierClient:
     def __init__(self, api_key: str | list[str], insttoken: str = "", *, base_url: str = "https://api.elsevier.com",
                  rate_per_sec: float = 3.0, max_retries: int = 3, backoff_base: float = 1.0,
                  timeout: float = 60.0, cache: ApiCache | None = None,
                  on_quota: Callable[[str, Quota], None] | None = None,
                  transport: httpx.AsyncBaseTransport | None = None, max_concurrency: int = 4,
-                 rate_limit_retries: int = 8, max_backoff: float = 120.0):
+                 rate_limit_retries: int = 8, max_backoff: float = 120.0,
+                 api_max_rate: dict[str, float] | None = None):
         # 可傳入多組 Key：某支 API 的額度用完時換下一組（Scopus、SciVal 額度各自獨立，分開切換）
         self.api_keys = ([api_key] if isinstance(api_key, str) else list(api_key)) or [""]
         self._key_index: dict[str, int] = {}
@@ -140,8 +151,12 @@ class ElsevierClient:
         if insttoken:
             headers["X-ELS-Insttoken"] = insttoken
         self._http = httpx.AsyncClient(base_url=base_url, headers=headers, timeout=timeout, transport=transport)
-        self._limiter = AsyncRateLimiter(rate_per_sec)
-        self._slots = asyncio.Semaphore(max(max_concurrency, 1))   # 同時在途的請求數上限
+        # 速率與同時請求數以 API 為單位（api_of）：Scopus、Abstract Retrieval、SciVal 的限制各自獨立
+        self.rate_per_sec = rate_per_sec
+        self.api_max_rate = api_max_rate or {}
+        self.max_concurrency = max(max_concurrency, 1)
+        self._limiters: dict[str, AsyncRateLimiter] = {}
+        self._slots: dict[str, asyncio.Semaphore] = {}
         self.max_retries = max_retries
         self.rate_limit_retries = rate_limit_retries
         self.backoff_base = backoff_base
@@ -149,6 +164,18 @@ class ElsevierClient:
         self.cache = cache
         self.on_quota = on_quota
         self.quota: dict[str, Quota] = {}  # "scopus" / "scival" → 最近一次回應的額度
+        self.usage: Counter[str] = Counter()  # 各 API 實際成功的請求數（快取命中不算），即消耗的額度
+
+    def limiter(self, api: str) -> AsyncRateLimiter:
+        if api not in self._limiters:
+            rate = min(self.rate_per_sec, self.api_max_rate.get(api, self.rate_per_sec))
+            self._limiters[api] = AsyncRateLimiter(rate)
+        return self._limiters[api]
+
+    def _slots_of(self, api: str) -> asyncio.Semaphore:
+        if api not in self._slots:   # 每支 API 同時在途的請求數上限
+            self._slots[api] = asyncio.Semaphore(self.max_concurrency * API_CONCURRENCY_FACTOR.get(api, 1))
+        return self._slots[api]
 
     def _backoff(self, attempt: int) -> float:
         """指數退避加上隨機抖動，避免大家同時重試。"""
@@ -157,11 +184,13 @@ class ElsevierClient:
     async def _request(self, path: str, params: dict, retries: int) -> dict:
         attempt = throttled = 0
         rate_limit_retries = self.rate_limit_retries if retries else 0   # 檢查連線時不重試
+        api = api_of(path)
+        limiter = self.limiter(api)
         while True:
-            await self._limiter.acquire()
+            await limiter.acquire()
             try:
-                index = self._key_index.get(api_of(path), 0)
-                async with self._slots:
+                index = self._key_index.get(api, 0)
+                async with self._slots_of(api):
                     resp = await self._http.get(path, params=params,
                                                 headers={"X-ELS-APIKey": self.api_keys[index]})
             except (httpx.TimeoutException, httpx.TransportError) as e:
@@ -173,7 +202,8 @@ class ElsevierClient:
                     if self.on_quota is not None:
                         self.on_quota(api_of(path), quota)
                 if resp.status_code == 200:
-                    self._limiter.reward()
+                    limiter.reward()
+                    self.usage[api] += 1
                     try:
                         return strip_links(resp.json())
                     except ValueError:
@@ -195,7 +225,7 @@ class ElsevierClient:
                     if wait is None and reset is not None:
                         wait = max(reset - time.time(), 0.0)
                     wait = min(wait if wait is not None else self._backoff(throttled), self.max_backoff)
-                    self._limiter.penalize(wait)   # 所有請求一起暫停並放慢，而不是各自重試
+                    limiter.penalize(wait)   # 同一支 API 的請求一起暫停並放慢，而不是各自重試
                     throttled += 1
                     continue
                 retryable = resp.status_code >= 500
@@ -262,5 +292,6 @@ def make_client(settings, session) -> ElsevierClient:
         on_quota=QuotaStore(cache.session_factory).record,
         max_concurrency=int(get_setting(session, "max_concurrency")),
         rate_limit_retries=int(get_setting(session, "rate_limit_retries")),
+        api_max_rate=API_MAX_RATE,
         max_backoff=float(get_setting(session, "max_backoff_sec")),
     )

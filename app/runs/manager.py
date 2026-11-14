@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import Run, RunUnit
 from app.elsevier.client import ElsevierClient
+from app.elsevier.inset_selfcite import InSetSelfCitations
 from app.runs.executor import FETCHING, execute_run
 
 
@@ -27,8 +28,10 @@ class RunManager:
     def __init__(self, session_factory: sessionmaker[Session], client_factory: Callable[[], ElsevierClient]):
         self.session_factory = session_factory
         self.client_factory = client_factory
-        self.tasks: dict[int, asyncio.Task] = {}
-        self.current_run_id: int | None = None  # 這個行程最後啟動（開始／接續／重抓）的分析，首頁儀表板顯示它
+        self.tasks: dict[int, asyncio.Task] = {}  # 依啟動順序排列（重新啟動的移到最後）
+        # 最後啟動的分析；結束時若已沒有其他分析在執行，改為剛結束的那個（見 display_run_id）
+        self.current_run_id: int | None = None
+        self.selfcite: dict[int, InSetSelfCitations] = {}  # 執行中分析的排除自我引用進度（首頁流程圖顯示）
 
     def is_running(self, run_id: int) -> bool:
         task = self.tasks.get(run_id)
@@ -36,6 +39,18 @@ class RunManager:
 
     def any_running(self) -> bool:
         return any(not t.done() for t in self.tasks.values())
+
+    @property
+    def display_run_id(self) -> int | None:
+        """首頁儀表板顯示的分析：有分析在執行就顯示它（多個時取最後啟動的），
+        否則顯示最後結束的。不能只看最後啟動的：執行 #2 時對 #1 接續或重抓，#1 很快做完，
+        首頁就會停在 #1 的結果而看不到仍在執行的 #2。"""
+        running = [run_id for run_id in self.tasks if self.is_running(run_id)]
+        return running[-1] if running else self.current_run_id
+
+    def _finished(self, run_id: int) -> None:
+        if not self.any_running():
+            self.current_run_id = run_id
 
     async def _cancel(self, run_id: int) -> bool:
         task = self.tasks.get(run_id)
@@ -83,12 +98,14 @@ class RunManager:
         async def job():
             client = self.client_factory()
             try:
-                await execute_run(run_id, self.session_factory, client, **kwargs)
+                await execute_run(run_id, self.session_factory, client, live=self.selfcite, **kwargs)
             finally:
                 await client.aclose()
 
-        self.tasks[run_id] = asyncio.create_task(job())
+        self.tasks.pop(run_id, None)
+        task = self.tasks[run_id] = asyncio.create_task(job())
         self.current_run_id = run_id
+        task.add_done_callback(lambda _: self._finished(run_id))
         return True
 
     def start(self, run_id: int) -> bool:

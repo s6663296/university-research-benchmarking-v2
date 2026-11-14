@@ -7,11 +7,13 @@ from app.db.models import RunPublication, RunUnit, Unit
 from app.db.settings_store import set_setting
 from app.elsevier.cache import ApiCache
 from app.elsevier.client import ElsevierClient
-from app.elsevier.inset_selfcite import InSetSelfCitations, count_in_set, full_view_refs
+from app.elsevier.inset_selfcite import (MAX_QUERY, InSetSelfCitations, count_in_set, full_view_refs, ref_groups,
+                                         ref_query)
 from app.elsevier.scival import citation_count
+from app.elsevier.scopus import build_query
 from app.runs.executor import execute_run
 from tests.elsevier_fixtures import ABSTRACT_URL, abstract_full, ids67, load
-from tests.run_helpers import PAPERS, FakeElsevier, fake_client, make_run
+from tests.run_helpers import PAPERS, FakeElsevier, doi_of, fake_client, make_run
 
 
 def client(cache=None):
@@ -101,3 +103,111 @@ async def test_other_strategies_do_not_fetch_references(session, session_factory
     assert fake.abstract_calls == []
     row = session.scalars(select(RunPublication).where(RunPublication.run_id == run.id)).first()
     assert json.loads(row.metrics_json)["self_citations"] is None
+
+
+# ---- 篩選 + 參考文獻；Abstract Retrieval 額度用完時只用 Scopus Search ----
+
+IM_QUERY = build_query("Department of Information Management, National Central University", 2021, 2025)
+
+
+def im_case():
+    """中央資管 20 篇：P0 被 3 篇引用（含自己）、P1 被 1 篇引用，另有引用組外論文的參考文獻。"""
+    im = ids67()[0:20]
+    p0, p1, q1, q2, q3 = im[:5]
+    refs = {p0: [p0, "999"], q1: [p0, p1], q2: [p0, "998"], q3: ["997"], ids67()[30]: [p0]}
+    return im, refs, {p0: 3, p1: 1}
+
+
+async def count_im(fake, respx_mock, cache=None, counter=None):
+    fake.install(respx_mock)
+    im = ids67()[0:20]
+    counter = counter or InSetSelfCitations(client(cache))
+    result = await counter.count(im, {i: 5 for i in im}, query=IM_QUERY, dois={i: doi_of(i) for i in im})
+    return result, counter
+
+
+async def test_filter_then_fetch_only_citers(respx_mock):
+    im, refs, truth = im_case()
+    fake = FakeElsevier(refs=refs)
+    result, counter = await count_im(fake, respx_mock)
+    assert result == truth
+    assert sorted(fake.abstract_calls) == sorted({im[0], im[2], im[3]})   # 只查引用了單位論文的 3 篇
+    assert fake.openalex_calls == [] and counter.fetched == 3
+    assert counter.refs_done == counter.refs_total == 3   # 首頁流程圖的細部進度
+
+
+async def test_scopus_only_when_abstract_quota_exhausted(respx_mock):
+    im, refs, truth = im_case()
+    # OpenAlex 查不到 q1、少了 q2 → P0：兩者都只能靠 Scopus 的整組檢查補上
+    fake = FakeElsevier(refs=refs, abstract_quota=0, oa_missing={im[2]}, oa_drop={(im[3], im[0])})
+    result, counter = await count_im(fake, respx_mock)
+    assert result == truth
+    assert fake.abstract_calls == [] and counter.abstract_exhausted and fake.openalex_calls
+
+
+async def test_references_only_when_ref_search_unavailable(respx_mock):
+    im, refs, truth = im_case()
+    fake = FakeElsevier(refs=refs, ref_search=False)
+    result, _ = await count_im(fake, respx_mock)
+    assert result == truth
+    assert sorted(fake.abstract_calls) == sorted(im)   # 退回逐篇查參考文獻
+
+
+async def test_cached_references_need_only_the_filter(respx_mock, session_factory):
+    im, refs, truth = im_case()
+    cache = ApiCache(session_factory, cache_days=1)
+    await count_im(FakeElsevier(refs=refs), respx_mock, cache)
+    fake = FakeElsevier(refs=refs)
+    result, counter = await count_im(fake, respx_mock, cache)
+    assert result == truth and fake.abstract_calls == [] and counter.fetched == 0
+
+
+async def test_scopus_only_setting_never_downloads_references(respx_mock):
+    im, refs, truth = im_case()
+    fake = FakeElsevier(refs=refs)
+    result, counter = await count_im(fake, respx_mock, counter=InSetSelfCitations(client(), scopus_only=True))
+    assert result == truth   # 與逐篇查參考文獻的結果相同
+    assert fake.abstract_calls == [] and fake.openalex_calls and counter.searches > 0
+    assert counter.refs_total == 0 and not counter.abstract_exhausted
+
+
+async def test_scopus_only_still_uses_cached_references(respx_mock, session_factory):
+    im, refs, truth = im_case()
+    cache = ApiCache(session_factory, cache_days=1)
+    await count_im(FakeElsevier(refs=refs), respx_mock, cache)
+    fake = FakeElsevier(refs=refs)
+    result, counter = await count_im(fake, respx_mock, cache,
+                                     InSetSelfCitations(client(cache), scopus_only=True))
+    # 引用者的參考文獻都在永久快取：不花額度，也不必逐篇查 Scopus
+    assert result == truth and fake.abstract_calls == [] and fake.openalex_calls == []
+    assert counter.refs_done == counter.refs_total == 3
+
+
+async def test_run_uses_selfcite_method_setting(session, session_factory, respx_mock):
+    set_setting(session, "selfcite_method", "scopus")
+    fake = FakeElsevier()
+    fake.install(respx_mock)
+    run = make_run(session)
+    live = {}
+    await execute_run(run.id, session_factory, fake_client(), live=live)
+    assert fake.abstract_calls == [] and live == {}   # 結束後移除進度物件
+
+
+def test_ref_groups_keep_queries_short():
+    ids = [str(85000000000 + i) for i in range(300)]
+    groups = ref_groups(IM_QUERY, ids)
+    assert sum(groups, []) == ids and len(groups) > 1
+    assert all(len(ref_query(IM_QUERY, g)) <= MAX_QUERY for g in groups)
+
+
+async def test_run_marks_failures_in_the_selfcite_step(session, session_factory, respx_mock):
+    from app.runs.executor import SELFCITE_ERROR
+    # REF 不可用、Abstract Retrieval 又沒有額度：排除自我引用這一步失敗
+    FakeElsevier(refs={ids67()[1]: [ids67()[0]]}, ref_search=False, abstract_quota=0).install(respx_mock)
+    run = make_run(session)
+    await execute_run(run.id, session_factory, fake_client())
+    session.expire_all()
+    failed = session.scalars(select(RunUnit).where(RunUnit.run_id == run.id, RunUnit.status == "failed")).all()
+    assert failed and all(ru.error.startswith(SELFCITE_ERROR + "Scopus Abstract Retrieval API 的額度已用完")
+                          for ru in failed)
+    assert all(ru.eid_count is not None for ru in failed)   # Scopus、SciVal 都已完成
