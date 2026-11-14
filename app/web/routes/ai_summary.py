@@ -9,8 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai import service
+from app.ai.prompts import DEFAULT_TONE
 from app.ai.baseline import baseline_choices, baseline_for, basis_differences
 from app.db.models import AiSummary, Run
+from app.db.settings_store import get_setting, set_setting
 from app.funding.service import run_colleges
 from app.reports.college_report import build_college_report, college_report_filename
 from app.reports.exports import export_path, record_export
@@ -69,7 +71,15 @@ def ai_context(session: Session, run: Run, sel: str = "") -> dict:
         current["summary"] = bullets(row.summary if row else None)
         current["comparison"] = bullets(row.comparison if row else None)
     return dict(ai_rows=rows, ai_current=current, ai_stale_text=STALE_TEXT,
-                baseline_options=baseline_choices(session, run))
+                baseline_options=baseline_choices(session, run),
+                ai_tone=get_setting(session, "ai_tone_prompt"), ai_default_tone=DEFAULT_TONE)
+
+
+async def _save_tone(request: Request, session: Session) -> None:
+    """產生前把提示框的內容存成設定（與設定頁共用）；空白或沒送出時沿用原本的設定。"""
+    tone = str((await request.form()).get("tone_prompt", "")).strip()
+    if tone:
+        set_setting(session, "ai_tone_prompt", tone)
 
 
 def ai_progress_context(request: Request, run: Run) -> dict:
@@ -91,6 +101,7 @@ def ai_progress(request: Request, run_id: int, session: Session = Depends(get_se
 @router.post("/runs/{run_id}/ai/generate")
 async def generate_all(request: Request, run_id: int, session: Session = Depends(get_session)):
     _done_run(session, run_id)
+    await _save_tone(request, session)
     request.app.state.ai_jobs.start(run_id)
     return _back(run_id)
 
@@ -100,6 +111,7 @@ async def generate_one(request: Request, run_id: int, kind: str, key: str, sessi
     run = _done_run(session, run_id)
     if (kind, key) not in service.targets(session, run):
         raise HTTPException(404, "找不到這個總結對象")
+    await _save_tone(request, session)
     request.app.state.ai_jobs.start(run_id, only=(kind, key))
     return _back(run_id, kind, key)
 

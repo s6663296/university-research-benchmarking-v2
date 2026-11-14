@@ -232,3 +232,40 @@ def test_same_period_run_cannot_be_chosen(client, run_id):
         twin_id = twin.id
     assert f'value="{twin_id}"' not in client.get(f"/runs/{run_id}?ind=ai").text
     assert client.post(f"/runs/{run_id}/ai/baseline", data={"baseline": str(twin_id)}).status_code == 400
+
+
+def test_ai_tab_shows_prompt_box_with_default(client, run_id):
+    from app.ai.prompts import DEFAULT_TONE
+    html = client.get(f"/runs/{run_id}?ind=ai").text
+    assert 'name="tone_prompt"' in html and DEFAULT_TONE in html
+
+
+def test_generate_uses_and_saves_custom_prompt(client, run_id):
+    from app.db.settings_store import get_setting
+    seen = []
+
+    class Recorder(FakeWriter):
+        def write(self, system, payload):
+            seen.append(system)
+            return super().write(system, payload)
+
+    client.app.state.ai_jobs.writer_factory = lambda: Recorder()
+    r = client.post(f"/runs/{run_id}/ai/generate/dept/{DEPT}", data={"tone_prompt": "請用輕鬆口吻"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    wait_job(client, run_id)
+    assert seen and seen[0].startswith("請用輕鬆口吻")
+    with client.app.state.session_factory() as s:
+        assert get_setting(s, "ai_tone_prompt") == "請用輕鬆口吻"
+    assert "請用輕鬆口吻" in client.get(f"/runs/{run_id}?ind=ai").text
+
+
+def test_blank_prompt_keeps_saved_one(client, run_id):
+    from app.db.settings_store import get_setting, set_setting
+    with client.app.state.session_factory() as s:
+        set_setting(s, "ai_tone_prompt", "既有語氣")
+        s.commit()
+    client.post(f"/runs/{run_id}/ai/generate", data={"tone_prompt": "  "}, follow_redirects=False)
+    wait_job(client, run_id)
+    with client.app.state.session_factory() as s:
+        assert get_setting(s, "ai_tone_prompt") == "既有語氣"

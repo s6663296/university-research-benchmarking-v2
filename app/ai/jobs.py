@@ -41,7 +41,7 @@ class AiJobManager:
         return any(not t.done() for t in self.tasks.values())
 
     def start(self, run_id: int, only: tuple[str, str] | None = None) -> bool:
-        """已在跑回 False。"""
+        """已在跑回 False。語氣提示讀設定（AI 總結分頁的提示框會先寫回設定）。"""
         if self.is_running(run_id):
             return False
         with self.session_factory() as session:

@@ -8,11 +8,29 @@
     </select>
     <noscript><button type="submit" class="secondary">套用</button></noscript>
   </form>
-  <form method="post" action="/runs/{{ run.id }}/ai/generate">
+  <form method="post" action="/runs/{{ run.id }}/ai/generate" class="ai-generate">
+    <input type="hidden" name="tone_prompt">
     <button type="submit"{% if ai_polling %} disabled{% endif %}
       onclick="return confirm('會重新產生所有學院與系所的總結，並覆蓋已修改的文字。確定產生？')">產生 AI 總結</button>
   </form>
 </div>
+
+<details class="ai-prompt">
+  <summary>提示詞（產生時使用，會一併存成預設）</summary>
+  <div class="field">
+    <label for="ai-tone" class="sr-only">提示詞</label>
+    <textarea id="ai-tone" rows="5" data-default="{{ ai_default_tone }}">{{ ai_tone }}</textarea>
+  </div>
+  <button type="button" class="secondary"
+    onclick="const t=document.getElementById('ai-tone');t.value=t.dataset.default;t.focus()">還原預設提示詞</button>
+  <span class="muted small">資料使用規則（只引用提供的數字等）固定附加，不受這裡影響。</span>
+</details>
+<script>
+  // 產生按鈕送出時帶上提示框的內容；沒有 JavaScript 時沿用已儲存的提示詞
+  document.querySelectorAll("form.ai-generate").forEach(f => f.addEventListener("submit", () => {
+    f.elements.tone_prompt.value = document.getElementById("ai-tone").value;
+  }));
+</script>
 
 {% include "_ai_progress.html" %}
 
@@ -58,7 +76,8 @@
       <button type="button" class="secondary" aria-controls="ai-edit" aria-expanded="false"
         onclick="const f=document.getElementById('ai-edit');f.hidden=!f.hidden;this.setAttribute('aria-expanded',!f.hidden);if(!f.hidden)f.querySelector('textarea').focus()">編輯</button>
       {% endif %}
-      <form method="post" action="/runs/{{ run.id }}/ai/generate/{{ c.kind }}/{{ c.key | urlencode }}">
+      <form method="post" action="/runs/{{ run.id }}/ai/generate/{{ c.kind }}/{{ c.key | urlencode }}" class="ai-generate">
+        <input type="hidden" name="tone_prompt">
         <button type="submit" class="{{ 'secondary' if c.row and not c.stale }}"{% if ai_polling %} disabled{% endif %}>{{ "重新產生" if c.row else "產生這一份" }}</button>
       </form>
       {% if c.kind == "college" and c.row and not c.stale %}
