@@ -189,5 +189,5 @@ def pipeline(session: Session, run_id: int | None = None, running: bool = False,
             Stage(k, label, "todo") for k, label in (("fetch", FETCH_LABEL), ("selfcite", SELFCITE_LABEL),
                                                      ("review", REVIEW_LABEL), ("output", "產出"))]
     depts = "、".join(RunConfig.from_json(run.scope_json).ncu_depts)
-    stages.append(Stage("run", "建立分析", "done", f"#{run.id} {depts}", f"/runs/{run.id}"))
+    stages.append(Stage("run", "建立分析", "done", f"#{run.id} {depts}", "/runs/new"))  # 點下去一律回分析設定
     return stages + _run_stages(session, run, running, selfcite)
