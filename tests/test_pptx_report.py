@@ -292,3 +292,42 @@ async def test_single_huge_paragraph_stays_above_footer(session, done_run, tmp_p
         for i, a in enumerate(shapes):
             for b in shapes[i + 1:]:
                 assert a[3] <= b[1] or b[3] <= a[1] or a[4] <= b[2] or b[4] <= a[2], (a[0], b[0])
+
+
+TWO_COL = SummaryDraft("・Q1 師均**排名第一**，領先台大、政治\n・國際合著排名第二", "・FWCI 由 1.10 提升至 1.20（+9.09%）",
+                       has_baseline=True, challenges="・**台大**在 Top 1% 領先 0.05\n・政治逼近本系所",
+                       rival_changes="・台大 Q1 成長 **+50.00%**")
+
+
+async def test_two_column_ai_pages(session, done_run, tmp_path):
+    p = build(session, done_run, tmp_path, TWO_COL)
+    assert len(p.slides) == 11
+    now, prev = texts_on(p.slides[-2]), texts_on(p.slides[-1])
+    assert "現況／優勢" in now and "挑戰／機會" in now and "排名第一" in now and "**" not in now
+    assert "本系所變化" in prev and "競爭學校變化" in prev and "+9.09%" in prev
+    for slide in (p.slides[-2], p.slides[-1]):
+        assert "※本頁由 AI 依系統數據統整" in texts_on(slide)
+    body = next(s for s in p.slides[-2].shapes if s.has_text_frame and "排名第一" in s.text_frame.text)
+    runs = [r for para in body.text_frame.paragraphs for r in para.runs]
+    assert next(r for r in runs if r.text == "排名第一").font.color.rgb == RED
+    assert next(r for r in runs if r.text.startswith("，領先")).font.color.rgb != RED
+    assert sum(r.text == "□ " for r in runs) == 2
+
+
+async def test_two_column_without_baseline_says_so(session, done_run, tmp_path):
+    p = build(session, done_run, tmp_path, SummaryDraft("・優勢", None, challenges="・挑戰"))
+    assert "現況／優勢" in texts_on(p.slides[-2]) and "無前期資料可比較" in texts_on(p.slides[-1])
+
+
+async def test_long_two_column_splits_and_stays_above_footer(session, done_run, tmp_path):
+    long = "\n".join("・" + "字" * 40 for _ in range(30))
+    p = build(session, done_run, tmp_path, SummaryDraft(long, None, has_baseline=True, challenges="・挑戰"))
+    assert len(p.slides) > 10 and "（續）" in p.slides[-1].shapes.title.text
+    for slide in list(p.slides)[9:]:
+        texts = [b for b in boxes(slide) if "TextBox" in b[0]]
+        for name, x0, y0, x1, y1 in boxes(slide):
+            if "Title" not in name and y0 < FOOTER_RULE_Y:
+                assert y1 <= FOOTER_RULE_Y, name
+        for i, a in enumerate(texts):  # 欄名文字疊在色塊上是刻意的；文字框彼此不重疊
+            for b in texts[i + 1:]:
+                assert a[3] <= b[1] or b[3] <= a[1] or a[4] <= b[2] or b[4] <= a[2], (a[0], b[0])

@@ -133,8 +133,10 @@ class AiSummary(Base):
     kind: Mapped[str] = mapped_column(String)  # "dept" 或 "college"
     key: Mapped[str] = mapped_column(String)  # 系所名或學院名
     baseline_run_id: Mapped[int | None] = mapped_column(Integer)
-    summary: Mapped[str] = mapped_column(Text)
-    comparison: Mapped[str | None] = mapped_column(Text)
+    summary: Mapped[str] = mapped_column(Text)                    # 現況／優勢
+    comparison: Mapped[str | None] = mapped_column(Text)          # 與前期比較：本系所（本院）變化
+    challenges: Mapped[str | None] = mapped_column(Text)          # 挑戰／機會
+    rival_changes: Mapped[str | None] = mapped_column(Text)       # 與前期比較：競爭學校變化
     input_hash: Mapped[str] = mapped_column(String)
     model: Mapped[str] = mapped_column(String)
     edited: Mapped[bool] = mapped_column(default=False)

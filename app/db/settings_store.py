@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.ai.prompts import DEFAULT_TONE
+from app.ai.prompts import DEFAULT_TONE, LEGACY_TONES
 from app.db.models import AppSetting
 
 DEFAULT_SETTINGS: dict[str, Any] = {
@@ -32,7 +32,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 def get_setting(session: Session, key: str) -> Any:
     row = session.get(AppSetting, key)
     if row is not None:
-        return json.loads(row.value_json)
+        value = json.loads(row.value_json)
+        if key == "ai_tone_prompt" and value in LEGACY_TONES:  # 存的是舊版預設，視同沒改過
+            return DEFAULT_TONE
+        return value
     return deepcopy(DEFAULT_SETTINGS[key])
 
 

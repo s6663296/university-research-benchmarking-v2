@@ -17,9 +17,13 @@ from app.runs.scope import RunConfig
 
 @dataclass
 class SummaryDraft:
+    """兩欄版面：summary（現況／優勢）對 challenges（挑戰／機會）；
+    有前期時再一頁 comparison（本系所變化）對 rival_changes（競爭學校變化）。"""
     summary: str
     comparison: str | None
     has_baseline: bool = False  # 有前期卻沒有比較說明時，報告不能寫「無前期資料可比較」
+    challenges: str | None = None
+    rival_changes: str | None = None
 
 
 class SummaryWriter(Protocol):
@@ -54,7 +58,8 @@ def generate(session: Session, run: Run, kind: str, key: str, writer: SummaryWri
              tone: str, model: str) -> AiSummary:
     payload = _payload(session, run, kind, key)
     draft = writer.write(system_prompt(kind, tone), payload)  # AiError 直接往上拋，不動既有資料
-    values = dict(summary=draft.summary, comparison=draft.comparison, input_hash=input_hash(payload),
+    values = dict(summary=draft.summary, comparison=draft.comparison, challenges=draft.challenges,
+                  rival_changes=draft.rival_changes, input_hash=input_hash(payload),
                   baseline_run_id=_baseline_id(session, run, kind, key), model=model, edited=False,
                   updated_at=datetime.now())
     row = _row(session, run.id, kind, key)
@@ -68,9 +73,11 @@ def generate(session: Session, run: Run, kind: str, key: str, writer: SummaryWri
     return row
 
 
-def save_edit(session: Session, summary_id: int, summary: str, comparison: str | None) -> AiSummary:
+def save_edit(session: Session, summary_id: int, summary: str, comparison: str | None,
+              challenges: str | None = None, rival_changes: str | None = None) -> AiSummary:
     row = session.get(AiSummary, summary_id)
     row.summary, row.comparison = summary, comparison
+    row.challenges, row.rival_changes = challenges, rival_changes
     row.edited, row.updated_at = True, datetime.now()
     session.commit()
     return row
@@ -85,7 +92,8 @@ def fresh_text(session: Session, run: Run, kind: str, key: str) -> SummaryDraft 
     row = _row(session, run.id, kind, key)
     if row is None or not is_fresh(session, row):
         return None
-    return SummaryDraft(row.summary, row.comparison, row.baseline_run_id is not None)
+    return SummaryDraft(row.summary, row.comparison, row.baseline_run_id is not None,
+                        row.challenges, row.rival_changes)
 
 
 def targets(session: Session, run: Run) -> list[tuple[str, str]]:

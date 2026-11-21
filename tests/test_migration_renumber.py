@@ -19,6 +19,7 @@ def test_db_on_old_api_usage_revision_upgrades_to_head(tmp_path):
     init_db(engine)
 
     with engine.connect() as conn:
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0010_run_api_usage"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0011_ai_two_columns"
         columns = {c["name"] for c in inspect(conn).get_columns("runs")}
         assert {"api_usage_json", "ai_baseline_run_id"} <= columns and inspect(conn).has_table("ai_summaries")
+        assert {"challenges", "rival_changes"} <= {c["name"] for c in inspect(conn).get_columns("ai_summaries")}

@@ -33,6 +33,7 @@ from app.db.settings_store import get_setting
 from app.funding.service import count_text, funding_table, funding_warnings, money
 from app.mapping.parser import NCU_SHEET, is_ncu
 from app.mapping.service import units_of
+from app.reports.emphasis import emphasis, plain, strip_bullet
 from app.reports.report_text import INDICATOR_KEYS, ReportText, report_values
 from app.reports.tables import IndicatorTable, Row, fmt, indicator_table, summary_table
 
@@ -82,6 +83,15 @@ TEXT_INSETS = 2 * 45720          # 文字框預設的上下留白
 TEXT_MAX_PT, TEXT_MIN_PT = 18, 12             # 文字頁字級範圍
 SUMMARY_MAX_PT, SUMMARY_MIN_PT = 24, 16       # AI 總結要點：簡報給主管看，字要大
 HEAD_GAP, SECTION_GAP = 40000, 160000        # 文字頁：小標與內文、區塊之間的間距
+# 兩欄頁（研發處簡報的「現況／挑戰」版面）：左欄黃、右欄藍，□ 條列，重點紅字，底部 AI 註記
+YELLOW = RGBColor(0xF5, 0xB8, 0x00)
+COL_HEAD_Y, COL_HEAD_H = SUB_Y + 60000, 460000
+COL_BODY_Y = COL_HEAD_Y + COL_HEAD_H + 120000
+AI_NOTE = "※本頁由 AI 依系統數據統整，內容不一定準確，請進一步確認"
+AI_NOTE_H = 280000
+COL_BODY_H = FOOTER_RULE_Y - 60000 - AI_NOTE_H - COL_BODY_Y
+COL_MAX_PT, COL_MIN_PT = 20, 14
+PARA_GAP = 0.45                  # 兩點之間的空白（字級倍數）
 
 def _font(run, size=None, bold=None, color=None):
     """統一字型：中英文都用微軟正黑體。顏色要在字型之前設定（XML 元素順序）。"""
@@ -287,6 +297,51 @@ def _block_height(text: str, size: float) -> int:
     return int(lines * size * PT * LINE + TEXT_INSETS)
 
 
+def _points(text: str | None) -> list[str]:
+    """每行一點，去掉開頭的項目符號（簡報上統一用 □）。"""
+    return [strip_bullet(line) for line in (text or "").splitlines() if line.strip()]
+
+
+def _points_height(points: list[str], size: float, width: int) -> int:
+    """一欄條列的總高度；□ 佔掉一個字寬。"""
+    lines = sum(max(1, math.ceil((_em(plain(p)) + 1.5) * size * PT / width)) for p in points)
+    return int(lines * size * PT * LINE + len(points) * size * PT * PARA_GAP + TEXT_INSETS)
+
+
+def _chunk_points(points: list[str], size: float, width: int, avail: int) -> list[list[str]]:
+    """放不下時以點為界分頁（單點本身過長就獨占一頁）。"""
+    pages: list[list[str]] = [[]]
+    for p in points:
+        if pages[-1] and _points_height([*pages[-1], p], size, width) > avail:
+            pages.append([])
+        pages[-1].append(p)
+    return pages
+
+
+def _bullet_box(slide, points: list[str], left, top, width, height, size: float, box_color):
+    """□ 條列文字框：□ 用欄位顏色，** 包住的片段標紅字。"""
+    box = slide.shapes.add_textbox(Emu(left), Emu(top), Emu(width), Emu(height))
+    frame = box.text_frame
+    frame.word_wrap = True
+    frame.margin_left = frame.margin_right = 0
+    for i, point in enumerate(points):
+        para = frame.paragraphs[0] if i == 0 else frame.add_paragraph()
+        if i:
+            para.space_before = Pt(size * PARA_GAP)
+        hang = str(int(size * PT * 1.15))   # 凸排：換行後對齊 □ 之後的文字
+        ppr = para._p.get_or_add_pPr()
+        ppr.set("marL", hang)
+        ppr.set("indent", "-" + hang)
+        run = para.add_run()
+        run.text = "□ "
+        _font(run, Pt(size), True, box_color)
+        for text, red in emphasis(point):
+            run = para.add_run()
+            run.text = text
+            _font(run, Pt(size), red, RED if red else GRAY)
+    return box
+
+
 def _split_long(text: str, size: float, avail: int) -> list[str]:
     """單段高度超過一頁可用空間（扣掉小標）時，依字寬切成每塊都放得下的幾段。"""
     budget = avail - _block_height("標", size + 2) - HEAD_GAP - SECTION_GAP
@@ -401,6 +456,43 @@ class DeckBuilder:
                   anchor=MSO_ANCHOR.MIDDLE)
             _text(slide, f"{n} / {len(slides)}", SLIDE_W - MARGIN - 1100000, FOOTER_Y, 1100000, FOOTER_H, Pt(9),
                   GRAY, align=PP_ALIGN.RIGHT, anchor=MSO_ANCHOR.MIDDLE)
+
+    def two_column_pages(self, title: str, kicker: str, left: tuple[str, str | None], right: tuple[str, str | None]):
+        """兩欄頁：(欄名, 每行一點的文字)。字級由大往小縮到兩欄都放得下，仍放不下就分頁（續）。"""
+        cols = [(head, _points(text), color) for (head, text), color in ((left, YELLOW), (right, BLUE))]
+        size = COL_MAX_PT
+        while size > COL_MIN_PT and any(_points_height(pts, size, HALF_W) > COL_BODY_H for _, pts, _ in cols):
+            size -= 1
+        chunks = [_chunk_points(pts, size, HALF_W, COL_BODY_H) for _, pts, _ in cols]
+        for page in range(max(len(c) for c in chunks)):
+            slide = self._slide(title + ("（續）" if page else ""), kicker)
+            for (head, _, color), pages, x in zip(cols, chunks, (LEFT_X, RIGHT_X)):
+                _rect(slide, x, COL_HEAD_Y, HALF_W, COL_HEAD_H, color)
+                _text(slide, head, x + 150000, COL_HEAD_Y, HALF_W - 300000, COL_HEAD_H, Pt(20), WHITE, True,
+                      anchor=MSO_ANCHOR.MIDDLE)
+                points = pages[page] if page < len(pages) else []
+                if points:
+                    _bullet_box(slide, points, x, COL_BODY_Y, HALF_W, COL_BODY_H, size, color)
+            _text(slide, AI_NOTE, MARGIN, FOOTER_RULE_Y - 40000 - AI_NOTE_H, CONTENT_W, AI_NOTE_H, Pt(11), GRAY,
+                  anchor=MSO_ANCHOR.MIDDLE)
+
+    def ai_pages(self, title: str, kicker: str, compare_kicker: str, self_head: str, draft: "SummaryDraft"):
+        """AI 總結：現況／優勢 vs 挑戰／機會；有前期時再一頁 本系所（本院）變化 vs 競爭學校變化。
+        舊版只有單欄文字（沒有 challenges）時，沿用條列文字頁。"""
+        no_prev = None if draft.has_baseline else "無前期資料可比較"
+        if draft.challenges is None and draft.rival_changes is None:
+            sections = [("總結", draft.summary)]
+            if draft.comparison or no_prev:
+                sections.append(("與前期比較", draft.comparison or no_prev))
+            self.text_pages(title, kicker, sections, SUMMARY_MAX_PT, SUMMARY_MIN_PT)
+            return
+        self.two_column_pages(title, kicker, ("現況／優勢", draft.summary), ("挑戰／機會", draft.challenges))
+        if draft.comparison or draft.rival_changes:
+            self.two_column_pages(f"{title}：與前期比較", compare_kicker, (self_head, draft.comparison),
+                                  ("競爭學校變化", draft.rival_changes))
+        elif no_prev:
+            self.text_pages(f"{title}：與前期比較", compare_kicker, [("與前期比較", no_prev)],
+                            SUMMARY_MAX_PT, SUMMARY_MIN_PT)
 
     def text_pages(self, title: str, kicker: str, sections: list[tuple[str, str]],
                    max_pt: float = TEXT_MAX_PT, min_pt: float = TEXT_MIN_PT):
@@ -607,13 +699,9 @@ class ReportBuilder(DeckBuilder):
         self._bottom(slide, indicator_id)
 
     def ai_page(self):
-        """最後一章：Claude 產生的總結與前期比較（無前期資料時明說）。"""
-        sections = [("總結", self.ai_text.summary)]
-        comparison = self.ai_text.comparison or (None if self.ai_text.has_baseline else "無前期資料可比較")
-        if comparison:
-            sections.append(("與前期比較", comparison))
-        self.text_pages(f"{self.ncu_dept}總結與建議", f"{self.numbers['ai']}. 總結與建議", sections,
-                        SUMMARY_MAX_PT, SUMMARY_MIN_PT)
+        """最後一章：Claude 產生的總結（兩欄）與前期比較（無前期資料時明說）。"""
+        kicker = f"{self.numbers['ai']}. 總結與建議"
+        self.ai_pages(f"{self.ncu_dept}總結與建議", kicker, kicker, "本系所變化", self.ai_text)
 
     def build(self, out_path: Path) -> Path:
         self.cover()

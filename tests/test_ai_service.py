@@ -52,7 +52,8 @@ async def test_system_prompt_has_tone_and_rules(session, done_run):
     system, payload = writer.calls[0]
     assert "自訂語氣XYZ" in system and "只能引用提供的數字" in system
     assert "待人工確認" in system and "只談這個系所" in system
-    assert "comparison 回傳 null" in system and "比較基準不同" in system
+    assert "self_changes 與 rival_changes 都回傳 null" in system and "比較基準不同" in system
+    assert "名次在前的學校" in system and "**" in system
     assert payload["系所"] == DEPT
     assert "只談這個系所" not in system_prompt("college", "x")
 
@@ -179,10 +180,11 @@ def test_claude_writer_parses_output_and_sends_expected_request():
 
     def create(**kw):
         seen.update(kw)
-        return response(json.dumps({"summary": ["整體穩定"], "comparison": None}, ensure_ascii=False))
+        return response(json.dumps({"strengths": ["整體穩定"], "challenges": ["被台大超越"],
+                                    "self_changes": None, "rival_changes": None}, ensure_ascii=False))
 
     draft = ClaudeWriter("key", "claude-test", client=fake_client(create)).write("系統", {"系所": "資管"})
-    assert draft == SummaryDraft("・整體穩定", None)
+    assert draft == SummaryDraft("・整體穩定", None, challenges="・被台大超越")
     assert seen["model"] == "claude-test" and seen["system"] == "系統"
     assert "temperature" not in seen and "thinking" not in seen
     assert seen["output_config"]["effort"] == "medium"
@@ -196,26 +198,31 @@ def test_claude_writer_asks_for_bullets_and_joins_them():
 
     def create(**kw):
         seen.update(kw)
-        return response(json.dumps({"summary": ["Q1 師均居對標第 1", "・國際合著仍有成長空間"],
-                                    "comparison": ["- FWCI 由 1.10 提升至 1.20"]}, ensure_ascii=False))
+        return response(json.dumps({"strengths": ["Q1 師均**排名第一**", "・國際合著成長平緩"],
+                                    "challenges": ["**台大**領先 0.05", "* 政治逼近"],
+                                    "self_changes": ["- FWCI 由 1.10 提升至 1.20"],
+                                    "rival_changes": ["・台大成長 +50.00%"]}, ensure_ascii=False))
 
     draft = ClaudeWriter("key", "m", client=fake_client(create)).write("s", {})
-    assert draft == SummaryDraft("・Q1 師均居對標第 1\n・國際合著仍有成長空間", "・FWCI 由 1.10 提升至 1.20")
+    assert draft == SummaryDraft("・Q1 師均**排名第一**\n・國際合著成長平緩", "・FWCI 由 1.10 提升至 1.20",
+                                 challenges="・**台大**領先 0.05\n・政治逼近", rival_changes="・台大成長 +50.00%")
     props = seen["output_config"]["format"]["schema"]["properties"]
-    assert props["summary"] == {"type": "array", "items": {"type": "string"}}
-    assert props["comparison"] == {"anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "null"}]}
+    bullets = {"type": "array", "items": {"type": "string"}}
+    assert props["strengths"] == props["challenges"] == bullets
+    assert props["self_changes"] == props["rival_changes"] == {"anyOf": [bullets, {"type": "null"}]}
 
 
 def test_claude_writer_empty_comparison_list_is_none():
     draft = ClaudeWriter("key", "m", client=fake_client(
-        lambda **kw: response(json.dumps({"summary": ["整體穩定"], "comparison": []}, ensure_ascii=False)))).write("s", {})
-    assert draft == SummaryDraft("・整體穩定", None)
+        lambda **kw: response(json.dumps({"strengths": ["整體穩定"], "challenges": ["無"],
+                                          "self_changes": [], "rival_changes": []}, ensure_ascii=False)))).write("s", {})
+    assert draft == SummaryDraft("・整體穩定", None, challenges="・無")
 
 
 def test_system_prompt_requires_short_bullets():
     dept, college = system_prompt("dept", DEFAULT_TONE), system_prompt("college", DEFAULT_TONE)
     for text in (dept, college):
-        assert "條列" in text and "35" in text and "開場白" in text
+        assert "條列" in text and "45" in text and "開場白" in text
     assert "3 至 4 點" in dept and "4 至 5 點" in college
     # 語氣欄被使用者清空或改寫時，簡報格式規則仍在
     assert "條列" in system_prompt("dept", "請正式一點")
@@ -238,3 +245,12 @@ async def test_any_running_tracks_tasks(session_factory):
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
     assert manager.any_running() is False
+
+
+def test_legacy_default_tone_maps_to_new_default(session):
+    from app.ai.prompts import LEGACY_TONES
+    from app.db.settings_store import get_setting, set_setting
+    set_setting(session, "ai_tone_prompt", LEGACY_TONES[0])
+    assert get_setting(session, "ai_tone_prompt") == DEFAULT_TONE
+    set_setting(session, "ai_tone_prompt", "自訂語氣")
+    assert get_setting(session, "ai_tone_prompt") == "自訂語氣"

@@ -5,15 +5,18 @@ import json
 import anthropic
 
 from app.ai.service import AiError, SummaryDraft
+from app.reports.emphasis import strip_bullet
 
 _BULLETS = {"type": "array", "items": {"type": "string"}}
 SCHEMA = {
     "type": "object",
     "properties": {
-        "summary": _BULLETS,
-        "comparison": {"anyOf": [_BULLETS, {"type": "null"}]},
+        "strengths": _BULLETS,
+        "challenges": _BULLETS,
+        "self_changes": {"anyOf": [_BULLETS, {"type": "null"}]},
+        "rival_changes": {"anyOf": [_BULLETS, {"type": "null"}]},
     },
-    "required": ["summary", "comparison"],
+    "required": ["strengths", "challenges", "self_changes", "rival_changes"],
     "additionalProperties": False,
 }
 BULLET = "・"
@@ -21,7 +24,7 @@ BULLET = "・"
 
 def _join(items) -> str:
     """要點陣列 → 每行一點、以「・」開頭的文字（模型自己加的項目符號先去掉，避免重複）。"""
-    lines = [str(i).strip().lstrip("・-•*").strip() for i in items or []]
+    lines = [strip_bullet(str(i)) for i in items or []]
     return "\n".join(BULLET + line for line in lines if line)
 
 
@@ -77,6 +80,8 @@ class ClaudeWriter:
         text = next((b.text for b in response.content if b.type == "text"), "")
         try:
             data = json.loads(text)
-            return SummaryDraft(summary=_join(data["summary"]), comparison=_join(data.get("comparison")) or None)
+            return SummaryDraft(summary=_join(data["strengths"]), comparison=_join(data.get("self_changes")) or None,
+                                challenges=_join(data.get("challenges")) or None,
+                                rival_changes=_join(data.get("rival_changes")) or None)
         except (ValueError, KeyError, TypeError):
             raise AiError("Claude 回覆的格式無法解讀，請重試") from None

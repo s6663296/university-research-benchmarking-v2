@@ -148,8 +148,20 @@ async def test_rival_changes_flag_overtake_and_closing_gap(session, session_fact
         for school, value, rank in values:
             _set(session, run_id, school, "q1", value, rank)
     session.commit()
-    rivals = [c for c in dept_input(session, cur, DEPT)["前期"]["對標學校變化"] if c["名稱"] == BY_ID["q1"].label]
-    by_school = {c["學校"]: c for c in rivals}
-    assert by_school["台大"]["變化"] == "本期超越本系所"
-    assert (by_school["台大"]["前期對方減本系所"], by_school["台大"]["本期對方減本系所"]) == ("-2.00", "1.00")
-    assert "逼近本系所" in by_school["政治"]["變化"]
+    prev = dept_input(session, cur, DEPT)["前期"]
+    q1 = BY_ID["q1"].label
+    by_school = {r["學校"]: next(i for i in r["指標"] if i["名稱"] == q1) for r in prev["對標學校變化"]}
+    assert by_school["台大"]["相對本系所"] == "本期超越本系所"
+    assert by_school["台大"]["變化率"] == "+50.00%"
+    assert "逼近本系所" in by_school["政治"]["相對本系所"]
+    assert by_school["政治"]["變化率"] == "+350.00%"
+    own = next(c for c in prev["指標變化"] if c["比較"] == "對標學校比較" and c["名稱"] == q1)
+    assert own["變化率"] == "+10.00%"
+
+
+def test_pct_edge_cases():
+    from app.ai.inputs import _pct
+    assert _pct(Decimal("1.102"), Decimal("1.052")) == "-4.54%"
+    assert _pct(Decimal("0"), Decimal("3")) == "前期為0，無法計算"
+    assert _pct(None, Decimal("3")) == "待確認"
+    assert _pct(Decimal("2"), Decimal("2")) == "0.00%"

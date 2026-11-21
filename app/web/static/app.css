@@ -350,6 +350,12 @@ tr.ev-me td { background: var(--primary-soft); font-weight: 600; }
 .ai-points li + li { margin-top: .35rem; }
 .ai-points li::marker { color: var(--slide-accent); }
 .ai-sub { color: var(--slide-title); font-size: 1rem; margin: 1.4rem 0 0; }
+.ai-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1.4rem; margin-top: 1rem; }
+.ai-col-head { margin: 0; padding: .35rem .7rem; font-size: 1rem; color: #fff; border-radius: 3px; }
+.ai-col-a .ai-col-head { background: #c99700; }  /* 研發處簡報：左欄黃 */
+.ai-col-b .ai-col-head { background: var(--slide-accent); }  /* 右欄藍 */
+.ai-col .ai-points { margin-top: .6rem; max-width: none; }
+.ai-red { color: #d00000; }
 .ai-empty { color: var(--muted); margin: 3rem 0; text-align: center; }
 .ai-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
 .ai-actions form { margin: 0; }

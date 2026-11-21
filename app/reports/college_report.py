@@ -27,12 +27,15 @@ class CollegeReportBuilder(DeckBuilder):
     def build(self, out_path: Path) -> Path:
         self._cover("員額小組論文資料", f"{NCU_SHEET}{self.college}",
                     f"{self.period} 論文指標全院總結\n{date.today().strftime('%Y/%m/%d')}")
-        self.text_pages("全院總結", "I. 全院總結", [("全院總結", self.ai_text.summary)],
-                        SUMMARY_MAX_PT, SUMMARY_MIN_PT)
-        comparison = self.ai_text.comparison or (None if self.ai_text.has_baseline else "無前期資料可比較")
-        if comparison:
-            self.text_pages("與前期比較", "II. 與前期比較", [("與前期比較", comparison)],
+        if self.ai_text.challenges is None and self.ai_text.rival_changes is None:  # 舊版單欄文字
+            self.text_pages("全院總結", "I. 全院總結", [("全院總結", self.ai_text.summary)],
                             SUMMARY_MAX_PT, SUMMARY_MIN_PT)
+            comparison = self.ai_text.comparison or (None if self.ai_text.has_baseline else "無前期資料可比較")
+            if comparison:
+                self.text_pages("與前期比較", "II. 與前期比較", [("與前期比較", comparison)],
+                                SUMMARY_MAX_PT, SUMMARY_MIN_PT)
+        else:
+            self.ai_pages("全院總結", "I. 全院總結", "II. 與前期比較", "本院變化", self.ai_text)
         self._footer(f"{NCU_SHEET} {self.college}｜{self.period} 論文指標全院總結")
         out_path.parent.mkdir(parents=True, exist_ok=True)
         self.prs.save(out_path)

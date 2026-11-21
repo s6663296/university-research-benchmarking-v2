@@ -39,6 +39,16 @@ def _gap(a, b) -> str:
     return fmt(a - b) if a is not None and b is not None else "待確認"
 
 
+def _pct(a, b) -> str:
+    """前期 a → 本期 b 的變化率（%），由程式先算好，模型不用自己算。"""
+    if a is None or b is None:
+        return "待確認"
+    if a == 0:
+        return "前期為0，無法計算"
+    v = (b - a) / a * 100
+    return ("+" if v > 0 else "") + fmt(v) + "%"
+
+
 def _standing(table: IndicatorTable, own: Row) -> dict:
     """本系所在對標群組中的相對位置：名次在前、在後、同名次的學校，以及和本系所的差距。"""
     if own.rank is None:
@@ -126,30 +136,36 @@ _SHIFTS = {("在後", "在前"): "本期超越本系所", ("同名次", "在前"
            ("在前", "在後"): "本期被本系所超越", ("同名次", "在後"): "本期被本系所超越"}
 
 
+def _shift(mine, d) -> str | None:
+    """對方和本系所相對位置的明顯變化：超越、被超越，或差距縮小。"""
+    before, after = _relation(mine.rank_a, d.rank_a), _relation(mine.rank_b, d.rank_b)
+    if before is None or after is None:
+        return None
+    shift = _SHIFTS.get((before, after))
+    if shift or None in (d.a, d.b, mine.a, mine.b):
+        return shift
+    if before == after == "在後" and (mine.b - d.b) < (mine.a - d.a):
+        return "仍落後本系所，但差距縮小（逼近本系所）"
+    if before == after == "在前" and (d.b - mine.b) < (d.a - mine.a):
+        return "仍領先本系所，但差距縮小（本系所追近）"
+    return None
+
+
 def _rivals(diffs: list) -> list[dict]:
-    """兩期都有的對標學校中，和本系所相對位置有明顯變化的項目（差距由程式算好）。"""
+    """兩期都有的對標學校：逐項指標的前後期數值、變化率與名次；相對位置有明顯變化的另外標出。"""
     own = {d.indicator_id: d for d in diffs if is_ncu(d.school)}
-    out = []
+    schools: dict[str, list[dict]] = {}
     for d in diffs:
         mine = own.get(d.indicator_id)
-        if is_ncu(d.school) or mine is None or d.rank_a is None or d.rank_b is None:
+        if is_ncu(d.school) or mine is None or d.a is None or d.b is None:
             continue
-        before, after = _relation(mine.rank_a, d.rank_a), _relation(mine.rank_b, d.rank_b)
-        if before is None or after is None:
-            continue
-        item = {"學校": d.school, "名稱": BY_ID[d.indicator_id].label,
-                "前期名次": d.rank_a, "本期名次": d.rank_b,
-                "前期對方減本系所": _gap(d.a, mine.a), "本期對方減本系所": _gap(d.b, mine.b)}
-        shift = _SHIFTS.get((before, after))
-        if shift is None and before == after == "在後" and None not in (d.a, d.b, mine.a, mine.b):
-            if (mine.b - d.b) < (mine.a - d.a):
-                shift = "仍落後本系所，但差距縮小（逼近本系所）"
-        if shift is None and before == after == "在前" and None not in (d.a, d.b, mine.a, mine.b):
-            if (d.b - mine.b) < (d.a - mine.a):
-                shift = "仍領先本系所，但差距縮小（本系所追近）"
+        item = {"名稱": BY_ID[d.indicator_id].label, "前期數值": fmt(d.a), "本期數值": fmt(d.b),
+                "變化率": _pct(d.a, d.b), "前期名次": d.rank_a, "本期名次": d.rank_b}
+        shift = _shift(mine, d)
         if shift:
-            out.append({**item, "變化": shift})
-    return out
+            item["相對本系所"] = shift
+        schools.setdefault(d.school, []).append(item)
+    return [{"學校": school, "指標": items} for school, items in schools.items()]
 
 
 def _previous(session: Session, run: Run, base: Run, dept: str, college: str) -> dict:
@@ -162,7 +178,7 @@ def _previous(session: Session, run: Run, base: Run, dept: str, college: str) ->
         if d.a is None and d.b is None:
             continue
         changes.append({"名稱": BY_ID[d.indicator_id].label, "比較": _group_name(d.comparison, college),
-                        "前期數值": fmt(d.a), "本期數值": fmt(d.b),
+                        "前期數值": fmt(d.a), "本期數值": fmt(d.b), "變化率": _pct(d.a, d.b),
                         "前期名次": d.rank_a, "本期名次": d.rank_b})
     old_row = _dept_funding_row(session, base, dept, college)
     new_row = _dept_funding_row(session, run, dept, college)

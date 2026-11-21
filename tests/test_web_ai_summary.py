@@ -269,3 +269,20 @@ def test_blank_prompt_keeps_saved_one(client, run_id):
     wait_job(client, run_id)
     with client.app.state.session_factory() as s:
         assert get_setting(s, "ai_tone_prompt") == "既有語氣"
+
+
+def test_two_column_edit_and_red_text(client, run_id):
+    generate(client, run_id)
+    with client.app.state.session_factory() as s:
+        sid = s.scalars(select(AiSummary.id).where(AiSummary.key == DEPT)).first()
+    r = client.post(f"/runs/{run_id}/ai/summaries/{sid}",
+                    data={"summary": "・Q1 **排名第一**", "challenges": "・台大領先", "comparison": "",
+                          "rival_changes": "・政治逼近"}, follow_redirects=False)
+    assert r.status_code == 303
+    with client.app.state.session_factory() as s:
+        row = s.get(AiSummary, sid)
+        assert (row.challenges, row.rival_changes, row.comparison) == ("・台大領先", "・政治逼近", None)
+    page = client.get(f"/runs/{run_id}?ind=ai&sel=dept:{DEPT}").text
+    assert '<strong class="ai-red">排名第一</strong>' in page and "挑戰／機會" in page
+    texts = slide_texts(client.get(f"/runs/{run_id}/pptx/{DEPT}").content)
+    assert any("挑戰／機會" in t and "台大領先" in t for t in texts)

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.ai import service
 from app.ai.prompts import DEFAULT_TONE
+from app.reports.emphasis import emphasis, strip_bullet
 from app.ai.baseline import baseline_choices, baseline_for, basis_differences
 from app.db.models import AiSummary, Run
 from app.db.settings_store import get_setting, set_setting
@@ -40,9 +41,9 @@ def _back(run_id: int, kind: str | None = None, key: str | None = None) -> Redir
     return RedirectResponse(url, status_code=303)
 
 
-def bullets(text: str | None) -> list[str]:
-    """每行一點；去掉開頭的項目符號，網頁上用清單顯示。"""
-    return [line.strip().lstrip("・-•*").strip() for line in (text or "").splitlines() if line.strip()]
+def bullets(text: str | None) -> list[list[tuple[str, bool]]]:
+    """每行一點；去掉開頭的項目符號，每點拆成 (文字, 是否紅字) 片段（**包起來的是紅字**）。"""
+    return [emphasis(strip_bullet(line)) for line in (text or "").splitlines() if line.strip()]
 
 
 def ai_context(session: Session, run: Run, sel: str = "") -> dict:
@@ -68,8 +69,8 @@ def ai_context(session: Session, run: Run, sel: str = "") -> dict:
         current["base"] = baseline_for(session, run, key) if kind == "dept" else None
         current["diffs"] = basis_differences(run, current["base"], key) if current["base"] else []
         row = current["row"]
-        current["summary"] = bullets(row.summary if row else None)
-        current["comparison"] = bullets(row.comparison if row else None)
+        for field in ("summary", "challenges", "comparison", "rival_changes"):
+            current[field] = bullets(getattr(row, field) if row else None)
     return dict(ai_rows=rows, ai_current=current, ai_stale_text=STALE_TEXT,
                 baseline_options=baseline_choices(session, run),
                 ai_tone=get_setting(session, "ai_tone_prompt"), ai_default_tone=DEFAULT_TONE)
@@ -126,8 +127,11 @@ async def save_summary(request: Request, run_id: int, summary_id: int, session: 
     text = str(form.get("summary", "")).strip()
     if not text:
         raise HTTPException(400, "總結不能是空白")
-    service.save_edit(session, summary_id, text,
-                      str(form.get("comparison", "")).strip() or None)
+    def optional(name: str) -> str | None:
+        return str(form.get(name, "")).strip() or None
+
+    service.save_edit(session, summary_id, text, optional("comparison"),
+                      optional("challenges"), optional("rival_changes"))
     return _back(run_id, row.kind, row.key)
 
 

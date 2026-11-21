@@ -59,11 +59,18 @@
       </p>
       {% endif %}
 
+      {% macro points(items) %}<ul class="ai-points">{% for p in items %}<li>{% for text, red in p %}{% if red %}<strong class="ai-red">{{ text }}</strong>{% else %}{{ text }}{% endif %}{% endfor %}</li>{% endfor %}</ul>{% endmacro %}
       {% if c.row %}
-      <ul class="ai-points">{% for p in c.summary %}<li>{{ p }}</li>{% endfor %}</ul>
-      {% if c.comparison and (c.kind == "college" or c.base) %}{# 沒有前期時上方已註明，不重複 #}
+      <div class="ai-cols">
+        <div class="ai-col ai-col-a"><h3 class="ai-col-head">現況／優勢</h3>{{ points(c.summary) }}</div>
+        {% if c.challenges %}<div class="ai-col ai-col-b"><h3 class="ai-col-head">挑戰／機會</h3>{{ points(c.challenges) }}</div>{% endif %}
+      </div>
+      {% if (c.comparison or c.rival_changes) and (c.kind == "college" or c.base) %}{# 沒有前期時上方已註明，不重複 #}
       <h3 class="ai-sub">與前期比較</h3>
-      <ul class="ai-points">{% for p in c.comparison %}<li>{{ p }}</li>{% endfor %}</ul>
+      <div class="ai-cols">
+        {% if c.comparison %}<div class="ai-col ai-col-a"><h3 class="ai-col-head">{{ "本院變化" if c.kind == "college" else "本系所變化" }}</h3>{{ points(c.comparison) }}</div>{% endif %}
+        {% if c.rival_changes %}<div class="ai-col ai-col-b"><h3 class="ai-col-head">競爭學校變化</h3>{{ points(c.rival_changes) }}</div>{% endif %}
+      </div>
       {% endif %}
       {% else %}
       <p class="ai-empty">尚未產生</p>
@@ -86,10 +93,15 @@
 
     {% if c.row %}
     <form method="post" action="/runs/{{ run.id }}/ai/summaries/{{ c.row.id }}" id="ai-edit" class="ai-edit" hidden>
-      <div class="field"><label for="ai-s">總結</label>
-        <textarea id="ai-s" name="summary" rows="6">{{ c.row.summary }}</textarea></div>
-      <div class="field"><label for="ai-c">與前期比較</label>
+      <p class="muted small">每行一點；用 **兩個星號** 包起來的文字在簡報上會標成紅字。</p>
+      <div class="field"><label for="ai-s">現況／優勢</label>
+        <textarea id="ai-s" name="summary" rows="5">{{ c.row.summary }}</textarea></div>
+      <div class="field"><label for="ai-ch">挑戰／機會</label>
+        <textarea id="ai-ch" name="challenges" rows="4">{{ c.row.challenges or "" }}</textarea></div>
+      <div class="field"><label for="ai-c">與前期比較：{{ "本院變化" if c.kind == "college" else "本系所變化" }}</label>
         <textarea id="ai-c" name="comparison" rows="4">{{ c.row.comparison or "" }}</textarea></div>
+      <div class="field"><label for="ai-r">與前期比較：競爭學校變化</label>
+        <textarea id="ai-r" name="rival_changes" rows="4">{{ c.row.rival_changes or "" }}</textarea></div>
       <button type="submit">儲存</button>
       <button type="button" class="secondary" onclick="this.form.hidden=true">取消</button>
     </form>
