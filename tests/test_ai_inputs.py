@@ -105,3 +105,51 @@ async def test_renumbering_baseline_keeps_hash(session, session_factory, respx_m
     cur_after = session.scalars(select(Run).order_by(Run.id.desc())).first()
     assert cur_after.id != cur_id
     assert input_hash(dept_input(session, cur_after, DEPT)) == before
+
+
+async def test_standing_lists_every_school_with_gaps(session, done_run):
+    bench = entry(dept_input(session, done_run, DEPT), "q1", "對標學校比較")
+    table = indicator_table(session, done_run.id, "benchmark", DEPT, "q1")
+    own = next(r for r in table.rows if r.is_ncu)
+    listed = ([e["學校"] for e in bench["名次在前的學校"]] + [e["學校"] for e in bench["名次在後的學校"]]
+              + bench.get("同名次的學校", []) + bench.get("數值待確認的學校", []))
+    assert sorted(listed) == sorted(r.label.rsplit("-", 1)[-1] for r in table.rows if not r.is_ncu)
+    for e in bench["名次在前的學校"]:
+        other = next(r for r in table.rows if r.label.endswith(e["學校"]))
+        assert e["名次"] < own.rank and e["領先本系所"] == fmt(other.value - own.value)
+    for e in bench["名次在後的學校"]:
+        other = next(r for r in table.rows if r.label.endswith(e["學校"]))
+        assert e["名次"] > own.rank and e["本系所領先"] == fmt(own.value - other.value)
+
+
+async def test_college_group_has_no_school_lists(session, done_run):
+    payload = dept_input(session, done_run, DEPT)
+    college = entry(payload, "q1", f"{payload['學院']}內系所比較")
+    assert "名次在前的學校" not in college
+
+
+def _set(session, run_id, school, indicator_id, value, rank):
+    r = session.scalars(select(Result).join(Unit, Unit.id == Result.unit_id).where(
+        Result.run_id == run_id, Result.comparison == "benchmark", Result.indicator_id == indicator_id,
+        Unit.school == school, Unit.ncu_dept == DEPT)).one()
+    r.value, r.rank = Decimal(value), rank
+
+
+async def test_rival_changes_flag_overtake_and_closing_gap(session, session_factory, respx_mock):
+    FakeElsevier().install(respx_mock)
+    old = make_run(session, year_from=2020, year_to=2024)
+    await execute_run(old.id, session_factory, fake_client())
+    cur = make_run(session)
+    await execute_run(cur.id, session_factory, fake_client())
+    session.expire_all()
+    # 前期：中央 10 第一、台大 8 第二、政治 2 第三；本期：台大 12 超越中央 11，政治 9 逼近
+    for run_id, values in ((old.id, (("中央", "10", 1), ("台大", "8", 2), ("政治", "2", 3))),
+                           (cur.id, (("台大", "12", 1), ("中央", "11", 2), ("政治", "9", 3)))):
+        for school, value, rank in values:
+            _set(session, run_id, school, "q1", value, rank)
+    session.commit()
+    rivals = [c for c in dept_input(session, cur, DEPT)["前期"]["對標學校變化"] if c["名稱"] == BY_ID["q1"].label]
+    by_school = {c["學校"]: c for c in rivals}
+    assert by_school["台大"]["變化"] == "本期超越本系所"
+    assert (by_school["台大"]["前期對方減本系所"], by_school["台大"]["本期對方減本系所"]) == ("-2.00", "1.00")
+    assert "逼近本系所" in by_school["政治"]["變化"]
