@@ -155,6 +155,7 @@ FastAPI
 4. **抓取資料**（背景任務，每個單位有各自的進度）
    - Scopus Search：`AFFIL(<英文名稱>) AND AFFILCOUNTRY(Taiwan) AND PUBYEAR > <起年-1> AND PUBYEAR < <迄年+1>`，以 cursor 翻頁取得全部 EID（`AFFILCOUNTRY(Taiwan)` 依操作步驟第 5 頁的篩選）
      - 英文名稱**不加引號**，與 Scopus 網頁「Search within: Affiliation」相同（操作步驟第 5 頁）。加引號會變成連續片語比對，篇數較少：清大經濟 2021–2025 加引號 34 篇、不加 40 篇（2026-10-30 實測）
+     - 校名互相包含的學校（台大 ⊂ 台科大、成大 ⊂ 成大醫院）：開始分析前以 Scopus Affiliation Search 依英文校名自動取得機構代碼（AF-ID，名稱完全相同者中論文數最多的那筆；找不到就在對標學校資料表頁人工指定），查詢加上 `AND NOT (AF-ID(他校) AND NOT AF-ID(本校))`；兩個代碼都有、又比對得到他校系所字串的論文，再以 Abstract Retrieval 讀機構原文，有機構同時寫了本系所與本校才保留（2026-11-22 實測：台大化工 1459 → 1576、台大機械 743 → 779，其他 190 個單位不變）
    - SciVal Publication Metrics：Scopus ID 分批送出（每批大小可設定，預設 25，實作時依實測調整）
      - 所有請求都明確帶 `includedDocs=AllPublicationTypes`（與 SciVal 網頁的「All publication types」相同）
      - 篇數類指標與 FWCI：`yearRange=5yrs`、`byYear=true`
@@ -245,6 +246,12 @@ FastAPI
 3. Abstract Retrieval 額度用完時：OpenAlex 指出可能被引用的論文 P，逐篇 `(單位查詢) AND REF(P)` 取得精確的引用者；其餘 P 整組檢查，有結果才拆半直到單篇。數字一律來自 Scopus
 
 中央財金驗證：兩種做法的組內互引都是 100 次，與 SciVal 網頁的差額一致，逐篇也與參考文獻算出的結果相同。`REF(<Scopus ID>)` 不在官方文件中（`REFEID` 對這把 Key 不開放），每次分析先以已知引用關係檢查，不符時改回逐篇查參考文獻。
+
+**只保留增量更新（2026-11-21）**：上面的篩選（`REF()`）與只用 Scopus Search（OpenAlex 排序）兩種查法已移除，「設定 → 組內互引查詢方式」也一併移除。現在每篇論文的參考文獻都以 Abstract Retrieval 取得一次並永久快取，之後以 `EID(…) AND LOAD-DATE AFT <日期>`（每 80 篇 1 次 Scopus Search）找出重載的紀錄再重抓。選它的理由：不依賴官方文件沒有記載的 `REF()`、會核對參考文獻筆數是否完整、快取以論文為單位，各單位與各次分析共用，重跑幾乎不花額度。代價是第一次要補齊所有論文的參考文獻（當時全校 34,602 篇中已有 12,843 篇在快取），額度不足時等重置後自動續查。同日以中央機械 100 篇重測 `includeSelfCitations`：Publication 端點 `true`／`false`／不帶參數、有無 insttoken 都完全相同（被引合計皆 2,999；組內有 37 次共同作者互引），同一把 Key 的 Author 端點則有差異（例如 369 → 318），確認不是權限問題。
+
+**各單位不再互相等（2026-11-21 晚）**：原本以同一把鎖確認參考文獻，單位只能一個接一個做（當天 51 個單位依序完成，Abstract Retrieval 只跑到每秒上限的 75%），等鎖的單位又佔著同時處理的名額，SciVal 跟著閒置。改成：每篇論文由第一個需要它的單位負責確認，其他單位只等那一篇（同一篇仍只下載一次）；快取中沒有的論文直接下載，不必等 `LOAD-DATE` 查詢；各組 80 篇同時進行；單位在排除自我引用時讓出名額給下一個單位取指標。下載依送出順序排隊，先到的單位先完成。
+
+同日評估過改回只用 `REF()`：把不同單位的 `(單位) AND REF(P)` 以 OR 打包、跨系合著再以 `(EID(論文) AND REF(P))` 確認，以 11/13 的 135 個單位重放約 2,600 次 Scopus Search、不用 Abstract Retrieval，實測也與參考文獻算出的一致。但 `REF()` 的結果不能跨次快取，每次全校分析都要再花這些查詢；參考文獻補齊後重跑幾乎不花額度，長期較省，所以維持參考文獻的做法。
 
 **設計**：策略 `SelfCitationStrategy` 只保留「組內互引」（預設）與「不排除」兩種，在設定頁切換；結果頁與報告註腳標示使用的策略。「SciVal 參數」（驗證無效）與「Scopus Citation Overview」（沒有授權）已移除，舊分析仍顯示原本的策略名稱，設定中存著舊策略時改用預設策略。
 

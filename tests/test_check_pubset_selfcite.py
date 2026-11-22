@@ -14,13 +14,13 @@ REFS = {"85141566632": ["85120042660", "99900000001"], "85144826309": ["85120042
 
 def args(**kw):
     return argparse.Namespace(**{"ids": None, "file": None, "web": None, "dept": None, "years": None,
-                                 "save": None, "show": 30, "scopus_only": False, **kw})
+                                 "save": None, "show": 30, **kw})
 
 
 def patch_client(monkeypatch):
-    monkeypatch.setattr(check, "Settings", lambda: SimpleNamespace(elsevier_api_key="k", elsevier_insttoken=""))
+    monkeypatch.setattr(check, "Settings", lambda: SimpleNamespace(elsevier_api_key="k"))
     monkeypatch.setattr(check, "open_client", lambda settings: fake_client())
-    monkeypatch.setattr(check, "mapping_schools", lambda settings: [])
+    monkeypatch.setattr(check, "mapping_schools", lambda settings: ([], {}))
 
 
 def install(respx_mock, monkeypatch, **kw):
@@ -51,8 +51,12 @@ async def test_custom_ids_compare_with_given_web_numbers(respx_mock, monkeypatch
 async def test_dept_saves_eids_and_uses_same_query_as_system(respx_mock, monkeypatch, tmp_path, capsys):
     patch_client(monkeypatch)
     ids = ids67()[0:20]                                            # 模擬伺服器中「中央資管」的論文
-    FakeElsevier(refs={ids[1]: [ids[0]], ids[2]: [ids[0], ids[1]]}).install(respx_mock)
     base = {str(r["publication"]["id"]): citation_count(r) for r in load("scival_cites_qf_67.json")["results"]}
+    # 組內互引不能超過 SciVal 的被引數：p0 被引用 2 次、p1 被引用 1 次
+    p0 = next(i for i in ids if base[i] >= 2)
+    p1 = next(i for i in ids if base[i] >= 1 and i != p0)
+    c1, c2 = [i for i in ids if i not in (p0, p1)][:2]
+    FakeElsevier(refs={c1: [p0], c2: [p0, p1]}).install(respx_mock)
     total = sum(base[i] for i in ids)
     save = tmp_path / "eids.txt"
     code = await check.run(args(dept="Department of Information Management, National Central University",
@@ -70,14 +74,7 @@ async def test_warns_when_paper_count_entered_as_citations(respx_mock, monkeypat
     assert "可能輸入成 Scholarly Output" in capsys.readouterr().out
 
 
-async def test_sample_scopus_only_needs_no_abstract_retrieval(respx_mock, monkeypatch, capsys):
-    fake = install(respx_mock, monkeypatch)
-    assert await check.run(args(scopus_only=True)) == 0
-    assert fake.abstract_calls == []
-    assert "含自我引用 44，組內互引 4，排除後 40" in capsys.readouterr().out
-
-
-async def test_sample_fetches_only_papers_citing_the_set(respx_mock, monkeypatch, capsys):
+async def test_sample_fetches_each_paper_once(respx_mock, monkeypatch):
     fake = install(respx_mock, monkeypatch)
     assert await check.run(args()) == 0
-    assert sorted(fake.abstract_calls) == sorted(REFS)   # 7 篇中只有 4 篇引用了組內論文
+    assert sorted(fake.abstract_calls) == sorted(check.SAMPLE_IDS)

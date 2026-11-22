@@ -9,7 +9,7 @@
   <form method="post" action="/mapping" enctype="multipart/form-data">
     <input type="file" name="file" accept=".xlsx" required>
     <button type="submit">上傳</button>
-    <a class="button secondary" href="/mapping/template.xlsx">下載空白範本</a>
+    <a class="button secondary" href="/mapping/template.xlsx" download>下載空白範本</a>
   </form>
   {% if version %}
   <p title="SHA-256 {{ version.sha256 }}">{{ version.filename }}・{{ version.imported_at.strftime("%Y/%m/%d %H:%M") }}</p>
@@ -50,6 +50,37 @@
   </div>
   {% endif %}
 </section>
+
+{% if affiliations %}
+<section class="card">
+  <h2>Scopus 機構代碼</h2>
+  <p class="muted">校名互相包含的學校（如台大與台科大）用機構代碼區分論文。開始分析時會自動查詢。</p>
+  <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
+  <table>
+    <tr><th>學校</th><th>機構代碼</th><th>Scopus 機構名稱</th><th>來源</th><th>修改</th></tr>
+    {% for name, row in affiliations %}
+    <tr>
+      <td>{{ name }}</td>
+      <td class="num {% if not (row and row.af_id) %}warning{% endif %}">{{ row.af_id if row and row.af_id else "待查" }}</td>
+      <td>{{ row.af_name or "" if row else "" }}</td>
+      <td>{{ ("人工" if row.matched_by == "manual" else "自動") if row and row.af_id else "" }}</td>
+      <td>
+        <form method="post" action="/mapping/affiliation">
+          <input type="hidden" name="school_en" value="{{ name }}">
+          {% set cands = candidates_of(row) %}
+          <input name="af_id" list="cands-{{ loop.index }}" inputmode="numeric" placeholder="機構代碼" required size="10">
+          <datalist id="cands-{{ loop.index }}">
+            {% for c in cands %}<option value="{{ c.af_id }}">{{ c.name }}（{{ c.city }}，{{ c.doc_count }} 篇）</option>{% endfor %}
+          </datalist>
+          <button type="submit" class="secondary">指定</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</section>
+{% endif %}
 
 <section class="card">
   <h2>單位清單</h2>

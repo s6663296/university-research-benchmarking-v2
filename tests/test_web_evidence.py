@@ -76,3 +76,13 @@ def test_mismatch_banner(client, web_done_run):
     text = client.get(f"/runs/{web_done_run}").text
     assert "有 1 格重算值與存檔值不符" in text and f"?ind=total&amp;hl={uid}" in text
     assert "⚠ 重算值與存檔值不符" in client.get(f"/runs/{web_done_run}", params={"ind": "total"}).text
+
+
+def test_no_mismatch_banner_while_a_unit_is_refetching(client, web_done_run):
+    # 重新抓取中的單位暫時沒有重算值，其他單位的名次也會跟著變：不能據此報「不符」
+    from app.db.models import RunUnit
+    with client.app.state.session_factory() as s:
+        ru = s.scalars(select(RunUnit).where(RunUnit.run_id == web_done_run)).first()
+        ru.status = "selfcite"
+        s.commit()
+    assert "格重算值與存檔值不符" not in client.get(f"/runs/{web_done_run}").text

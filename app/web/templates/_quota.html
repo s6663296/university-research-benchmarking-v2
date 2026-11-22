@@ -1,12 +1,45 @@
+{% if grid is not none %}
+{# 多組 Key：每支 API 一列、每組 Key 一欄，只顯示剩餘百分比與細條，詳細數字放在提示 #}
+{% if grid %}
+<div class="quota-grid-wrap">
+<table class="quota-grid">
+  <thead><tr><th></th>{% for k in keys %}<th scope="col" title="{{ k }}">Key {{ loop.index }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in grid %}
+  <tr><th scope="row">{{ row.label }}</th>
+    {% for q in row.cells %}
+    {% if q is none %}<td class="muted">—</td>
+    {% elif q.expired %}<td class="muted" title="{{ q.reset_at.strftime('%m/%d %H:%M') }} 已重置，本期額度待查">待查</td>
+    {% elif q.limit and q.remaining is not none %}<td class="quota-cell{% if q.low %} low{% endif %}" title="剩 {{ '{:,}'.format(q.remaining) }} / {{ '{:,}'.format(q.limit) }} 次/週{% if q.reset_at %}，{{ q.reset_at.strftime('%m/%d %H:%M') }} 重置{% endif %}">
+      <span class="quota-pct">{{ q.percent }}%</span><div class="quota-bar"><span style="width: {{ q.percent }}%"></span></div></td>
+    {% elif q.remaining is not none %}<td class="quota-cell"><span class="quota-pct">{{ '{:,}'.format(q.remaining) }}</span></td>
+    {% else %}<td class="muted">—</td>{% endif %}
+    {% endfor %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% set observed = grid | map(attribute="cells") | sum(start=[]) | reject("none") | map(attribute="observed_at") | max %}
+<div class="quota-meta"><span>{{ observed.strftime("%m/%d %H:%M") }} 更新</span></div>
+{% else %}
+<p class="muted">尚無額度資料</p>
+{% endif %}
+{% else %}
 {% for q in quotas %}
-<div class="quota{% if q.low %} low{% endif %}">
-  <div class="quota-head"><strong>{{ q.label }}</strong>{% if q.remaining is not none %}<span class="quota-figures"><b class="quota-left">{{ "{:,}".format(q.remaining) }}</b>{% if q.limit %} / {{ "{:,}".format(q.limit) }} 次/週{% else %} 次{% endif %}</span>{% endif %}</div>
-  {% if q.limit and q.remaining is not none %}<div class="quota-bar" title="剩 {{ q.percent }}%"><span style="width: {{ q.percent }}%"></span></div>{% endif %}
+{% set expired = q.expired %}
+<div class="quota{% if not expired and q.low %} low{% endif %}">
+  <div class="quota-head"><strong>{{ q.label }}</strong>
+    {% if expired %}<span class="quota-figures">本期額度待查</span>
+    {% elif q.remaining is not none %}<span class="quota-figures"><b class="quota-left">{{ "{:,}".format(q.remaining) }}</b>{% if q.limit %} / {{ "{:,}".format(q.limit) }} 次/週{% else %} 次{% endif %}</span>{% endif %}
+  </div>
+  {% if not expired and q.limit and q.remaining is not none %}<div class="quota-bar" title="剩 {{ q.percent }}%"><span style="width: {{ q.percent }}%"></span></div>{% endif %}
   <div class="quota-meta">{% if q.reset_at %}<span>{{ q.reset_at.strftime("%m/%d %H:%M") }} 重置</span>{% endif %}<span>{{ q.observed_at.strftime("%m/%d %H:%M") }} 更新</span></div>
 </div>
 {% else %}
 <p class="muted">尚無額度資料</p>
 {% endfor %}
+{% endif %}
 {% if check %}
 <p id="api-check" hx-swap-oob="true" class="{{ 'ok' if check.ok else 'error' }}">{{ check.message }}</p>
 {% endif %}

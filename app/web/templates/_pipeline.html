@@ -7,7 +7,7 @@
       {% if s.href %}<a href="{{ s.href }}" title="{{ state_labels[s.state] }}{% if info %}：{{ info }}{% endif %}{% if s.detail %}（{{ s.detail }}）{% endif %}">{% else %}<div title="{{ state_labels[s.state] }}">{% endif %}
         <span class="stage-icon" aria-label="{{ state_labels[s.state] }}">{{ {"done": "✔", "active": "●", "error": "✖", "warn": "!", "todo": loop.index}[s.state] }}</span>
         <span class="stage-label">{{ s.label_parts[0] }}{% if s.label_parts[1] %}<span class="stage-label-tail">{{ s.label_parts[1] }}</span>{% endif %}</span>
-        {% if s.progress %}<span class="stage-progress">{% for line in s.progress %}<span>{{ line }}</span>{% endfor %}</span>{% endif %}
+        {% if s.progress %}<span class="stage-progress">{% for line in s.progress %}{% set name, figure = line|split_figure %}<span><span>{{ name }}</span>{% if figure %} <span class="stage-figure">{{ figure }}</span>{% endif %}</span>{% endfor %}</span>{% endif %}
         {% if s.summary %}<span class="stage-summary">{{ s.summary }}</span>{% endif %}
       {% if s.href %}</a>{% else %}</div>{% endif %}
     </li>

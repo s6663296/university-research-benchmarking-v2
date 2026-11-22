@@ -27,7 +27,9 @@ def state_signature(request: Request, session: Session, run_id: int | None = Non
         opened = opened.where(Anomaly.run_id == run_id)
         exports = exports.where(Export.run_id == run_id)
     open_counts, export_counts = dict(session.execute(opened).all()), dict(session.execute(exports).all())
-    parts = [f"{rid}:{status}:{int(manager.is_running(rid))}:{open_counts.get(rid, 0)}:{export_counts.get(rid, 0)}"
+    # 背景重新抓取單位時每一輪都會重算，待確認數跟著變；整批抓完才重新整理一次，免得打斷正在看的頁面
+    parts = [f"{rid}:{status}:refetch" if manager.refetching(rid) is not None else
+             f"{rid}:{status}:{int(manager.is_running(rid))}:{open_counts.get(rid, 0)}:{export_counts.get(rid, 0)}"
              for rid, status in session.execute(runs)]
     parts.append(f"show:{manager.display_run_id}")
     return hashlib.md5("|".join(parts).encode()).hexdigest()[:12]

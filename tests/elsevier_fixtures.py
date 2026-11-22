@@ -10,7 +10,6 @@ FIXTURES = Path(__file__).parent / "fixtures" / "elsevier"
 SCOPUS_URL = r".*/content/search/scopus.*"
 SCIVAL_URL = r".*/analytics/scival/publication/metrics.*"
 ABSTRACT_URL = r".*/content/abstract/scopus_id/.*"
-OPENALEX_URL = r"https://api\.openalex\.org/works.*"
 
 
 @cache

@@ -1,4 +1,7 @@
 import json
+import re
+
+import pytest
 
 import httpx
 from sqlalchemy import select
@@ -6,14 +9,12 @@ from sqlalchemy import select
 from app.db.models import RunPublication, RunUnit, Unit
 from app.db.settings_store import set_setting
 from app.elsevier.cache import ApiCache
-from app.elsevier.client import ElsevierClient
-from app.elsevier.inset_selfcite import (MAX_QUERY, InSetSelfCitations, count_in_set, full_view_refs, ref_groups,
-                                         ref_query)
+from app.elsevier.client import ElsevierClient, ElsevierError
+from app.elsevier.inset_selfcite import InSetSelfCitations, count_in_set, full_view_refs
 from app.elsevier.scival import citation_count
-from app.elsevier.scopus import build_query
-from app.runs.executor import execute_run
-from tests.elsevier_fixtures import ABSTRACT_URL, abstract_full, ids67, load
-from tests.run_helpers import PAPERS, FakeElsevier, doi_of, fake_client, make_run
+from app.runs.executor import SELFCITE_ERROR, execute_run
+from tests.elsevier_fixtures import ABSTRACT_URL, SCOPUS_URL, abstract_full, ids67, load
+from tests.run_helpers import PAPERS, FakeElsevier, fake_client, make_run
 
 
 def client(cache=None):
@@ -49,22 +50,26 @@ async def test_single_paper_citing_itself(respx_mock):
 
 async def test_count_and_permanent_cache(respx_mock, session_factory):
     refs = {"2": ["1", "99"], "3": ["1", "2"]}
-    route = respx_mock.get(url__regex=ABSTRACT_URL).mock(side_effect=lambda req: (
-        httpx.Response(404) if req.url.path.endswith("/4")
-        else httpx.Response(200, json=abstract_full(refs.get(req.url.path.rsplit("/", 1)[-1], [])))))
+    route = respx_mock.get(url__regex=ABSTRACT_URL).mock(side_effect=lambda req: httpx.Response(
+        200, json=abstract_full(refs.get(req.url.path.rsplit("/", 1)[-1], []))))
+    # 快取中的參考文獻要先向 Scopus 確認沒有重載過；這裡沒有任何論文被重載
+    search = respx_mock.get(url__regex=SCOPUS_URL).mock(return_value=httpx.Response(
+        200, json={"search-results": {"opensearch:totalResults": "0", "entry": []}}))
     cache = ApiCache(session_factory, cache_days=1)
     counter = InSetSelfCitations(client(cache))
     ids = ["1", "2", "3", "4"]
     assert await counter.count(ids, {"1": 5}) == {"1": 2, "2": 1}
-    assert route.call_count == 4 and counter.fetched == 4
-    # 同一實例：重疊的論文不再請求；新實例：從永久快取讀出
+    assert route.call_count == 4 and counter.fetched == 4 and search.call_count == 0
+    # 同一實例：重疊的論文不再請求；新實例：從永久快取讀出，只花一次 Scopus 查詢
     assert await counter.count(["1", "2"], {"1": 5}) == {"1": 1}
     again = InSetSelfCitations(client(cache))
     assert await again.count(ids, {"1": 5}) == {"1": 2, "2": 1}
-    assert route.call_count == 4 and again.fetched == 0
+    assert route.call_count == 4 and again.fetched == 0 and search.call_count == 1
 
 
-async def test_run_subtracts_citations_within_each_unit(session, session_factory, respx_mock):
+@pytest.mark.parametrize("strategy", ["scival_pubset_ref", "scival_pubset"])
+async def test_run_subtracts_citations_within_each_unit(session, session_factory, respx_mock, strategy):
+    set_setting(session, "self_citation_strategy", strategy)
     ids = ids67()
     base = base_citations()
     im = ids[0:20]                         # 中央資管
@@ -76,8 +81,10 @@ async def test_run_subtracts_citations_within_each_unit(session, session_factory
                         refs={q1: [p], q2: [p, "999"], outside: [p], extra: [p]})
     fake.install(respx_mock)
     run = make_run(session)
-    assert run.self_citation_strategy == "scival_pubset"
-    await execute_run(run.id, session_factory, fake_client())
+    assert run.self_citation_strategy == strategy
+    elsevier = fake_client()
+    await execute_run(run.id, session_factory, elsevier)
+    assert elsevier.wait_for_quota_reset   # 補齊參考文獻用完額度時，等重置後自動續查
 
     def pub(dept):
         unit = session.scalars(select(Unit).where(Unit.school == "中央", Unit.ncu_dept == dept)).first()
@@ -92,6 +99,11 @@ async def test_run_subtracts_citations_within_each_unit(session, session_factory
     assert pub("資訊管理學系")["citations"] == base[p] - 2
     assert pub("財務金融學系")["self_citations"] == 3
     assert sorted(fake.abstract_calls) == sorted(set(fake.abstract_calls))   # 每篇只查一次
+    if strategy == "scival_pubset_ref":   # REF() 篩選後只抓引用了單位論文的論文
+        assert set(fake.abstract_calls) == {q1, q2, extra}
+        assert any("REF(" in q for q in fake.scopus_calls)
+    else:
+        assert len(fake.abstract_calls) > 3
 
 
 async def test_other_strategies_do_not_fetch_references(session, session_factory, respx_mock):
@@ -99,115 +111,59 @@ async def test_other_strategies_do_not_fetch_references(session, session_factory
     fake = FakeElsevier()
     fake.install(respx_mock)
     run = make_run(session)
-    await execute_run(run.id, session_factory, fake_client())
-    assert fake.abstract_calls == []
+    elsevier = fake_client()
+    await execute_run(run.id, session_factory, elsevier)
+    assert fake.abstract_calls == [] and not elsevier.wait_for_quota_reset
     row = session.scalars(select(RunPublication).where(RunPublication.run_id == run.id)).first()
     assert json.loads(row.metrics_json)["self_citations"] is None
 
 
-# ---- 篩選 + 參考文獻；Abstract Retrieval 額度用完時只用 Scopus Search ----
-
-IM_QUERY = build_query("Department of Information Management, National Central University", 2021, 2025)
-
-
-def im_case():
-    """中央資管 20 篇：P0 被 3 篇引用（含自己）、P1 被 1 篇引用，另有引用組外論文的參考文獻。"""
-    im = ids67()[0:20]
-    p0, p1, q1, q2, q3 = im[:5]
-    refs = {p0: [p0, "999"], q1: [p0, p1], q2: [p0, "998"], q3: ["997"], ids67()[30]: [p0]}
-    return im, refs, {p0: 3, p1: 1}
-
-
-async def count_im(fake, respx_mock, cache=None, counter=None):
-    fake.install(respx_mock)
-    im = ids67()[0:20]
-    counter = counter or InSetSelfCitations(client(cache))
-    result = await counter.count(im, {i: 5 for i in im}, query=IM_QUERY, dois={i: doi_of(i) for i in im})
-    return result, counter
-
-
-async def test_filter_then_fetch_only_citers(respx_mock):
-    im, refs, truth = im_case()
-    fake = FakeElsevier(refs=refs)
-    result, counter = await count_im(fake, respx_mock)
-    assert result == truth
-    assert sorted(fake.abstract_calls) == sorted({im[0], im[2], im[3]})   # 只查引用了單位論文的 3 篇
-    assert fake.openalex_calls == [] and counter.fetched == 3
-    assert counter.refs_done == counter.refs_total == 3   # 首頁流程圖的細部進度
-
-
-async def test_scopus_only_when_abstract_quota_exhausted(respx_mock):
-    im, refs, truth = im_case()
-    # OpenAlex 查不到 q1、少了 q2 → P0：兩者都只能靠 Scopus 的整組檢查補上
-    fake = FakeElsevier(refs=refs, abstract_quota=0, oa_missing={im[2]}, oa_drop={(im[3], im[0])})
-    result, counter = await count_im(fake, respx_mock)
-    assert result == truth
-    assert fake.abstract_calls == [] and counter.abstract_exhausted and fake.openalex_calls
-
-
-async def test_references_only_when_ref_search_unavailable(respx_mock):
-    im, refs, truth = im_case()
-    fake = FakeElsevier(refs=refs, ref_search=False)
-    result, _ = await count_im(fake, respx_mock)
-    assert result == truth
-    assert sorted(fake.abstract_calls) == sorted(im)   # 退回逐篇查參考文獻
-
-
-async def test_cached_references_need_only_the_filter(respx_mock, session_factory):
-    im, refs, truth = im_case()
-    cache = ApiCache(session_factory, cache_days=1)
-    await count_im(FakeElsevier(refs=refs), respx_mock, cache)
-    fake = FakeElsevier(refs=refs)
-    result, counter = await count_im(fake, respx_mock, cache)
-    assert result == truth and fake.abstract_calls == [] and counter.fetched == 0
-
-
-async def test_scopus_only_setting_never_downloads_references(respx_mock):
-    im, refs, truth = im_case()
-    fake = FakeElsevier(refs=refs)
-    result, counter = await count_im(fake, respx_mock, counter=InSetSelfCitations(client(), scopus_only=True))
-    assert result == truth   # 與逐篇查參考文獻的結果相同
-    assert fake.abstract_calls == [] and fake.openalex_calls and counter.searches > 0
-    assert counter.refs_total == 0 and not counter.abstract_exhausted
-
-
-async def test_scopus_only_still_uses_cached_references(respx_mock, session_factory):
-    im, refs, truth = im_case()
-    cache = ApiCache(session_factory, cache_days=1)
-    await count_im(FakeElsevier(refs=refs), respx_mock, cache)
-    fake = FakeElsevier(refs=refs)
-    result, counter = await count_im(fake, respx_mock, cache,
-                                     InSetSelfCitations(client(cache), scopus_only=True))
-    # 引用者的參考文獻都在永久快取：不花額度，也不必逐篇查 Scopus
-    assert result == truth and fake.abstract_calls == [] and fake.openalex_calls == []
-    assert counter.refs_done == counter.refs_total == 3
-
-
-async def test_run_uses_selfcite_method_setting(session, session_factory, respx_mock):
-    set_setting(session, "selfcite_method", "scopus")
-    fake = FakeElsevier()
-    fake.install(respx_mock)
-    run = make_run(session)
-    live = {}
-    await execute_run(run.id, session_factory, fake_client(), live=live)
-    assert fake.abstract_calls == [] and live == {}   # 結束後移除進度物件
-
-
-def test_ref_groups_keep_queries_short():
-    ids = [str(85000000000 + i) for i in range(300)]
-    groups = ref_groups(IM_QUERY, ids)
-    assert sum(groups, []) == ids and len(groups) > 1
-    assert all(len(ref_query(IM_QUERY, g)) <= MAX_QUERY for g in groups)
-
-
 async def test_run_marks_failures_in_the_selfcite_step(session, session_factory, respx_mock):
-    from app.runs.executor import SELFCITE_ERROR
-    # REF 不可用、Abstract Retrieval 又沒有額度：排除自我引用這一步失敗
-    FakeElsevier(refs={ids67()[1]: [ids67()[0]]}, ref_search=False, abstract_quota=0).install(respx_mock)
+    set_setting(session, "self_citation_strategy", "scival_pubset")   # 每篇都要抓參考文獻
+    FakeElsevier(abstract_status=500).install(respx_mock)
     run = make_run(session)
     await execute_run(run.id, session_factory, fake_client())
     session.expire_all()
     failed = session.scalars(select(RunUnit).where(RunUnit.run_id == run.id, RunUnit.status == "failed")).all()
-    assert failed and all(ru.error.startswith(SELFCITE_ERROR + "Scopus Abstract Retrieval API 的額度已用完")
-                          for ru in failed)
+    assert failed and all(ru.error.startswith(SELFCITE_ERROR) for ru in failed)
     assert all(ru.eid_count is not None for ru in failed)   # Scopus、SciVal 都已完成
+
+
+async def test_ref_filter_fetches_only_citers(respx_mock):
+    from app.elsevier.ref_selfcite import RefSelfCitations, ref_groups
+    refs = {"2": ["1", "99"], "3": ["1", "2"]}
+    queries = []
+
+    def search(req):
+        q = req.url.params["query"]
+        queries.append(q)
+        if q.startswith("REF(85120042660)"):   # 每次分析一次的 REF() 檢查
+            return httpx.Response(200, json={"search-results": {"opensearch:totalResults": "1", "entry": []}})
+        cited = set(re.findall(r"REF\((\d+)\)", q))
+        hits = [s for s, r in refs.items() if cited & set(r)] + ["X"]   # X 不在單位論文中（SciVal 沒收錄）
+        hits = [h for h in hits if h != "X" or cited]
+        return httpx.Response(200, json={"search-results": {"opensearch:totalResults": str(len(hits)), "entry": [
+            {"dc:identifier": f"SCOPUS_ID:{h}", "eid": f"2-s2.0-{h}"} for h in hits]}})
+
+    respx_mock.get(url__regex=SCOPUS_URL).mock(side_effect=search)
+    route = respx_mock.get(url__regex=ABSTRACT_URL).mock(side_effect=lambda req: httpx.Response(
+        200, json=abstract_full(refs.get(req.url.path.rsplit("/", 1)[-1], []))))
+    counter = RefSelfCitations(client())
+    ids = ["1", "2", "3", "4"]
+    assert await counter.count(ids, {"1": 5, "2": 1}, query="AFFIL(x)") == {"1": 2, "2": 1}
+    assert route.call_count == 2 and counter.fetched == 2     # 只抓引用者 2、3
+    assert counter.searches == 2 and len(queries) == 2         # 檢查 1 次 + 篩選 1 組
+    # 第二個單位：REF() 檢查不再重做
+    assert await counter.count(["1", "2"], {"1": 5}, query="AFFIL(y)") == {"1": 1}
+    assert len(queries) == 3 and route.call_count == 2
+    # 查詢長度上限：分組不超過 MAX_QUERY
+    groups = ref_groups("Q" * 400, [str(10 ** 10 + i) for i in range(300)])
+    assert len(groups) > 1 and sum(map(len, groups)) == 300
+
+
+async def test_ref_filter_stops_when_ref_unusable(respx_mock):
+    from app.elsevier.ref_selfcite import RefSelfCitations
+    respx_mock.get(url__regex=SCOPUS_URL).mock(return_value=httpx.Response(
+        200, json={"search-results": {"opensearch:totalResults": "0", "entry": []}}))
+    with pytest.raises(ElsevierError, match="REF"):
+        await RefSelfCitations(client()).count(["1"], {"1": 3}, query="AFFIL(x)")

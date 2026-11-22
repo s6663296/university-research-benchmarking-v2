@@ -125,6 +125,17 @@ button.danger { border-color: var(--danger); background: var(--danger); }
 .quota-bar { height: 5px; margin: .2rem 0 .2rem; background: var(--subtle); border-radius: 3px; overflow: hidden; }
 .quota-bar > span { display: block; height: 100%; background: var(--ok); }
 .quota.low .quota-bar > span { background: var(--danger); }
+.quota-grid-wrap { overflow-x: auto; margin-bottom: .3rem; }
+.quota-grid { width: 100%; font-size: 13px; background: none; }
+.quota-grid th, .quota-grid td { background: none; border: none; border-bottom: 1px solid var(--line); padding: .3rem .4rem; min-width: 0; vertical-align: middle; }
+.quota-grid thead th { font-weight: 600; color: var(--muted); font-size: 12px; text-align: center; }
+.quota-grid tbody th { font-weight: 600; padding-left: 0; }
+.quota-grid td { text-align: center; min-width: 3.2rem; font-variant-numeric: tabular-nums; }
+.quota-grid tbody tr:last-child > * { border-bottom: none; }
+.quota-pct { font-weight: 700; color: var(--ok); }
+.quota-cell .quota-bar { height: 3px; margin: .15rem 0 0; }
+.quota-cell.low .quota-pct { color: var(--danger); }
+.quota-cell.low .quota-bar > span { background: var(--danger); }
 .pipeline { list-style: none; display: flex; margin: 0; padding: 0; gap: 1.4rem; }
 .pipeline .stage { flex: 1 1 0; min-width: 0; position: relative; }
 .pipeline .stage + .stage::before { content: "→"; position: absolute; left: -1.15rem; top: .55rem; color: var(--muted); }
@@ -138,7 +149,10 @@ button.danger { border-color: var(--danger); background: var(--danger); }
 .stage-summary, .stage-progress { font-size: 12px; line-height: 1.5; color: var(--muted); max-width: 100%; }
 .stage-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stage-progress { display: flex; flex-direction: column; gap: .2rem; }
-.stage-progress > span { white-space: nowrap; }
+/* 每行分成名稱與數字，各自不斷行；欄位太窄時數字換到名稱下方，不會溢出到隔壁 */
+.stage-progress > span { display: flex; flex-wrap: wrap; justify-content: center; column-gap: .3em; }
+.stage-progress > span > span { overflow-wrap: anywhere; }
+.stage-progress .stage-figure { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .stage.done .stage-icon { border-color: var(--ok); background: var(--ok); color: #fff; }
 .stage.active .stage-icon { border-color: var(--primary); color: var(--primary); animation: pulse 1.2s ease-in-out infinite; }
 .stage.active .stage-summary { color: var(--primary); }
@@ -158,11 +172,13 @@ button.danger { border-color: var(--danger); background: var(--danger); }
   .pipeline .stage > a, .pipeline .stage > div { flex-direction: row; text-align: left; gap: .6rem; }
   .stage-label { min-height: 0; margin-top: 0; }
   .stage-label-tail { display: inline; }
+  .stage-progress > span { justify-content: flex-start; }
 }
 /* 版本紀錄：短欄依內容縮小，系所保留可閱讀的換行寬度。 */
 table.runs td { min-width: 0; vertical-align: middle; }
 table.runs td:first-child, table.runs td:nth-child(2), table.runs td:nth-child(3) { white-space: nowrap; }
-table.runs .run-id { font-weight: 600; }
+table.runs .run-no { font-weight: 600; }
+table.runs .run-uid { font-family: ui-monospace, Consolas, monospace; }
 table.runs td.row-actions { white-space: nowrap; text-align: right; }
 table.runs td.row-actions > a { margin-right: .6rem; }
 table.runs td.row-actions form { margin: .1rem 0 .1rem .3rem; }
@@ -368,3 +384,30 @@ tr.ev-me td { background: var(--primary-soft); font-weight: 600; }
   .ai-item.current { border-bottom-color: var(--primary); }
   .ai-slide { padding: 1.2rem; min-height: 0; }
 }
+
+/* 整頁換頁時的中央轉圈（page-loading.js） */
+.page-loading { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center;
+  background: rgba(246, 246, 246, .55); opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .15s, visibility .15s; }
+.page-loading.visible { opacity: 1; visibility: visible; pointer-events: auto; cursor: progress; }
+.page-loading-spinner { width: 2.75rem; height: 2.75rem; border-radius: 50%;
+  border: 4px solid var(--primary-strong); border-top-color: var(--primary);
+  animation: page-spin .8s linear infinite; }
+@keyframes page-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .page-loading-spinner { animation-duration: 2s; } }
+.load-balance { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 .6rem; }
+.load-balance label { font-weight: 600; cursor: pointer; }
+/* 壓縮檔下載進度（export-progress.js） */
+.export-zip { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; }
+.export-zip a.busy { opacity: .6; pointer-events: none; cursor: progress; }
+.export-status { display: inline-flex; align-items: center; gap: .5rem; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.export-status progress { width: 10rem; height: .5rem; accent-color: var(--primary); }
+.export-status.error { color: var(--danger); }
+/* 背景重新抓取：按鈕原地換成進度（_refetch_button.html） */
+.refetch-state { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; }
+.refetch-state.ok { color: var(--ok); }
+.refetch-state.error { color: var(--danger); }
+.refetch-state .spinner { width: .9rem; height: .9rem; border-radius: 50%; flex: none;
+  border: 2px solid var(--primary-strong); border-top-color: var(--primary);
+  animation: page-spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .refetch-state .spinner { animation-duration: 2s; } }

@@ -100,7 +100,7 @@ def test_baseline_override_marks_stale(client, run_id):
         run = s.get(Run, run_id)
         copies = []
         for back in (1, 2):   # 自動會挑較近的前一期；手動改選更早的那一期才算換了前期
-            other = Run(**{c.name: getattr(run, c.name) for c in Run.__table__.columns if c.name != "id"})
+            other = Run(**{c.name: getattr(run, c.name) for c in Run.__table__.columns if c.name not in ("id", "uid")})
             other.period_from, other.period_to = run.period_from - back, run.period_to - back
             s.add(other)
             copies.append(other)
@@ -214,7 +214,7 @@ def test_baseline_options_show_date(client, run_id):
     factory = client.app.state.session_factory
     with factory() as s:
         run = s.get(Run, run_id)
-        other = Run(**{c.name: getattr(run, c.name) for c in Run.__table__.columns if c.name != "id"})
+        other = Run(**{c.name: getattr(run, c.name) for c in Run.__table__.columns if c.name not in ("id", "uid")})
         other.period_from, other.period_to = run.period_from - 1, run.period_to - 1
         s.add(other)
         s.commit()
@@ -226,7 +226,7 @@ def test_same_period_run_cannot_be_chosen(client, run_id):
     factory = client.app.state.session_factory
     with factory() as s:
         run = s.get(Run, run_id)
-        twin = Run(**{c.name: getattr(run, c.name) for c in Run.__table__.columns if c.name != "id"})
+        twin = Run(**{c.name: getattr(run, c.name) for c in Run.__table__.columns if c.name not in ("id", "uid")})
         s.add(twin)
         s.commit()
         twin_id = twin.id
@@ -286,3 +286,22 @@ def test_two_column_edit_and_red_text(client, run_id):
     assert '<strong class="ai-red">排名第一</strong>' in page and "挑戰／機會" in page
     texts = slide_texts(client.get(f"/runs/{run_id}/pptx/{DEPT}").content)
     assert any("挑戰／機會" in t and "台大領先" in t for t in texts)
+
+
+def test_college_zip_export_explains_missing_summary(client, run_id):
+    import time
+
+    url = f"/runs/{run_id}/exports/college"
+    client.post(url)
+    for _ in range(100):
+        state = client.get(url).json()
+        if state["error"] or state["ready"]:
+            break
+        time.sleep(0.05)
+    assert state["error"] == "請先產生並確認全院總結" and not state["ready"]
+    # 下載頁：沒有總結的學院不是下載連結，也不提供 zip 按鈕
+    text = client.get(f"/runs/{run_id}?ind=downloads").text
+    assert "/college-summary/" not in text and "exports/college" not in text and "AI 總結</a> 產生" in text
+    generate(client, run_id)
+    text = client.get(f"/runs/{run_id}?ind=downloads").text
+    assert "/college-summary/" in text and f'data-export="/runs/{run_id}/exports/college"' in text

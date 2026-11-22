@@ -9,13 +9,15 @@ from decimal import Decimal
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db.models import Anomaly, Result, Run, RunPublication, RunUnit
+from app.db.models import Anomaly, Result, Run, RunPublication, RunUnit, Unit
 from app.db.settings_store import get_setting
 from app.elsevier.client import ElsevierClient, ElsevierError
 from app.elsevier.inset_selfcite import InSetSelfCitations
+from app.elsevier.ref_selfcite import RefSelfCitations
 from app.elsevier.quota import API_LABELS
 from app.elsevier.scival import MetricsFetcher, PubMetrics, scival_year_ranges
-from app.elsevier.scopus import search_docs
+from app.elsevier.overlap import Overlap, drop_other_schools, overlap_of
+from app.elsevier.scopus import school_names, search_docs
 from app.elsevier.selfcite import get_strategy
 from app.mapping.service import units_of
 from app.metrics.compute import compute_unit, rank
@@ -103,7 +105,8 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
     with session_factory() as s:
         run = s.get(Run, run_id)
         cfg = RunConfig.from_json(run.scope_json)
-        run.status, run.error = "running", None
+        if unit_ids is None or run.status != "done":  # 已完成的分析重新抓取單位時維持已完成，結果頁照常顯示
+            run.status, run.error = "running", None
         q = select(RunUnit).where(RunUnit.run_id == run_id)
         if unit_ids is not None:  # 共用同一查詢的單位一起重抓，數字才會一致
             queries = s.scalars(select(RunUnit.query).where(RunUnit.run_id == run_id,
@@ -113,15 +116,20 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
             q = q.where(RunUnit.status != "done")
         by_query: dict[str, list[int]] = defaultdict(list)
         scopus_done: set[int] = set()  # 接續時 Scopus 已完成的單位，進度直接從 SciVal 算起
+        # 校名互相包含的學校（台大 ⊂ 台科大）：查詢分不出來的論文要逐篇讀機構全文
+        schools = school_names(u.dept_en for u in units_of(s, run.mapping_version_id))
+        overlaps: dict[str, Overlap | None] = {}
         for ru in s.scalars(q.order_by(RunUnit.id)):
             by_query[ru.query].append(ru.id)
+            overlaps.setdefault(ru.query, overlap_of(s.get(Unit, ru.unit_id).dept_en, schools))
             if only_unfinished and ru.eid_count is not None:
                 scopus_done.add(ru.id)
         strategy = get_strategy(run.self_citation_strategy)
         _, cite_range = scival_year_ranges(run.period_from, run.period_to, run.created_at.year)
-        # 一次只處理幾個單位：全校分析時不會所有單位同時湧入，進度也會逐一完成而不是全部卡在半途
-        units_at_once = asyncio.Semaphore(max(int(get_setting(s, "max_concurrency")), 1))
-        scopus_only = get_setting(s, "selfcite_method") == "scopus"
+        # 一次只處理幾個單位：全校分析時不會所有單位同時湧入，進度也會逐一完成而不是全部卡在半途。
+        # 負載平衡時請求會分散到各組 Key 並行送出，同時處理的單位數也跟著乘上 Key 的組數
+        keys = len(client.api_keys) if client.load_balance else 1
+        units_at_once = asyncio.Semaphore(max(int(get_setting(s, "max_concurrency")), 1) * keys)
         s.commit()
     if use_cache is None:
         use_cache = only_unfinished or not cfg.force_refresh
@@ -129,7 +137,14 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
     # 所以整批改用 cite_range，被引數與其他指標同一次請求。SciVal 逐篇指標忽略 includeSelfCitations，
     # 一律取含自我引用的數字，需要排除時再減去組內互引
     fetcher = MetricsFetcher(client, year_range=cite_range, include_self="true", use_cache=use_cache)
-    in_set = InSetSelfCitations(client, use_cache=use_cache, scopus_only=scopus_only) if strategy.in_set else None
+    if not strategy.in_set:
+        in_set = None
+    elif strategy.ref_filter:
+        in_set = RefSelfCitations(client, use_cache=use_cache)
+    else:
+        in_set = InSetSelfCitations(client)
+    if in_set is not None:   # 第一次補齊參考文獻可能用完額度：等到重置後自動續查，不中斷分析
+        client.wait_for_quota_reset = True
     if live is not None and in_set is not None:
         live[run_id] = in_set
     saved_usage = Counter(client.usage)  # 已寫入這次分析的部分；同一個 client 之前的用量不算
@@ -150,39 +165,49 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
                     setattr(ru, k, v)
             s.commit()
 
-    async def fetch(query: str, ru_ids: list[int]) -> None:
-        async with units_at_once:
-            await _fetch(query, ru_ids)
+    def fail(ru_ids: list[int], prefix: str, e: Exception) -> None:
+        message = e.message if isinstance(e, ElsevierError) else f"非預期錯誤：{type(e).__name__}: {e}"
+        update(ru_ids, status="failed", error=prefix + message)
 
-    async def _fetch(query: str, ru_ids: list[int]) -> None:
+    async def fetch(query: str, ru_ids: list[int]) -> None:
+        async with units_at_once:   # 排除自我引用時讓出名額，其他單位繼續取指標
+            fetched = await _metrics(query, ru_ids)
+        if fetched is None:
+            return
+        docs, metrics = fetched
+        if in_set is not None:
+            update(ru_ids, status="selfcite")
+            try:
+                # SciVal Publication Set 只含 SciVal 有收錄的論文，組內互引也只算這些論文之間的引用
+                selfs = await in_set.count([d.scopus_id for d in docs if d.scopus_id in metrics],
+                                           {i: m.citations for i, m in metrics.items()}, query=query)
+            except Exception as e:  # 單一單位的錯誤不影響其他單位
+                fail(ru_ids, SELFCITE_ERROR, e)
+                return
+            for i, m in metrics.items():
+                if m.citations is not None:
+                    m.self_citations = selfs.get(i, 0)
+                    m.citations = max(m.citations - m.self_citations, 0)
+        save(ru_ids, docs, metrics)
+
+    async def _metrics(query: str, ru_ids: list[int]):
+        """Scopus 取 EID、SciVal 取指標；失敗時記下原因並回傳 None。"""
         if all(i in scopus_done for i in ru_ids):
             update(ru_ids, status="scival", error=None)
         else:
             update(ru_ids, status="scopus", error=None, eid_count=None)
-        prefix = ""
         try:
-            docs = await search_docs(client, query, use_cache=use_cache)  # 接續時由快取取回 EID 清單
-            ids = [d.scopus_id for d in docs]
+            docs = await search_docs(client, query, use_cache=use_cache, strict=in_set is not None)
+            docs = await drop_other_schools(client, query, docs, overlaps[query], use_cache=use_cache,
+                                            strict=in_set is not None)
             # 先記下篇數：失敗時看 eid_count 有沒有值，就知道是卡在 Scopus 還是 SciVal
             update(ru_ids, status="scival", eid_count=len(docs))
-            metrics = await fetcher.fetch(ids)
-            if in_set is not None:
-                prefix = SELFCITE_ERROR
-                update(ru_ids, status="selfcite")
-                # SciVal Publication Set 只含 SciVal 有收錄的論文，組內互引也只算這些論文之間的引用
-                selfs = await in_set.count([i for i in ids if i in metrics],
-                                           {i: m.citations for i, m in metrics.items()},
-                                           query=query, dois={d.scopus_id: d.doi for d in docs if d.doi})
-                for i, m in metrics.items():
-                    if m.citations is not None:
-                        m.self_citations = selfs.get(i, 0)
-                        m.citations = max(m.citations - m.self_citations, 0)
-        except ElsevierError as e:
-            update(ru_ids, status="failed", error=prefix + e.message)
-            return
-        except Exception as e:  # 單一單位的非預期錯誤不影響其他單位
-            update(ru_ids, status="failed", error=f"{prefix}非預期錯誤：{type(e).__name__}: {e}")
-            return
+            return docs, await fetcher.fetch([d.scopus_id for d in docs])
+        except Exception as e:  # 單一單位的錯誤不影響其他單位
+            fail(ru_ids, "", e)
+            return None
+
+    def save(ru_ids: list[int], docs, metrics: dict[str, PubMetrics]) -> None:
         with session_factory() as s:
             for ru in s.scalars(select(RunUnit).where(RunUnit.id.in_(ru_ids))):
                 s.execute(delete(RunPublication).where(RunPublication.run_id == run_id,

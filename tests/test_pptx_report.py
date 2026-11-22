@@ -331,3 +331,35 @@ async def test_long_two_column_splits_and_stays_above_footer(session, done_run, 
         for i, a in enumerate(texts):  # 欄名文字疊在色塊上是刻意的；文字框彼此不重疊
             for b in texts[i + 1:]:
                 assert a[3] <= b[1] or b[3] <= a[1] or a[4] <= b[2] or b[4] <= a[2], (a[0], b[0])
+
+
+def wait_export(client, url):
+    import time
+
+    for _ in range(200):
+        state = client.get(url).json()
+        if state["ready"] or state["error"]:
+            return state
+        time.sleep(0.05)
+    raise AssertionError("壓縮檔一直沒有完成")
+
+
+def test_zip_export_reports_progress_then_serves_file(client, web_done_run):
+    url = f"/runs/{web_done_run}/exports/pptx"
+    started = client.post(url)
+    assert started.status_code == 202 and started.json()["error"] is None
+    state = wait_export(client, url)
+    assert state["ready"] and state["done"] == state["total"] > 0
+    r = client.get(url + "/file")
+    assert r.status_code == 200 and r.content[:2] == b"PK" and "attachment" in r.headers["content-disposition"]
+
+
+def test_zip_export_unknown_kind_and_missing_file(client, web_done_run):
+    assert client.post(f"/runs/{web_done_run}/exports/nope").status_code == 404
+    assert client.get(f"/runs/{web_done_run}/exports/college/file").status_code == 404
+
+
+def test_downloads_tab_uses_progress_buttons(client, web_done_run):
+    text = client.get(f"/runs/{web_done_run}?ind=downloads").text
+    assert f'data-export="/runs/{web_done_run}/exports/pptx"' in text
+    assert "export-progress.js" in text

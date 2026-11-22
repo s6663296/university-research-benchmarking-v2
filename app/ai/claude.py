@@ -20,6 +20,7 @@ SCHEMA = {
     "additionalProperties": False,
 }
 BULLET = "・"
+EFFORT_CHOICES = {"low": "低", "medium": "中", "high": "高", "xhigh": "很高", "max": "最高"}
 
 
 def _join(items) -> str:
@@ -42,9 +43,10 @@ def list_models(api_key: str, client=None) -> list[tuple[str, str]]:
 
 
 class ClaudeWriter:
-    def __init__(self, api_key: str, model: str, client=None):
+    def __init__(self, api_key: str, model: str, client=None, effort: str = "medium"):
         self.api_key = api_key
         self.model = model
+        self.effort = effort
         self._client = client
 
     def _get_client(self):
@@ -63,7 +65,7 @@ class ClaudeWriter:
                 max_tokens=16000,
                 system=system,
                 messages=[{"role": "user", "content": user}],
-                output_config={"effort": "medium", "format": {"type": "json_schema", "schema": SCHEMA}},
+                output_config={"effort": self.effort, "format": {"type": "json_schema", "schema": SCHEMA}},
                 betas=["server-side-fallback-2026-07-01"],
                 fallbacks="default",
             )

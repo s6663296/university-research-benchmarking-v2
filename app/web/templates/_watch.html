@@ -1,1 +1,1 @@
-{% if watch %}<div hidden hx-get="{{ watch }}" hx-trigger="every 3s" hx-swap="none"></div>{% endif %}
+{% if watch %}<div id="watch" hidden hx-get="{{ watch }}" hx-trigger="every 3s" hx-swap="none"{% if watch_oob %} hx-swap-oob="true"{% endif %}></div>{% endif %}

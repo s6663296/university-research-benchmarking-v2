@@ -25,12 +25,16 @@ class ApiCache:
 
     def get_many(self, keys: list[str]) -> dict[str, dict]:
         """一次查多筆，只回傳仍有效的。"""
+        return {key: data for key, (_, data) in self.get_many_dated(keys).items()}
+
+    def get_many_dated(self, keys: list[str]) -> dict[str, tuple[datetime, dict]]:
         oldest_valid = date.today() - timedelta(days=self.cache_days)
-        out: dict[str, dict] = {}
+        out = {}
         with self.session_factory() as s:
             for i in range(0, len(keys), 500):  # SQLite 的 IN 參數有上限
                 rows = s.scalars(select(ApiCacheRow).where(ApiCacheRow.key.in_(keys[i:i + 500])))
-                out.update((r.key, json.loads(r.response_json)) for r in rows if r.fetched_at.date() > oldest_valid)
+                out.update((r.key, (r.fetched_at, json.loads(r.response_json))) for r in rows
+                           if r.fetched_at.date() > oldest_valid)
         return out
 
     def put(self, key: str, endpoint: str, data: dict) -> None:

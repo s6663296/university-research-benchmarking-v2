@@ -1,0 +1,15 @@
+{# 重新抓取按鈕：按下後在背景抓取，原地顯示排隊／抓取中，每 2 秒更新 #}
+{% set url = "/runs/%d/units/%d/refetch" % (run_id, unit_id) %}
+{% if state in ("queued", "active") %}
+<span class="refetch-state" role="status" hx-get="{{ url }}" hx-trigger="every 2s" hx-swap="outerHTML"><span class="spinner" aria-hidden="true"></span>{{ "抓取中" if state == "active" else "排隊中" }}</span>
+{% elif state == "done" %}
+<span class="refetch-state ok" role="status">✓ 已重新抓取</span>
+{% elif state == "failed" %}
+<span class="refetch-state error" role="status">✖ 抓取失敗</span>
+{% elif state == "busy" %}
+<span class="refetch-state" role="status">分析執行中，完成後再試</span>
+{% else %}
+<button type="button" class="secondary" hx-post="{{ url }}" hx-swap="outerHTML">重新抓取</button>
+{% endif %}
+{# 按下後頁面的狀態簽章跟著更新，自己這頁才不會因為「開始重新抓取」被整頁重新整理 #}
+{% if new_watch %}{% with watch=new_watch, watch_oob=True %}{% include "_watch.html" %}{% endwith %}{% endif %}

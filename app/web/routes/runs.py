@@ -1,6 +1,7 @@
 import json
 import logging
 import zipfile
+from collections.abc import Callable
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -11,7 +12,8 @@ from sqlalchemy.orm import Session
 from app.ai.service import SummaryDraft, fresh_text
 from app.db.models import Anomaly, Run, RunUnit, Unit
 from app.db.settings_store import get_setting
-from app.elsevier.client import make_client
+from app.elsevier import affiliation
+from app.elsevier.client import ElsevierError, make_client
 from app.funding.service import count_text, funding_notes, funding_table, money, run_colleges
 from app.mapping.parser import is_ncu
 from app.mapping.service import latest_version, units_of
@@ -22,8 +24,9 @@ from app.reports.xlsx_report import build_run_workbook
 from app.reports.provenance import Explainer, columns_of, evidence_papers
 from app.reports.tables import SUMMARY_INDICATORS, fmt, indicator_table, summary_table
 from app.runs.anomaly import KIND_LABELS, resolve_anomaly
+from app.runs.executor import FETCHING
 from app.runs.scope import COMPARISON_LABELS, RunConfig, default_period
-from app.runs.service import create_run, preview_run
+from app.runs.service import create_run, preview_run, schools_needing_af_id
 from app.teachers.moe import import_years, latest_import
 from app.web.deps import get_session, render
 from app.web.live import watch_url
@@ -112,6 +115,7 @@ def _form_page(request: Request, session: Session, cfg: RunConfig | None = None,
                         years[-1] if years else 0, get_setting(session, "teacher_column"))
     return render(request, "run_new.html", status_code=status_code, cfg=cfg, colleges=colleges, schools=schools,
                   units=units, unit_groups=unit_groups, counterparts=counterparts, years=years, labels=COMPARISON_LABELS, error=error,
+                  year_min=date.today().year - 10, year_max=date.today().year - 1,  # SciVal 只提供近 10 年、到去年為止
                   ready=not _missing_imports(session))
 
 
@@ -141,7 +145,7 @@ async def start_run(request: Request, session: Session = Depends(get_session)):
 @router.post("/runs/start")
 def start_from_home(request: Request):
     """首頁「開始分析」：不沿用上一次設定，一律先到分析設定重選。"""
-    if request.app.state.run_manager.any_running():  # 已有分析在背景執行，不重複開始
+    if request.app.state.run_manager.any_full_running():  # 已有分析在背景執行，不重複開始（重新抓取單位不算）
         return RedirectResponse("/", status_code=303)
     return RedirectResponse("/runs/new", status_code=303)
 
@@ -156,10 +160,17 @@ async def _launch(request: Request, session: Session, cfg: RunConfig):
     client = make_client(settings, session)
     try:
         status = await client.check_connection()
+        if status.ok:   # 校名互相包含的學校（台大與台科大）要先有 Scopus 機構代碼；已有的不重查
+            unresolved = await affiliation.resolve(session, client, schools_needing_af_id(session))
+    except ElsevierError as e:
+        return _form_page(request, session, cfg, f"無法查詢學校的 Scopus 機構代碼：{e}", 400)
     finally:
         await client.aclose()
     if not status.ok:
         return _form_page(request, session, cfg, f"無法開始分析：{status.message}", 400)
+    if unresolved:
+        return _form_page(request, session, cfg, f"Scopus 找不到與 {'、'.join(unresolved)} 名稱完全相同的機構，"
+                                                 "請到「對標學校資料表」頁選擇機構代碼", 400)
     try:
         run = create_run(session, cfg)
     except ValueError as e:
@@ -168,16 +179,32 @@ async def _launch(request: Request, session: Session, cfg: RunConfig):
     return RedirectResponse("/", status_code=303)
 
 
+def refetch_state(request: Request, session: Session, run_id: int, unit_id: int) -> str | None:
+    """「重新抓取」按鈕的狀態：queued／active（背景處理中）、done／failed（這一批已處理），None 表示可以按。"""
+    refetch = request.app.state.run_manager.refetching(run_id)
+    state = refetch.state(unit_id) if refetch is not None else None
+    if state != "finished":
+        return state
+    ru = session.scalars(select(RunUnit).where(RunUnit.run_id == run_id, RunUnit.unit_id == unit_id)).first()
+    return "failed" if ru is not None and ru.status == "failed" else "done"
+
+
 def progress_context(request: Request, session: Session, run: Run) -> dict:
-    """polling：背景程式是否正在執行這次分析（以背景狀態為準，不看資料庫的 status）。"""
+    """polling：背景程式是否正在執行這次分析（以背景狀態為準，不看資料庫的 status）。
+    已完成的分析在背景重新抓取單位時不算執行中：結果頁照常顯示，進度改由各按鈕自己顯示。"""
+    manager = request.app.state.run_manager
+    refetching = manager.refetching(run.id) is not None
     rows = []
     for ru in session.scalars(select(RunUnit).where(RunUnit.run_id == run.id).order_by(RunUnit.id)):
         u = session.get(Unit, ru.unit_id)
         rows.append(dict(ru=ru, unit=u, status=UNIT_STATUS.get(ru.status, ru.status)))
     done = sum(1 for r in rows if r["ru"].status in ("done", "failed"))
-    unfinished = sum(1 for r in rows if r["ru"].status != "done")
+    unfinished = sum(1 for r in rows if r["ru"].status != "done" and not (refetching and r["ru"].status in FETCHING))
+    polling = manager.is_running(run.id) and not refetching
     return dict(run=run, rows=rows, done=done, total=len(rows), run_status=RUN_STATUS.get(run.status, run.status),
-                polling=request.app.state.run_manager.is_running(run.id), unfinished=unfinished, busy=False)
+                polling=polling, refetching=refetching, unfinished=unfinished, busy=False,
+                show_progress=polling or run.status != "done" or unfinished > 0,
+                refetch_state=lambda unit_id: refetch_state(request, session, run.id, unit_id))
 
 
 def get_run(session: Session, run_id: int) -> Run:
@@ -191,7 +218,7 @@ def get_run(session: Session, run_id: int) -> Run:
 def progress(request: Request, run_id: int, session: Session = Depends(get_session)):
     ctx = progress_context(request, session, get_run(session, run_id))
     response = render(request, "_progress.html", **ctx)
-    if not ctx["polling"]:
+    if not (ctx["polling"] or ctx["refetching"]):
         response.headers["HX-Refresh"] = "true"
     return response
 
@@ -227,8 +254,10 @@ def result_context(session: Session, run: Run, ind: str, sel: str = "") -> dict:
     return dict(
         indicators=INDICATORS, ind=ind, indicator=BY_ID.get(ind), tables=tables,
         summaries=[(c, summary_table(session, run.id, c, explainer)) for c in colleges],
-        mismatches=[dict(e=e, label=explainer.label(e.where[0]), indicator=BY_ID[e.where[2]].label)
-                    for e in explainer.mismatches()],
+        # 有單位正在（重新）抓取時，它暫時沒有重算值，其他單位的名次也跟著變，比對結果沒有意義
+        mismatches=[] if any(ru.status not in ("done", "failed") for ru in explainer.run_units.values()) else
+        [dict(e=e, label=explainer.label(e.where[0]), indicator=BY_ID[e.where[2]].label)
+         for e in explainer.mismatches()],
         summary_labels={i: BY_ID[i].label for i in SUMMARY_INDICATORS},
         anomalies=anomalies, open_anomalies=sum(1 for x in anomalies if x["a"].status != "confirmed"),
         notes=json.loads(run.notes_json or "{}"), fmt=fmt,
@@ -237,6 +266,9 @@ def result_context(session: Session, run: Run, ind: str, sel: str = "") -> dict:
         if ind == "funding" else [],
         money=money, count_text=count_text,
         college_names=run_colleges(session, run),
+        # 已產生且仍是最新的全院總結才能下載；其餘學院只列名稱
+        college_ready={c for c in run_colleges(session, run) if _ai_text(session, run, "college", c) is not None}
+        if ind == "downloads" else set(),
         **(ai_context(session, run, sel) if ind == "ai" else {}),
     )
 
@@ -334,11 +366,27 @@ async def resume(request: Request, run_id: int, home: bool = False, session: Ses
     return RedirectResponse(f"/runs/{run_id}" + ("" if started else "?busy=1"), status_code=303)
 
 
+def _refetch_button(request: Request, session: Session, run_id: int, unit_id: int, busy: bool = False,
+                    watch: str | None = None):
+    return render(request, "_refetch_button.html", run_id=run_id, unit_id=unit_id, new_watch=watch,
+                  state="busy" if busy else refetch_state(request, session, run_id, unit_id))
+
+
 @router.post("/runs/{run_id}/units/{unit_id}/refetch")
 async def refetch(request: Request, run_id: int, unit_id: int, session: Session = Depends(get_session)):
+    """在背景重新抓取，按鈕原地換成進度；同一分析可以連續按多個，依序處理。"""
     get_run(session, run_id)
     started = request.app.state.run_manager.refetch_unit(run_id, unit_id)
+    if request.headers.get("HX-Request"):
+        return _refetch_button(request, session, run_id, unit_id, busy=not started,
+                               watch=watch_url(request, session, run_id))
     return RedirectResponse(f"/runs/{run_id}" + ("" if started else "?busy=1"), status_code=303)
+
+
+@router.get("/runs/{run_id}/units/{unit_id}/refetch")
+def refetch_status(request: Request, run_id: int, unit_id: int, session: Session = Depends(get_session)):
+    get_run(session, run_id)
+    return _refetch_button(request, session, run_id, unit_id)
 
 
 PPTX_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -360,18 +408,26 @@ def _ai_text(session: Session, run: Run, kind: str, key: str) -> SummaryDraft | 
         return None
 
 
-@router.get("/runs/{run_id}/pptx.zip")
-def download_all_pptx(request: Request, run_id: int, session: Session = Depends(get_session)):
+def write_dept_zip(session: Session, settings, run_id: int, progress: Callable[[int, int], None] = lambda d, t: None):
+    """產生各系所簡報並壓縮成 zip；progress(完成份數, 總份數)。"""
     run = _done_run(session, run_id)
-    settings = request.app.state.settings
+    depts = RunConfig.from_json(run.scope_json).ncu_depts
     zip_path = export_path(settings, run_id, f"{run.period_from}-{run.period_to}各系所論文表現分析.zip")
+    progress(0, len(depts))
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for dept in RunConfig.from_json(run.scope_json).ncu_depts:
+        for i, dept in enumerate(depts, 1):
             name = report_filename(session, run_id, dept)
             path = build_dept_report(session, run_id, dept, export_path(settings, run_id, name),
                                      ai_text=_ai_text(session, run, "dept", dept))
             zf.write(path, name)
+            progress(i, len(depts))
     record_export(session, run_id, "pptx_zip", zip_path)
+    return zip_path
+
+
+@router.get("/runs/{run_id}/pptx.zip")
+def download_all_pptx(request: Request, run_id: int, session: Session = Depends(get_session)):
+    zip_path = write_dept_zip(session, request.app.state.settings, run_id)
     return FileResponse(zip_path, media_type="application/zip", filename=zip_path.name)
 
 

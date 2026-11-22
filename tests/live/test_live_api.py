@@ -14,7 +14,7 @@ pytestmark = pytest.mark.skipif(os.getenv("RUN_LIVE_API_TESTS") != "1", reason="
 
 async def test_scopus_and_scival_agree():
     settings = Settings()
-    client = ElsevierClient(settings.elsevier_api_key, settings.elsevier_insttoken)
+    client = ElsevierClient(settings.elsevier_api_key)
     try:
         query = build_query("Department of Quantitative Finance National Tsing-Hua University", 2021, 2025)
         docs = await search_docs(client, query, use_cache=False)

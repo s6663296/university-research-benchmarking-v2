@@ -5,27 +5,27 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.ai.claude import list_models
+from app.ai.claude import EFFORT_CHOICES, list_models
 from app.ai.prompts import DEFAULT_TONE
 from app.ai.service import AiError
 from app.config import parse_api_keys, save_env
 from app.db.session import clear_all_data, clear_refs_cache, refs_cache_stats
 from app.db.settings_store import DEFAULT_SETTINGS, get_setting, set_setting
 from app.elsevier.selfcite import usable_strategy_id
-from app.elsevier.client import ConnectionStatus, make_client
-from app.elsevier.quota import quota_rows
+from app.elsevier.client import ConnectionStatus, key_id, make_client
+from app.elsevier.quota import quota_grid, quota_rows
 from app.web.deps import get_session, render
 
 router = APIRouter()
 
 # (欄位, 名稱, 型別, 最小值)
 NUMERIC_FIELDS = [
-    ("rate_per_sec", "每支 API 每秒請求數", float, 0.01),
+    ("rate_per_sec", "每組 Key 每支 API 每秒請求數", float, 0.01),
     ("max_retries", "重試次數", int, 0),
     ("backoff_base_sec", "重試等待基準秒數", float, 0),
     ("timeout_sec", "逾時秒數", int, 1),
     ("cache_days", "快取有效天數", int, 0),
-    ("max_concurrency", "每支 API 同時請求數上限", int, 1),
+    ("max_concurrency", "每組 Key 每支 API 同時請求數上限", int, 1),
     ("rate_limit_retries", "遇到限速（HTTP 429）的重試次數", int, 0),
     ("max_backoff_sec", "限速時單次等待上限秒數", float, 1),
     ("anomaly_change_threshold", "篇數變化門檻", float, 0.01),
@@ -33,18 +33,10 @@ NUMERIC_FIELDS = [
 ]
 TEACHER_COLUMN_CHOICES = {"total": "專任教師數-教師總數總計", "asst_prof_plus": "專任助理教授以上人數-總計"}
 SELF_CITATION_CHOICES = {
-    "scival_pubset": "排除自我引用",
+    "scival_pubset_ref": "排除自我引用：REF() 篩選＋只抓篩出論文的參考文獻",
+    "scival_pubset": "排除自我引用：抓全部論文的參考文獻",
     "none": "不排除自我引用",
 }
-# 兩種查法算出的組內互引相同，差在速度與額度（見 app.elsevier.inset_selfcite）
-SELFCITE_METHOD_CHOICES = {
-    "references": "逐篇抓參考文獻",
-    "scopus": "只用 Scopus Search",
-}
-
-
-def mask_key(key: str) -> str:
-    return f"已設定（末 4 碼 ****{key[-4:]}）" if key else "未設定"
 
 
 def mask_api_key(key: str) -> str:
@@ -70,11 +62,11 @@ def _context(session: Session, request: Request, **extra) -> dict:
         numeric_fields=NUMERIC_FIELDS, values=values,
         teacher_column=get_setting(session, "teacher_column"), teacher_choices=TEACHER_COLUMN_CHOICES,
         strategy=usable_strategy_id(get_setting(session, "self_citation_strategy")), strategy_choices=SELF_CITATION_CHOICES,
-        selfcite_method=get_setting(session, "selfcite_method"), selfcite_method_choices=SELFCITE_METHOD_CHOICES,
         masked_keys=[mask_api_key(k) for k in request.app.state.settings.elsevier_api_keys],
-        insttoken_status=mask_key(request.app.state.settings.elsevier_insttoken),
+        load_balance=get_setting(session, "load_balance"),
         ai_masked_key=mask_api_key(request.app.state.settings.anthropic_api_key),
         ai_model=get_setting(session, "ai_model"), ai_tone=get_setting(session, "ai_tone_prompt"),
+        ai_effort=get_setting(session, "ai_effort"), effort_choices=EFFORT_CHOICES,
         errors=[], saved=False, reset=request.query_params.get("reset") == "1",
         keys_added=_int_param(request, "added"),
         keys_dup=[int(n) for n in request.query_params.get("dup", "").split(",") if n.isdigit()],
@@ -104,8 +96,6 @@ async def save_settings(request: Request, session: Session = Depends(get_session
         errors.append("教師數採用欄位不正確")
     if form.get("self_citation_strategy") not in SELF_CITATION_CHOICES:
         errors.append("自我引用策略不正確")
-    if form.get("selfcite_method") not in SELFCITE_METHOD_CHOICES:
-        errors.append("組內互引查詢方式不正確")
     if errors:
         return render(request, "settings.html", status_code=400, **_context(session, request, errors=errors))
 
@@ -113,17 +103,15 @@ async def save_settings(request: Request, session: Session = Depends(get_session
         set_setting(session, field, value)
     set_setting(session, "teacher_column", form["teacher_column"])
     set_setting(session, "self_citation_strategy", form["self_citation_strategy"])
-    set_setting(session, "selfcite_method", form["selfcite_method"])
     return render(request, "settings.html", **_context(session, request, saved=True))
 
 
-def _save_credentials(request: Request, keys: list[str], insttoken: str) -> RedirectResponse:
+def _save_credentials(request: Request, keys: list[str]) -> RedirectResponse:
     """寫回 .env 並更新記憶體中的設定。多組 Key 以逗號分隔存在同一行。"""
     settings = request.app.state.settings
     api_key = ",".join(keys)
-    save_env(settings.env_path, {"ELSEVIER_API_KEY": api_key, "ELSEVIER_INSTTOKEN": insttoken})
-    request.app.state.settings = settings.model_copy(
-        update={"elsevier_api_key": api_key, "elsevier_insttoken": insttoken})
+    save_env(settings.env_path, {"ELSEVIER_API_KEY": api_key})
+    request.app.state.settings = settings.model_copy(update={"elsevier_api_key": api_key})
     return RedirectResponse("/settings", status_code=303)
 
 
@@ -138,8 +126,16 @@ async def add_api_key(request: Request):
     added = [k for k in entered if k not in keys]
     query = urlencode({"added": len(added), "dup": ",".join(map(str, dup))})
     if added:
-        _save_credentials(request, keys + added, settings.elsevier_insttoken)
+        _save_credentials(request, keys + added)
     return RedirectResponse(f"/settings?{query}", status_code=303)
+
+
+@router.post("/settings/load-balance")
+async def save_load_balance(request: Request, session: Session = Depends(get_session)):
+    """勾選：多組 Key 平均分配並行送出；不勾選：單一 Key 優先，用完才換下一組。下一次分析開始時生效。"""
+    form = await request.form()
+    set_setting(session, "load_balance", form.get("load_balance") == "1")
+    return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/settings/api-keys/delete")
@@ -151,14 +147,7 @@ async def delete_api_key(request: Request):
         keys.pop(int(str(form.get("index", ""))))
     except (ValueError, IndexError):
         return RedirectResponse("/settings", status_code=303)
-    return _save_credentials(request, keys, settings.elsevier_insttoken)
-
-
-@router.post("/settings/insttoken")
-async def save_insttoken(request: Request):
-    form = await request.form()
-    settings = request.app.state.settings
-    return _save_credentials(request, settings.elsevier_api_keys, str(form.get("insttoken", "")).strip())
+    return _save_credentials(request, keys)
 
 
 def _save_ai_key(request: Request, key: str) -> RedirectResponse:
@@ -183,8 +172,10 @@ async def delete_ai_key(request: Request):
 
 @router.post("/settings/ai")
 async def save_ai_options(request: Request, session: Session = Depends(get_session)):
-    """模型與語氣提示；留空就回到預設值。"""
+    """模型、思考程度與語氣提示；留空就回到預設值。"""
     form = await request.form()
+    effort = str(form.get("ai_effort", ""))
+    set_setting(session, "ai_effort", effort if effort in EFFORT_CHOICES else DEFAULT_SETTINGS["ai_effort"])
     set_setting(session, "ai_model", str(form.get("ai_model", "")).strip() or DEFAULT_SETTINGS["ai_model"])
     set_setting(session, "ai_tone_prompt", str(form.get("ai_tone_prompt", "")).strip() or DEFAULT_TONE)
     return RedirectResponse("/settings", status_code=303)
@@ -214,9 +205,9 @@ def reset_all(request: Request):
     settings = request.app.state.settings
     clear_all_data(request.app.state.engine)
     shutil.rmtree(settings.data_dir / "exports", ignore_errors=True)
-    save_env(settings.env_path, {"ELSEVIER_API_KEY": "", "ELSEVIER_INSTTOKEN": "", "ANTHROPIC_API_KEY": ""})
+    save_env(settings.env_path, {"ELSEVIER_API_KEY": "", "ANTHROPIC_API_KEY": ""})
     request.app.state.settings = settings.model_copy(
-        update={"elsevier_api_key": "", "elsevier_insttoken": "", "anthropic_api_key": ""})
+        update={"elsevier_api_key": "", "anthropic_api_key": ""})
     return RedirectResponse("/settings?reset=1", status_code=303)
 
 
@@ -231,20 +222,30 @@ def clear_refs(request: Request):
 @router.get("/status/panel")
 def quota_panel(request: Request, session: Session = Depends(get_session)):
     """首頁載入時用：只讀已存的額度，不打 API。"""
-    return render(request, "_quota.html", quotas=quota_rows(session), check=None)
+    return _quota_panel(request, session, None)
 
 
 @router.get("/status")
 async def status(request: Request, session: Session = Depends(get_session)):
-    """檢查連線：Scopus、SciVal 各打一次，順便更新兩者的額度。"""
+    """手動檢查各 API 的連線並更新額度。"""
     settings = request.app.state.settings
     if not settings.elsevier_api_key:
         check = ConnectionStatus(False, "尚未設定 API Key，請到「設定」頁填寫")
     else:
         client = make_client(settings, session)
         try:
-            check = await client.check_connection()
+            check = await client.check_connection(include_abstract=True)
         finally:
             await client.aclose()
     session.expire_all()
-    return render(request, "_quota.html", quotas=quota_rows(session), check=check)
+    return _quota_panel(request, session, check)
+
+
+def _quota_panel(request: Request, session: Session, check: ConnectionStatus | None):
+    """一組 Key 時逐支 API 顯示；多組 Key 時改成 API × Key 的表格，卡片大小不變。"""
+    keys = request.app.state.settings.elsevier_api_keys
+    ids = [key_id(k) for k in keys]
+    if len(keys) > 1:
+        return render(request, "_quota.html", quotas=[], grid=quota_grid(session, ids),
+                      keys=[mask_api_key(k) for k in keys], check=check)
+    return render(request, "_quota.html", quotas=quota_rows(session, ids), grid=None, keys=[], check=check)

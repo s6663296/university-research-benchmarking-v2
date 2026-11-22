@@ -1,19 +1,23 @@
 """首頁流程儀表板：依資料庫目前的狀態，判斷自動化流程（設計 §6）每個步驟的進度。"""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Anomaly, Export, Run, RunUnit
 from app.elsevier.inset_selfcite import InSetSelfCitations
+from app.elsevier.quota import SHORT_LABELS
 from app.elsevier.selfcite import get_strategy
 from app.funding.service import effective_imports, imports as funding_imports
 from app.mapping.service import error_count, latest_version, recheck_mapping
 from app.runs.executor import SELFCITE_ERROR
+from app.runs.manager import Refetch
 from app.runs.scope import RunConfig
 from app.teachers.moe import import_years, latest_import
 from app.teachers.service import check_links
+from app.web.deps import run_no
 
 STATE_LABELS = {"done": "完成", "active": "進行中", "error": "錯誤", "warn": "需處理", "todo": "尚未開始"}
 FETCH_LABEL = "Scopus／SciVal 取指標"
@@ -116,8 +120,10 @@ def _selfcite_detail(live: InSetSelfCitations | None) -> tuple[str, ...]:
     lines = []
     if live.refs_total:
         lines.append(f"參考文獻 {live.refs_done:,}／{live.refs_total:,} 篇")
-    if live.scopus_only or live.abstract_exhausted:
+    if live.searches:
         lines.append(f"Scopus 查詢 {live.searches:,} 次")
+    for api, reset in live.client.quota_resume_at.items():
+        lines.append(f"{SHORT_LABELS.get(api, api)} {datetime.fromtimestamp(reset):%m/%d %H:%M} 自動續查")
     return tuple(lines)
 
 
@@ -164,6 +170,32 @@ def _review_stage(session: Session, run: Run, rus: list[RunUnit], running: bool)
                  f"{open_count} 項待確認" if open_count else "", f"{detail}?ind=anomalies")
 
 
+@dataclass(frozen=True)
+class UnitView:
+    """流程圖只讀的單位狀態；排隊中的單位資料庫裡還是上次的結果，要當成尚未開始。"""
+    status: str
+    eid_count: int | None
+    error: str | None
+
+
+def _refetch_stages(session: Session, run: Run, refetch: Refetch, selfcite: InSetSelfCitations | None) -> list[Stage]:
+    """已完成分析在背景重新抓取單位：抓取與排除自我引用只算這一批，依每個單位的實際狀態即時顯示；
+    其他單位的結果不受影響，計算與產出照完成時顯示，只有重算的那一刻顯示計算中。"""
+    rows = {ru.unit_id: ru for ru in session.scalars(
+        select(RunUnit).where(RunUnit.run_id == run.id, RunUnit.unit_id.in_(refetch.units)))}
+    views = {unit_id: UnitView("pending", None, None) if refetch.state(unit_id) == "queued"
+             else UnitView(ru.status, ru.eid_count, ru.error) for unit_id, ru in rows.items()}
+    fetch = _fetch_stage(run, list(views.values()), True)
+    fetch = replace(fetch, summary=f"重新抓取 {len(refetch.finished)}／{refetch.total}"
+                    + (f"・{fetch.summary}" if fetch.summary else ""))
+    out = [fetch, _selfcite_stage(run, list(views.values()), True, selfcite)]
+    # 這一輪的單位都抓完、背景還沒結束這一輪＝正在重算結果
+    if refetch.active and all(views[u].status in ("done", "failed") for u in refetch.active if u in views):
+        return out + [Stage("review", REVIEW_LABEL, "active", "計算中", f"/runs/{run.id}"),
+                      Stage("output", "產出", "todo")]
+    return out + _run_stages(session, run, False, None)[2:]
+
+
 def _run_stages(session: Session, run: Run, running: bool, selfcite: InSetSelfCitations | None) -> list[Stage]:
     rus = list(session.scalars(select(RunUnit).where(RunUnit.run_id == run.id)))
     out = [_fetch_stage(run, rus, running), _selfcite_stage(run, rus, running, selfcite),
@@ -177,7 +209,8 @@ def _run_stages(session: Session, run: Run, running: bool, selfcite: InSetSelfCi
 
 
 def pipeline(session: Session, run_id: int | None = None, running: bool = False,
-             moe_running: bool = False, selfcite: InSetSelfCitations | None = None) -> list[Stage]:
+             moe_running: bool = False, selfcite: InSetSelfCitations | None = None,
+             refetch: Refetch | None = None) -> list[Stage]:
     """流程的 8 個步驟，進度一律以背景程式的狀態為準：
     run_id 是背景程式最後啟動的分析、running 是它是否仍在執行、moe_running 是否正從教育部下載教師資料、
     selfcite 是這個分析排除自我引用的細部進度
@@ -189,5 +222,7 @@ def pipeline(session: Session, run_id: int | None = None, running: bool = False,
             Stage(k, label, "todo") for k, label in (("fetch", FETCH_LABEL), ("selfcite", SELFCITE_LABEL),
                                                      ("review", REVIEW_LABEL), ("output", "產出"))]
     depts = "、".join(RunConfig.from_json(run.scope_json).ncu_depts)
-    stages.append(Stage("run", "建立分析", "done", f"#{run.id} {depts}", "/runs/new"))  # 點下去一律回分析設定
+    stages.append(Stage("run", "建立分析", "done", f"#{run_no(run, session)} {depts}", "/runs/new"))  # 點下去一律回分析設定
+    if refetch is not None:
+        return stages + _refetch_stages(session, run, refetch, selfcite)
     return stages + _run_stages(session, run, running, selfcite)

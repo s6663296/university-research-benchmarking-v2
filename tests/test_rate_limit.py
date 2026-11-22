@@ -88,10 +88,29 @@ async def test_concurrency_cap(respx_mock):
         in_flight -= 1
         return httpx.Response(200, json={})
 
+    respx_mock.get(url__regex=SCIVAL).mock(side_effect=slow)
+    c = make(max_concurrency=2)
+    await asyncio.gather(*(c.get_json("/analytics/scival/publication/metrics", {"q": i}, use_cache=False)
+                           for i in range(8)))
+    assert peak == 2
+
+
+async def test_scopus_search_allows_more_in_flight(respx_mock):
+    """REF() 篩選大量送出 Scopus Search：同時請求數加倍，由每秒上限決定速度。"""
+    in_flight = peak = 0
+
+    async def slow(request):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0.02)
+        in_flight -= 1
+        return httpx.Response(200, json={})
+
     respx_mock.get(url__regex=SCOPUS).mock(side_effect=slow)
     c = make(max_concurrency=2)
-    await asyncio.gather(*(c.get_json("/content/search/scopus", {"q": i}, use_cache=False) for i in range(8)))
-    assert peak == 2
+    await asyncio.gather(*(c.get_json("/content/search/scopus", {"q": i}, use_cache=False) for i in range(16)))
+    assert peak == 4
 
 
 async def test_scival_batch_split_on_server_error(respx_mock):
@@ -116,12 +135,15 @@ async def test_scival_split_does_not_hide_auth_errors(respx_mock):
     assert route.call_count == 1
 
 
-@pytest.mark.parametrize("limit, expected", [(1, 1), (2, 2), (4, 4)])
-async def test_run_processes_limited_units_at_once(session, session_factory, respx_mock, monkeypatch, limit, expected):
-    """分析一次只處理「同時請求數上限」個單位，其餘排隊（測試分析共有 5 個不同查詢）。"""
+@pytest.mark.parametrize("limit, keys, balance, expected",
+                         [(1, 1, True, 1), (2, 1, True, 2), (4, 1, True, 4), (1, 3, True, 3), (2, 2, True, 4),
+                          (2, 2, False, 2)])
+async def test_run_processes_limited_units_at_once(session, session_factory, respx_mock, monkeypatch,
+                                                   limit, keys, balance, expected):
+    """分析一次只處理「同時請求數上限 × Key 組數」個單位，其餘排隊（測試分析共有 5 個不同查詢）。"""
     from app.db.settings_store import set_setting
     from app.runs import executor
-    from tests.run_helpers import FakeElsevier, fake_client, make_run
+    from tests.run_helpers import FakeElsevier, make_run
 
     set_setting(session, "max_concurrency", limit)
     run = make_run(session)
@@ -140,13 +162,16 @@ async def test_run_processes_limited_units_at_once(session, session_factory, res
             active -= 1
 
     monkeypatch.setattr(executor, "search_docs", tracking)
-    await executor.execute_run(run.id, session_factory, fake_client())
+    client = ElsevierClient([f"k{i}" for i in range(keys)], backoff_base=0, rate_per_sec=1000, max_retries=0,
+                            load_balance=balance)
+    await executor.execute_run(run.id, session_factory, client)
     assert peak == expected
 
 
 async def test_each_api_has_its_own_concurrency(respx_mock):
     """Scopus 與 SciVal 的限制各自獨立：一支 API 塞滿時，另一支不必排隊。"""
     in_flight = {"scopus": 0, "scival": 0}
+    limit = {"scopus": 2, "scival": 1}   # Scopus Search 同時請求數加倍
     peak = 0
 
     def slow(api):
@@ -154,7 +179,7 @@ async def test_each_api_has_its_own_concurrency(respx_mock):
             nonlocal peak
             in_flight[api] += 1
             peak = max(peak, sum(in_flight.values()))
-            assert in_flight[api] <= 1
+            assert in_flight[api] <= limit[api]
             await asyncio.sleep(0.02)
             in_flight[api] -= 1
             return httpx.Response(200, json={})
@@ -165,7 +190,7 @@ async def test_each_api_has_its_own_concurrency(respx_mock):
     c = make(max_concurrency=1)
     await asyncio.gather(*(c.get_json(path, {"q": i}, use_cache=False) for i in range(4)
                            for path in ("/content/search/scopus", "/analytics/scival/publication/metrics")))
-    assert peak == 2
+    assert peak == 3
 
 
 def test_official_limits_cap_each_api():

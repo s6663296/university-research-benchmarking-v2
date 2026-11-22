@@ -42,10 +42,50 @@ def test_refetch_route_runs_in_background(client, web_done_run):
         s.commit()
     r = client.post(f"/runs/{web_done_run}/units/{unit_id}/refetch", follow_redirects=False)
     assert r.status_code == 303
-    time.sleep(0.2)
-    assert wait_status(client, web_done_run) == "done"
+    wait_idle(client)
     with client.app.state.session_factory() as s:
+        assert s.get(Run, web_done_run).status == "done"
         assert unit_row(s, web_done_run, "台大").status == "done"
+
+
+def wait_idle(client, timeout=10):
+    end = time.time() + timeout
+    while time.time() < end:
+        if not client.app.state.run_manager.any_running():
+            return
+        time.sleep(0.05)
+    raise AssertionError("背景作業沒有在時間內結束")
+
+
+def test_refetch_button_stays_on_page_and_queues(client, web_done_run, monkeypatch):
+    """按「重新抓取」不跳頁：按鈕原地換成進度；抓取中再按別的單位排到下一輪，分析維持已完成。"""
+    import asyncio
+    import threading
+    import app.runs.manager as manager_module
+
+    gate = threading.Event()  # TestClient 的事件迴圈在另一個執行緒
+    calls = []
+
+    async def fake_execute(run_id, *args, unit_ids=None, **kwargs):
+        calls.append(set(unit_ids))
+        while not gate.is_set():
+            await asyncio.sleep(0.01)
+
+    monkeypatch.setattr(manager_module, "execute_run", fake_execute)
+    with client.app.state.session_factory() as s:
+        a, b = unit_row(s, web_done_run, "台大").unit_id, unit_row(s, web_done_run, "政治").unit_id
+    hx = {"HX-Request": "true"}
+    r = client.post(f"/runs/{web_done_run}/units/{a}/refetch", headers=hx)
+    assert r.status_code == 200 and "spinner" in r.text and "hx-get" in r.text
+    assert "spinner" in client.post(f"/runs/{web_done_run}/units/{b}/refetch", headers=hx).text
+    assert "排隊中" in client.get(f"/runs/{web_done_run}/units/{b}/refetch").text
+    page = client.get(f"/runs/{web_done_run}?ind=anomalies").text
+    assert 'id="progress"' not in page and "已有抓取作業正在執行" not in page
+    home = client.get("/").text
+    assert "重新抓取 0／2" in home
+    gate.set()
+    wait_idle(client)
+    assert calls == [{a}, {b}]
 
 
 async def test_non_json_response_fails_only_that_unit(session, session_factory, respx_mock):

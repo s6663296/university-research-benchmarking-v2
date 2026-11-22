@@ -1,6 +1,7 @@
 """AI 總結：分頁、背景產生、人工修改、前期設定與全院總結下載。"""
 
 import zipfile
+from collections.abc import Callable
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -153,24 +154,27 @@ def _fresh_college(session: Session, run: Run, college: str):
     return service.fresh_text(session, run, "college", college)
 
 
-@router.get("/runs/{run_id}/college-summary.zip")
-def download_college_zip(request: Request, run_id: int, session: Session = Depends(get_session)):
+def write_college_zip(session: Session, settings, run_id: int,
+                      progress: Callable[[int, int], None] = lambda d, t: None):
+    """產生各學院的全院總結簡報並壓縮成 zip；progress(完成份數, 總份數)。"""
     run = _done_run(session, run_id)
-    settings = request.app.state.settings
-    built = []
-    for college in run_colleges(session, run):
-        text = _fresh_college(session, run, college)
-        if text is not None:
-            name = college_report_filename(run, college)
-            built.append((name, build_college_report(session, run_id, college, text,
-                                                     export_path(settings, run_id, name))))
-    if not built:
+    texts = [(c, t) for c in run_colleges(session, run) if (t := _fresh_college(session, run, c)) is not None]
+    if not texts:
         raise HTTPException(409, NEED_SUMMARY)
     zip_path = export_path(settings, run_id, f"{run.period_from}-{run.period_to}各學院論文指標全院總結.zip")
+    progress(0, len(texts))
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for name, path in built:
-            zf.write(path, name)
+        for i, (college, text) in enumerate(texts, 1):
+            name = college_report_filename(run, college)
+            zf.write(build_college_report(session, run_id, college, text, export_path(settings, run_id, name)), name)
+            progress(i, len(texts))
     record_export(session, run_id, "college_pptx_zip", zip_path)
+    return zip_path
+
+
+@router.get("/runs/{run_id}/college-summary.zip")
+def download_college_zip(request: Request, run_id: int, session: Session = Depends(get_session)):
+    zip_path = write_college_zip(session, request.app.state.settings, run_id)
     return FileResponse(zip_path, media_type="application/zip", filename=zip_path.name)
 
 

@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.config import Settings
-from app.db.models import Run
+from app.db.models import Run, RunUnit
 from app.db.settings_store import set_setting
 from app.main import create_app
 from tests.elsevier_fixtures import SCOPUS_URL
@@ -145,7 +145,7 @@ def test_home_start_blocked_while_running(seeded):
         s.get(Run, run_id).status = "running"
         s.commit()
     manager = seeded.app.state.run_manager
-    manager.any_running = manager.is_running = lambda *a: True
+    manager.any_running = manager.any_full_running = manager.is_running = lambda *a: True
     manager.current_run_id = run_id
     r = seeded.post("/runs/start", follow_redirects=False)
     assert r.headers["location"] == "/" and run_count(seeded) == 1
@@ -230,3 +230,29 @@ def test_old_config_without_new_fields_keeps_behavior():
     cfg = RunConfig.from_json(old)
     assert cfg.schools_for("資訊管理學系") == ("台大",) and cfg.college_members("管理學院") is None
     assert RunConfig.from_json(cfg.to_json()) == cfg
+
+
+def test_create_looks_up_af_ids_for_overlapping_schools(seeded, respx_mock):
+    from app.elsevier import affiliation
+    from tests.test_affiliation import AFFIL_URL, NTU, NTUST, answer, overlap_mapping
+    seeded.post("/mapping", files={"file": ("m.xlsx", overlap_mapping(), XLSX)})
+    FakeElsevier().install(respx_mock)
+    route = respx_mock.get(url__regex=AFFIL_URL).mock(side_effect=answer)
+    r = seeded.post("/runs", data={**FORM, "schools": ["台大", "台科"], "comparisons": ["benchmark"]},
+                    follow_redirects=False)
+    assert r.status_code == 303 and route.call_count == 2
+    with seeded.app.state.session_factory() as s:
+        assert affiliation.af_ids(s, [NTU, NTUST]) == {NTU: "60005429", NTUST: "60027709"}
+        queries = [ru.query for ru in s.query(RunUnit).filter(RunUnit.run_id == latest_run_id(seeded))]
+    assert any(q.endswith("AND NOT (AF-ID(60027709) AND NOT AF-ID(60005429))") for q in queries)
+    wait_done(seeded, latest_run_id(seeded))
+
+
+def test_create_blocked_when_school_has_no_exact_scopus_name(seeded, respx_mock):
+
+    from tests.test_affiliation import AFFIL_URL, overlap_mapping
+    seeded.post("/mapping", files={"file": ("m.xlsx", overlap_mapping(), XLSX)})
+    FakeElsevier().install(respx_mock)
+    respx_mock.get(url__regex=AFFIL_URL).mock(return_value=httpx.Response(200, json={"search-results": {"entry": []}}))
+    r = seeded.post("/runs", data={**FORM, "schools": ["台大", "台科"], "comparisons": ["benchmark"]})
+    assert r.status_code == 400 and "請到「對標學校資料表」頁選擇機構代碼" in r.text and run_count(seeded) == 0

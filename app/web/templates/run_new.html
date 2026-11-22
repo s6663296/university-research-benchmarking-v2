@@ -8,8 +8,8 @@
 <form method="post" action="/runs" id="run-form">
 <section class="card">
   <h2>期間與教師數</h2>
-  <label>起 <input type="number" name="year_from" value="{{ cfg.year_from }}" style="width:6em"></label>
-  <label>迄 <input type="number" name="year_to" value="{{ cfg.year_to }}" style="width:6em"></label>
+  <label>起 <input type="number" name="year_from" value="{{ cfg.year_from }}" min="{{ year_min }}" max="{{ year_max }}" required style="width:6em"></label>
+  <label>迄 <input type="number" name="year_to" value="{{ cfg.year_to }}" min="{{ year_min }}" max="{{ year_max }}" required style="width:6em"></label>
   <label>教師數學年度
     <select name="academic_year">
       {% for y in years | reverse %}<option value="{{ y }}" {% if y == cfg.academic_year %}selected{% endif %}>{{ y }}</option>{% endfor %}

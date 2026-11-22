@@ -68,13 +68,11 @@ async def test_gives_up_after_max_retries(respx_mock):
     assert e.value.retryable is True and e.value.status == 503
 
 
-async def test_sends_insttoken_header_only_when_set(respx_mock):
+async def test_sends_api_key_header_without_insttoken(respx_mock):
     route = respx_mock.get(url__regex=SCOPUS).mock(return_value=httpx.Response(200, json={}))
     await make().get_json("/content/search/scopus", {})
     assert route.calls[-1].request.headers["X-ELS-APIKey"] == "k"
     assert "X-ELS-Insttoken" not in route.calls[-1].request.headers
-    await make(insttoken="tok").get_json("/content/search/scopus", {})
-    assert route.calls[-1].request.headers["X-ELS-Insttoken"] == "tok"
 
 
 async def test_cache_hit_skips_request_and_never_stores_key(respx_mock, session_factory):
@@ -113,7 +111,7 @@ async def test_quota_tracked_per_api(respx_mock):
     respx_mock.get(url__regex=SCOPUS).mock(return_value=httpx.Response(200, json={}, headers=quota_headers(20000, 19990)))
     respx_mock.get(url__regex=SCIVAL).mock(return_value=httpx.Response(200, json={}, headers=quota_headers(5000, 3700)))
     seen = []
-    c = make(on_quota=lambda api, q: seen.append((api, q.remaining)))
+    c = make(on_quota=lambda api, q, key: seen.append((api, q.remaining)))
     await c.get_json("/content/search/scopus", {})
     await c.get_json("/analytics/scival/publication/metrics", {})
     assert c.quota["scopus"] == Quota(20000, 19990, datetime.fromtimestamp(1793849792))

@@ -16,6 +16,7 @@ from app.web import live
 from app.web.deps import WEB_DIR
 from app.web.routes import (
     ai_summary,
+    exports,
     funding,
     history,
     home,
@@ -49,8 +50,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         def writer_factory():
             with session_factory() as s:
-                model = get_setting(s, "ai_model")
-            return ClaudeWriter(app.state.settings.anthropic_api_key, model)
+                model, effort = get_setting(s, "ai_model"), get_setting(s, "ai_effort")
+            return ClaudeWriter(app.state.settings.anthropic_api_key, model, effort=effort)
 
         app.state.ai_jobs = AiJobManager(session_factory, writer_factory)
         app.state.moe_fetcher = MoeFetcher(session_factory, settings.data_dir)
@@ -68,6 +69,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(funding.router)
     app.include_router(report_text.router)
     app.include_router(history.router)
+    app.include_router(exports.router)
     app.include_router(ai_summary.router)  # 要在 runs 之前，避免被 /runs/{run_id} 系列路由搶先
     app.include_router(runs.router)
     return app

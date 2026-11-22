@@ -146,7 +146,10 @@
     search.addEventListener('input', () => { page = 0; render(); });
     previous.addEventListener('click', () => { page--; render(); });
     next.addEventListener('click', () => { page++; render(); });
-    controllers.set(container, { snapshot: () => ({ query: search.value, page, focused: document.activeElement === search, start: search.selectionStart, end: search.selectionEnd }) });
+    controllers.set(container, {
+      snapshot: () => ({ query: search.value, page, focused: document.activeElement === search, start: search.selectionStart, end: search.selectionEnd }),
+      refresh: render,
+    });
     render();
     if (state?.focused) {
       search.focus();
@@ -169,10 +172,13 @@
     const containers = target.matches('.table-scroll') ? [target] : Array.from(target.querySelectorAll('.table-scroll'));
     if (containers.length) saved.set(target.id, containers.map(container => controllers.get(container)?.snapshot()));
   });
-  document.addEventListener('htmx:load', event => {
-    const root = event.detail.elt;
+  function restore(root) {
     const state = root.id ? saved.get(root.id) : undefined;
     initialize(root, state);
     if (root.id) saved.delete(root.id);
-  });
+  }
+  // htmx:load 要等 settle（約 20ms 後）才觸發，只靠它會先畫出未分頁的整張表再縮回去；afterSwap 在繪製前
+  document.addEventListener('htmx:afterSwap', event => restore(event.target));
+  document.addEventListener('htmx:load', event => restore(event.detail.elt));
+  document.addEventListener('table:change', event => controllers.get(event.target)?.refresh());
 }());

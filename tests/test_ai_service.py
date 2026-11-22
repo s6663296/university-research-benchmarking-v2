@@ -191,6 +191,8 @@ def test_claude_writer_parses_output_and_sends_expected_request():
     assert seen["output_config"]["format"]["type"] == "json_schema"
     assert seen["fallbacks"] == "default" and seen["betas"] == ["server-side-fallback-2026-07-01"]
     assert "資管" in seen["messages"][0]["content"]
+    ClaudeWriter("key", "m", client=fake_client(create), effort="xhigh").write("s", {})
+    assert seen["output_config"]["effort"] == "xhigh"
 
 
 def test_claude_writer_asks_for_bullets_and_joins_them():

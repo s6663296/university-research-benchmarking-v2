@@ -7,7 +7,7 @@
     <div class="card-head"><h2>API 連線狀態</h2>
       <button type="button" class="secondary" hx-get="/status" hx-target="#api-quota" hx-disabled-elt="this">檢查連線</button></div>
     <p id="api-check"></p>
-    <div id="api-quota" hx-get="/status/panel" hx-trigger="load"><p class="muted">載入中…</p></div>
+    <div id="api-quota" hx-get="/status/panel" hx-trigger="load{% if control == 'running' %}, every 2s{% endif %}"><p class="muted">載入中…</p></div>
   </section>
   <section class="card recent-card">
     <div class="card-head"><h2>最近分析</h2>{% if runs %}<a href="/runs">全部</a>{% endif %}</div>
@@ -15,12 +15,12 @@
     <ul class="recent-list" tabindex="0" aria-label="最近分析清單">
       {% for x in runs %}
       <li><a class="recent-row" href="/runs/{{ x.run.id }}" title="{{ x.depts | join('、') }}">
-        <span class="recent-id">#{{ x.run.id }}</span>
+        <span class="recent-id">#{{ run_no(x.run) }}</span>
         <span>{{ x.depts | length }} 個系所</span>
         <span class="recent-status">{{ x.status }}{% if x.open %}・待確認 {{ x.open }}{% endif %}</span>
         <time class="recent-time" datetime="{{ x.run.created_at.isoformat() }}">{{ x.run.created_at.strftime("%m/%d %H:%M") }}</time>
       </a>{% if x.resumable %}<form method="post" action="/runs/{{ x.run.id }}/resume?home=1" class="recent-resume">
-        <button type="submit" class="secondary" aria-label="繼續分析 #{{ x.run.id }}">▶ 繼續</button></form>{% endif %}</li>
+        <button type="submit" class="secondary" aria-label="繼續分析 #{{ run_no(x.run) }}">▶ 繼續</button></form>{% endif %}</li>
       {% endfor %}
     </ul>
     {% else %}

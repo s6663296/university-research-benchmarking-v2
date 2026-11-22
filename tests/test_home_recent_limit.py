@@ -13,7 +13,7 @@ def test_home_only_shows_three_latest_runs_but_history_keeps_all(client):
     assert all(f'href="/runs/{run_id}"' in recent for run_id in (2, 3, 4))
     assert 'href="/runs/1"' not in recent
     assert 'href="/runs">全部</a>' in home
-    assert ">#1</a>" in client.get("/runs").text
+    assert '<span class="run-no">#1</span>' in client.get("/runs").text
 
 
 def test_interrupted_runs_offer_resume_on_home_and_history(client):

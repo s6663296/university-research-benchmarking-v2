@@ -1,19 +1,21 @@
 """Scopus Search：以單位英文名稱取得期間內所有論文（設計 §6 步驟 4）。"""
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from app.elsevier.client import ElsevierClient
+from app.elsevier.affiliation import name_key
+from app.elsevier.client import ElsevierClient, ElsevierError
 
 SEARCH_PATH = "/content/search/scopus"
 PAGE_SIZE = 200  # 只取 id 時一頁最多 200 筆；不指定 field 的完整欄位一頁只能 25 筆
-FIELDS = "dc:identifier,eid,prism:doi"   # DOI 給排除自我引用時對照 OpenAlex 用，同一個請求取得
+FIELDS = "dc:identifier,eid"
 
 
 # 系所名稱與校名之間允許的字數：可容納「Department of Finance, College of Management and Center for
 # Research in Econometric Theory and Applications, National Taiwan University」這類夾了中心名稱的寫法
 NEAR = 15
+MISSING_AF_ID = "待查"
 
 
 def _clean(text: str) -> str:
@@ -70,49 +72,70 @@ def _dept_terms(dept: str) -> str:
     return f"({quoted})" if len(terms) > 1 else quoted
 
 
-def build_query(dept_en: str, year_from: int, year_to: int, schools: Iterable[str] = ()) -> str:
+def overlapping_schools(schools: Iterable[str]) -> list[str]:
+    """校名包含其他已知校名、或被其他校名包含的學校（台大與台科大）：查詢這些學校的系所時需要機構代碼。"""
+    keys = {name_key(s): s for s in (_clean(s) for s in schools)}
+    return [s for k, s in keys.items() if any(k != o and (k in o or o in k) for o in keys)]
+
+
+def build_query(dept_en: str, year_from: int, year_to: int, schools: Iterable[str] = (),
+                af_ids: Mapping[str, str] | None = None) -> str:
     """系所片語與校名片語須出現在同一機構字串的鄰近位置（W/NEAR，不分先後）。
 
     不加引號時 Scopus 只要求各字出現在論文任一機構中：台大資管 2021–2025 會抓到 2914 篇，
     其中多為北商大、高科大、政大等他校論文；整段加引號又會漏掉「National Taiwan University,
-    Department of …」或中間夾「College of Management」的寫法，且會把台科大一併算入。
-    若其他已知校名包含本校校名（台大 ⊂ 台科大），再排除他校同名系所。
+    Department of …」或中間夾「College of Management」的寫法。
+
+    校名片語也會比對到名稱包含它的他校（台大 ⊂ 台科大），所以排除「在他校機構代碼（AF-ID）下、卻不在本校
+    代碼下」的論文。不能直接用 AF-ID 限定本校：Scopus 有些論文掛在學院層級或合校前的舊代碼（台大工學院、
+    交大），2026-11-22 實測全部 201 個單位會漏掉 37 篇；也不能用校名字串排除他校同名系所，那會把兩校合著
+    的論文整篇刪掉。af_ids 是 {校名: AF-ID}；缺代碼時查詢式含「AF-ID(待查)」，建立分析前必須先補齊。
     """
     cleaned = [_clean(s) for s in schools]
     dept, school = _split(_clean(dept_en), cleaned)
     if school is None:
         affil = f'AFFIL("{dept}")'
     else:
-        terms = _dept_terms(dept)
-        affil = f'AFFIL({terms} W/{NEAR} "{school}")'
+        affil = f'AFFIL({_dept_terms(dept)} W/{NEAR} "{school}")'
+    query = f"{affil} AND AFFILCOUNTRY(Taiwan) AND PUBYEAR > {year_from - 1} AND PUBYEAR < {year_to + 1}"
+    if school is not None:
+        ids = {name_key(k): v for k, v in (af_ids or {}).items()}
+        own = name_key(school)
         for other in cleaned:
-            if other.lower() != school.lower() and school.lower() in other.lower():
-                affil += f' AND NOT AFFIL({terms} W/{NEAR} "{other}")'
-    # AND NOT 的優先順序最低，必須加括號，否則後面的國家與年份條件會被一起排除
-    return (f"({affil}) AND AFFILCOUNTRY(Taiwan) "
-            f"AND PUBYEAR > {year_from - 1} AND PUBYEAR < {year_to + 1}")
+            if name_key(other) != own and own in name_key(other):
+                # AND NOT 的優先順序最低，放在最後並加括號
+                query += (f" AND NOT (AF-ID({ids.get(name_key(other), MISSING_AF_ID)}) "
+                          f"AND NOT AF-ID({ids.get(own, MISSING_AF_ID)}))")
+    return query
 
 
 @dataclass(frozen=True)
 class ScopusDoc:
     scopus_id: str
     eid: str
-    doi: str | None = None
 
 
-async def search_docs(client: ElsevierClient, query: str, *, use_cache: bool) -> list[ScopusDoc]:
+async def search_docs(client: ElsevierClient, query: str, *, use_cache: bool, strict: bool = False) -> list[ScopusDoc]:
     docs: dict[str, ScopusDoc] = {}
     cursor = "*"
+    cursors = set()
+    expected = None
     while True:
+        cursors.add(cursor)
         params = {"query": query, "count": PAGE_SIZE, "field": FIELDS, "cursor": cursor}
         data = await client.get_json(SEARCH_PATH, params, use_cache=use_cache)
         result = data.get("search-results", {})
-        total = int(result.get("opensearch:totalResults") or 0)
+        reported = result.get("opensearch:totalResults")
+        if strict and (not str(reported).isdigit() or (expected is not None and int(reported) != expected)):
+            raise ElsevierError(200, True, "Scopus 分頁總筆數缺漏或變動，無法確認完整性")
+        total = expected = int(reported or 0)
         page = [e for e in result.get("entry", []) if "eid" in e and "dc:identifier" in e]
         for e in page:
             sid = e["dc:identifier"].replace("SCOPUS_ID:", "")
-            docs.setdefault(sid, ScopusDoc(sid, e["eid"], (e.get("prism:doi") or "").lower() or None))
+            docs.setdefault(sid, ScopusDoc(sid, e["eid"]))
         next_cursor = result.get("cursor", {}).get("@next")
-        if total == 0 or not page or not next_cursor or next_cursor == cursor or len(docs) >= total:
+        if total == 0 or not page or not next_cursor or next_cursor in cursors or len(docs) >= total:
+            if strict and len(docs) != total:
+                raise ElsevierError(200, True, f"Scopus 分頁不完整（收到 {len(docs)}／{total} 篇）")
             return list(docs.values())
         cursor = next_cursor

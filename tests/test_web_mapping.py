@@ -70,3 +70,19 @@ def test_mapping_template_has_marked_example_rows_that_are_skipped():
     for ws in wb.worksheets:
         assert ws.max_row == 2 and ws["F2"].value.startswith("【範例資料】") and ws["B2"].value == "資訊管理學系"
     assert parse_mapping(data).units == []      # 示範列不會被匯入
+
+
+def test_mapping_page_lets_user_set_af_id_for_overlapping_schools(client):
+    from tests.test_affiliation import overlap_mapping
+    upload(client, overlap_mapping())
+    text = client.get("/mapping").text
+    assert "Scopus 機構代碼" in text and "待查" in text
+    r = client.post("/mapping/affiliation", data={"school_en": "National Taiwan University", "af_id": "60005429"})
+    assert r.status_code == 200 and "60005429" in r.text and "人工" in r.text
+    assert client.post("/mapping/affiliation", data={"school_en": "National Taiwan University",
+                                                     "af_id": "x"}).status_code == 400
+
+
+def test_mapping_page_hides_af_ids_without_overlapping_schools(client):
+    upload(client, sample_mapping())
+    assert "Scopus 機構代碼" not in client.get("/mapping").text

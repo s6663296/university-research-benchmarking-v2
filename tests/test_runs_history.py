@@ -145,3 +145,34 @@ def test_delete_run_renumbers_the_rest(client, web_done_run):
         assert s.scalars(select(Export.path)).one() == str(exports / str(second) / "r.xlsx")
     assert (exports / str(second) / "r.xlsx").exists() and not (exports / str(third)).exists()
     assert client.get(f"/runs/{third}").status_code == 404
+
+
+def test_runs_have_random_unique_uid_that_links_to_the_run(client, web_done_run):
+    factory = client.app.state.session_factory
+    with factory() as s:
+        other = make_run(s)
+        first = s.get(Run, web_done_run)
+        uids, other_id = (first.uid, other.uid), other.id
+    assert all(len(u) == 8 for u in uids) and uids[0] != uids[1]
+    text = client.get("/runs").text
+    assert f'<span class="run-no">#2</span> <a href="/r/{uids[1]}" class="run-uid">{uids[1]}</a>' in text
+    r = client.get(f"/r/{uids[1]}", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"/runs/{other_id}"
+    assert client.get("/r/00000000", follow_redirects=False).status_code == 404
+
+
+def test_numbers_close_gaps_right_after_delete_even_while_another_run_is_running(client, web_done_run):
+    """有分析在跑時資料庫 id 不重排，但畫面上的編號照樣立即補齊；uid 不變。"""
+    factory = client.app.state.session_factory
+    with factory() as s:
+        second, third = make_run(s), make_run(s)
+        second_id, third_id, third_uid = second.id, third.id, third.uid
+    manager = client.app.state.run_manager
+    manager.is_running = lambda run_id: run_id == third_id
+    manager.any_running = lambda: True
+    assert client.post(f"/runs/{second_id}/delete", follow_redirects=False).status_code == 303
+    with factory() as s:
+        assert s.get(Run, third_id).uid == third_uid  # 沒有重排
+    text = client.get("/runs").text
+    assert f'<span class="run-no">#2</span> <a href="/r/{third_uid}"' in text and "#3" not in text
+    assert client.get(f"/r/{third_uid}", follow_redirects=False).headers["location"] == f"/runs/{third_id}"

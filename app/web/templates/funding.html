@@ -9,7 +9,7 @@
   <form method="post" action="/funding/import" enctype="multipart/form-data">
     <input type="file" name="file" accept=".xlsx" required>
     <button type="submit">上傳</button>
-    <a class="button secondary" href="/funding/template.xlsx">下載空白範本</a>
+    <a class="button secondary" href="/funding/template.xlsx" download>下載空白範本</a>
   </form>
   {% if not imports %}<p class="muted">尚未匯入</p>{% endif %}
 </section>

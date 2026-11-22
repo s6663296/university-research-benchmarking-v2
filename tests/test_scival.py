@@ -135,7 +135,8 @@ async def test_empty_ids_no_request(respx_mock):
 
 
 def test_strategy_ids():
-    assert set(STRATEGIES) == {"scival_pubset", "none"}
+    assert set(STRATEGIES) == {"scival_pubset_ref", "scival_pubset", "none"}
+    assert get_strategy("scival_pubset_ref").ref_filter and not get_strategy("scival_pubset").ref_filter
     assert get_strategy("scival_pubset").in_set and not get_strategy("none").in_set
     with pytest.raises(KeyError):
         get_strategy("unknown")
@@ -144,5 +145,5 @@ def test_strategy_ids():
 def test_removed_strategies_still_label_old_runs():
     for old in ("scival_param", "scopus_citation_overview"):
         assert "已移除" in get_strategy(old).label and not get_strategy(old).in_set
-        assert usable_strategy_id(old) == "scival_pubset"
+        assert usable_strategy_id(old) == "scival_pubset_ref"
     assert usable_strategy_id("none") == "none"

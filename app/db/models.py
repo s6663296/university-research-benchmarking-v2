@@ -1,5 +1,6 @@
 """SQLite 資料表（設計 §11）。JSON 內容一律以文字欄位存放，欄位名稱以 _json 結尾。"""
 
+import secrets
 from datetime import datetime
 from decimal import Decimal
 
@@ -104,9 +105,28 @@ class TeacherOverride(Base):
     created_at: Mapped[datetime]
 
 
+def new_run_uid() -> str:
+    return secrets.token_hex(4)
+
+
+class SchoolAffiliation(Base):
+    """學校的 Scopus 機構代碼（AF-ID）；以英文校名的比對鍵（忽略大小寫與標點）為主鍵，跨 mapping 版本沿用。"""
+    __tablename__ = "school_affiliations"
+    school_key: Mapped[str] = mapped_column(String, primary_key=True)
+    school_en: Mapped[str] = mapped_column(String)
+    af_id: Mapped[str | None] = mapped_column(String)
+    af_name: Mapped[str | None] = mapped_column(String)
+    matched_by: Mapped[str] = mapped_column(String, default="auto")  # "auto" 或 "manual"
+    candidates_json: Mapped[str] = mapped_column(Text, default="[]")  # 最近一次搜尋的候選，供人工選擇
+    updated_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+
 class Run(Base):
     __tablename__ = "runs"
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True)  # 刪除後會重排成 1…N，不能當固定連結
+    # 隨機產生、建立後不再變動的唯一鍵，版本紀錄的固定連結 /r/{uid} 用它
+    # 資料庫欄位允許 NULL（加欄位時不能重建有外鍵指向的 runs 表），實際上一律由 default 填入
+    uid: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=True, default=new_run_uid)
     created_at: Mapped[datetime]
     period_from: Mapped[int]
     period_to: Mapped[int]
@@ -185,9 +205,10 @@ class ApiCache(Base):
 
 
 class ApiQuota(Base):
-    """各 API 最近一次回應標頭中的額度（X-RateLimit-*）。"""
+    """各組 Key 的各 API 最近一次回應標頭中的額度（X-RateLimit-*）。key_id 是 Key 的雜湊，不存 Key 本身。"""
     __tablename__ = "api_quota"
     api: Mapped[str] = mapped_column(String, primary_key=True)
+    key_id: Mapped[str] = mapped_column(String, primary_key=True, default="", server_default="")
     limit: Mapped[int | None]
     remaining: Mapped[int | None]
     reset_at: Mapped[datetime | None]

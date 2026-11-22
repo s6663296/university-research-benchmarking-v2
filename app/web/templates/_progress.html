@@ -1,7 +1,7 @@
 <section class="card" id="progress"
-  {% if polling %}hx-get="/runs/{{ run.id }}/progress" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
-  <h2>執行進度：{{ run_status }}（{{ done }}／{{ total }}）</h2>
-  {% if run.error %}<div class="notice error">{{ run.error }}</div>{% endif %}
+  {% if polling or refetching %}hx-get="/runs/{{ run.id }}/progress" hx-trigger="every 1s" hx-swap="outerHTML" data-live-patch{% endif %}>
+  <h2 data-live="head">執行進度：{{ run_status }}（{{ done }}／{{ total }}）</h2>
+  {% if run.error %}<div class="notice error" data-live="error">{{ run.error }}</div>{% endif %}
   {% if polling %}
   <div class="run-controls">
     <form method="post" action="/runs/{{ run.id }}/pause?from=run" class="inline"><button type="submit" class="secondary">❚❚ 暫停</button></form>
@@ -16,14 +16,14 @@
   <table>
     <tr><th>學校</th><th>中大系所</th><th>狀態</th><th class="num">篇數</th><th>說明</th><th></th></tr>
     {% for r in rows %}
-    <tr>
+    <tr data-live="ru-{{ r.ru.id }}">
       <td>{{ r.unit.school }}</td><td>{{ r.unit.ncu_dept }}</td>
       <td class="{{ 'error' if r.ru.status == 'failed' else '' }}">{{ r.status }}</td>
       <td class="num">{{ r.ru.eid_count if r.ru.eid_count is not none else "" }}</td>
       <td>{{ r.ru.error or "" }}</td>
-      <td>{% if not polling and r.ru.status != "done" %}
-        <form method="post" action="/runs/{{ run.id }}/units/{{ r.ru.unit_id }}/refetch" class="inline"><button type="submit" class="secondary">重新抓取</button></form>
-      {% endif %}</td>
+      <td>{% if not polling %}{% set state = refetch_state(r.ru.unit_id) %}{% if state or r.ru.status != "done" %}
+        {% with run_id=run.id, unit_id=r.ru.unit_id, state=state %}{% include "_refetch_button.html" %}{% endwith %}
+      {% endif %}{% endif %}</td>
     </tr>
     {% endfor %}
   </table>

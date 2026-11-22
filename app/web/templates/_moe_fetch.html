@@ -22,7 +22,7 @@
     <ol class="fetch-steps">
       {% for step in job.steps %}<li>{{ step }}{% if loop.last and job.status == "running" %}…{% endif %}</li>{% endfor %}
     </ol>
-    {% if job.status == "done" %}完成：匯入 {{ job.row_count }} 筆。<a href="/teachers/fetch/file">下載原始 xlsx</a>
+    {% if job.status == "done" %}完成：匯入 {{ job.row_count }} 筆。<a href="/teachers/fetch/file" download>下載原始 xlsx</a>
     {% elif job.status == "failed" %}失敗：{{ job.error }}{% endif %}
   </div>
   {% endif %}

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "_evidence.html" import ev %}
 {% block content %}
-<h1>分析 #{{ run.id }}（{{ run.period_from }}–{{ run.period_to }}）</h1>
+<h1>分析 #{{ run_no(run) }}（{{ run.period_from }}–{{ run.period_to }}）</h1>
 {% if busy %}<div class="notice">已有抓取作業正在執行，請等它完成後再試。</div>{% endif %}
 {% set n = run.period_to - run.period_from + 1 %}
-{% if polling or run.status != "done" or rows | selectattr("ru.status", "ne", "done") | list %}
+{% if show_progress %}
 {% include "_progress.html" %}
 {% endif %}
 
@@ -131,7 +131,7 @@
         <form method="post" action="/runs/{{ run.id }}/anomalies/{{ x.a.id }}" class="inline">
           <input type="text" name="note" placeholder="備註" size="16"><button type="submit" class="secondary">標為已確認</button>
         </form>
-        {% if x.unit %}<form method="post" action="/runs/{{ run.id }}/units/{{ x.unit.id }}/refetch" class="inline"><button type="submit" class="secondary">重新抓取</button></form>{% endif %}
+        {% if x.unit %}{% with run_id=run.id, unit_id=x.unit.id, state=refetch_state(x.unit.id) %}{% include "_refetch_button.html" %}{% endwith %}{% endif %}
       {% endif %}</td>
     </tr>
     {% endfor %}
@@ -156,16 +156,20 @@
 {% elif ind == "downloads" %}
   <h3>簡報</h3>
   <ul>
-    {% for dept in report_depts %}<li><a href="/runs/{{ run.id }}/pptx/{{ dept }}">{{ dept }}</a></li>{% endfor %}
+    {% for dept in report_depts %}<li><a href="/runs/{{ run.id }}/pptx/{{ dept }}" download>{{ dept }}</a></li>{% endfor %}
   </ul>
-  <p><a class="button" href="/runs/{{ run.id }}/pptx.zip">下載全部簡報（zip）</a></p>
+  <p class="export-zip"><a class="button" href="/runs/{{ run.id }}/pptx.zip" data-export="/runs/{{ run.id }}/exports/pptx" download>下載全部簡報（zip）</a></p>
   <h3>全院總結簡報（AI）</h3>
   <ul>
-    {% for college in college_names %}<li><a href="/runs/{{ run.id }}/college-summary/{{ college | urlencode }}">{{ college }}</a></li>{% endfor %}
+    {% for college in college_names %}<li>{% if college in college_ready %}<a href="/runs/{{ run.id }}/college-summary/{{ college | urlencode }}" download>{{ college }}</a>{% else %}<span class="muted">{{ college }}</span>{% endif %}</li>{% endfor %}
   </ul>
-  <p><a class="button" href="/runs/{{ run.id }}/college-summary.zip">下載全院總結簡報（zip）</a></p>
+  {% if college_ready %}
+  <p class="export-zip"><a class="button" href="/runs/{{ run.id }}/college-summary.zip" data-export="/runs/{{ run.id }}/exports/college" download>下載全院總結簡報（zip）</a></p>
+  {% else %}
+  <p class="muted">請先到 <a href="/runs/{{ run.id }}?ind=ai">AI 總結</a> 產生並確認全院總結</p>
+  {% endif %}
   <h3>Excel</h3>
-  <p><a class="button" href="/runs/{{ run.id }}/xlsx">下載 xlsx</a></p>
+  <p><a class="button" href="/runs/{{ run.id }}/xlsx" download>下載 xlsx</a></p>
 {% endif %}
 {% endif %}
 {% endblock %}

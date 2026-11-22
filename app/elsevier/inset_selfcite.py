@@ -3,42 +3,31 @@
 SciVal 網頁的 Publication Set 取消勾選「Include self-citations」時，只排除「同一組論文彼此之間的引用」：
 2026-11-10 以 7 篇論文的 Publication Set 實測，含自我引用 44、排除後 40，少掉的 4 次恰好是這 7 篇之間的互相引用，
 逐年也完全吻合；這 7 篇以外、由共同作者發表的論文引用則沒有排除。
+SciVal API 的 includeSelfCitations 對逐篇指標沒有作用（2026-11-21 以 100 篇重測，true／false 完全相同），只能自己算。
 
-所以單位的自我引用 = 單位論文（SciVal 有收錄的）之間的引用次數。每個單位的算法：
-  0. 只看被引用過的論文 P（SciVal 被引數 > 0）；沒有就不必查
-  1. 篩選（Scopus Search，約每 100 篇 1 次）：(單位查詢) AND (REF(P1) OR …)，
-     取回「引用了單位論文的單位論文」C。中央財金 145 篇只有 47 篇，其餘不必查參考文獻
-  2. C 的參考文獻：永久快取中已有的直接用；其餘用 Abstract Retrieval（view=FULL，每篇 1 次）取得並永久快取
-  3. 設定選「只用 Scopus Search」或 Abstract Retrieval 的額度用完時，改用只花 Scopus Search 的做法：
-     OpenAlex 指出可能被單位內引用的 P → 逐篇 (單位查詢) AND REF(P) 取得精確的引用者；
-     其餘 P 整組查一次，有結果才拆半，直到單篇。OpenAlex 只決定查詢順序，數字一律來自 Scopus
-     C 的參考文獻都已在永久快取時，仍直接用快取（不花額度）
-  兩種做法的請求數相近（2026-11-13 全校分析已完成的 42 個單位：第 2 步 1,807 次 Abstract Retrieval，
-  第 3 步估計 1,715–5,355 次 Scopus Search），差在第 2 步每篇要下載整份論文資料：大型合作論文
-  （作者上千人）一篇 5–6 MB、10 秒以上；第 3 步的回應只有 Scopus ID。第 2 步的參考文獻可永久快取，
-  重跑幾乎不花額度；第 3 步的引用者會隨時間增加，只能快取當天
-  中央財金 145 篇三種做法都和 SciVal 網頁逐篇一致（100 次）：第 2 步 47 次 Abstract Retrieval；
-  第 3 步 44 次 Scopus Search + 0 次 Abstract Retrieval。
-
-REF(<Scopus ID>) 可以找出引用這篇的論文，但不在官方文件中（REFEID 對這把 Key 不開放）。
-每次分析先用已知的引用關係檢查一次，不符時全部改回逐篇查參考文獻（較慢，但數字一樣精確）。
+所以單位的自我引用 = 單位論文（SciVal 有收錄的）之間的引用次數，由每篇論文的參考文獻算出：
+  0. 組內沒有任何論文被引用過（SciVal 被引數 > 0）時不必計算
+  1. 參考文獻以論文為單位存在永久快取，各單位、各次分析共用（跨系合著只下載一次）
+  2. 快取中已有的論文，用 Scopus Search（EID 清單 AND LOAD-DATE AFT <上次確認日>，每 80 篇 1 次）
+     找出之後被 Scopus 重載的紀錄，只重抓這些
+  3. 缺少或重載的論文用 Abstract Retrieval（view=FULL，每篇 1 次）取得，核對參考文獻筆數完整才存入快取；
+     缺少的不必等第 2 步的查詢，直接下載
+  4. 組內互引超過 SciVal 被引數時表示兩邊資料不一致，該單位失敗，資料來源更新後再續查
+第一次分析要補齊所有論文的參考文獻（大型合作論文一篇 5–6 MB、10 秒以上），之後幾乎只花 Scopus Search。
+額度快用完時 client 會等到重置後自動續查（executor 開啟 wait_for_quota_reset）。
 """
 
 import asyncio
 from collections.abc import Awaitable, Iterable
+from datetime import datetime, timedelta
 
-from app import openalex
 from app.db.models import REFS_ENDPOINT   # 快取中參考文獻的分類名稱（只存 Scopus ID 清單，不存整份回應）
-from app.elsevier.cache import ApiCache
+from app.elsevier.cache import ApiCache, cache_key
 from app.elsevier.client import ElsevierClient, ElsevierError
-from app.elsevier.scopus import SEARCH_PATH, search_docs
+from app.elsevier.scopus import search_docs
 
 ABSTRACT_PATH = "/content/abstract/scopus_id/{}"
 PERMANENT_DAYS = 36500
-# 已知的引用關係：85141566632 的參考文獻有 85120042660（2026-11 以 Abstract Retrieval 與 SciVal 網頁確認）
-REF_CHECK = ("85120042660", "85141566632")
-# Scopus Search 的查詢長度上限：實測 2,550 字可用、3,050 字回 HTTP 400（網址太長）
-MAX_QUERY = 2400
 
 
 def as_list(value) -> list:
@@ -78,31 +67,17 @@ def count_in_set(refs: dict[str, set[str]]) -> dict[str, int]:
     return count_refs(refs, refs)
 
 
+def check_totals(counts: dict[str, int], citations: dict[str, int | None]) -> None:
+    """組內互引超過 SciVal 被引數時表示兩邊資料不一致，該單位失敗，資料來源更新後再續查。"""
+    for sid, count in counts.items():
+        total = citations.get(sid)
+        if total is not None and count > total:
+            raise ElsevierError(200, True, f"論文 {sid} 的組內互引 {count} 超出 SciVal 被引數 {total}，"
+                                              "請於資料來源更新後續查")
+
+
 def refs_key(scopus_id: str) -> str:
     return f"refs:{scopus_id}"
-
-
-def ref_query(query: str, ids: list[str]) -> str:
-    return f"({query}) AND (" + " OR ".join(f"REF({p})" for p in ids) + ")"
-
-
-def ref_groups(query: str, ids: list[str]) -> list[list[str]]:
-    """把論文分組，每組的 ref_query 不超過 MAX_QUERY 字（至少一篇一組）。"""
-    groups: list[list[str]] = []
-    size = len(query) + 10
-    for p in ids:
-        term = len(p) + 9   # "REF(…) OR "
-        if not groups or size + term > MAX_QUERY:
-            groups.append([])
-            size = len(query) + 10
-        groups[-1].append(p)
-        size += term
-    return groups
-
-
-def quota_exhausted(e: ElsevierError) -> bool:
-    """額度用完且短時間內不會重置（client 已換過所有 Key）。"""
-    return e.status == 429 and not e.retryable
 
 
 async def _all(awaitables: Iterable[Awaitable]) -> list:
@@ -115,69 +90,138 @@ async def _all(awaitables: Iterable[Awaitable]) -> list:
 
 
 class InSetSelfCitations:
-    """同一次分析共用一個實例：參考文獻、REF 檢查結果、Abstract Retrieval 額度狀態都在各單位間共用。"""
+    """同一次分析共用一個實例：已確認的參考文獻在各單位間共用。
 
-    def __init__(self, client: ElsevierClient, *, use_cache: bool = True, scopus_only: bool = False):
+    各單位同時計算、互不等待：每篇論文由第一個需要它的單位負責確認（查快取是否重載、下載），
+    其他需要同一篇的單位只等那一篇。下載請求依送出順序排隊，所以先到的單位先完成。
+    """
+
+    def __init__(self, client: ElsevierClient):
         self.client = client
-        self.use_cache = use_cache                    # Scopus Search 篩選結果是否沿用一般快取（參考文獻一律永久快取）
-        self.scopus_only = scopus_only                # 設定「只用 Scopus Search」：不向 Abstract Retrieval 要參考文獻
+        # 論文 → 它引用的 Scopus ID（這次分析已確認是最新的）；還在確認的也在這裡，其他單位直接等結果
+        self._refs: dict[str, asyncio.Future] = {}
         self._ref_cache: ApiCache | None = None
-        self._refs: dict[str, asyncio.Future] = {}   # 論文 → 它引用的 Scopus ID
-        self._ref_ok: asyncio.Future | None = None   # REF(<Scopus ID>) 是否可用（每次分析檢查一次）
-        self.abstract_exhausted = False               # Abstract Retrieval 額度用完後，其餘單位改用 Scopus Search
         self.fetched = 0                              # 這次實際向 Abstract Retrieval 要的篇數
-        self.searches = 0                             # 這次為了排除自我引用送出的 Scopus Search 查詢數
-        self.refs_total = 0                           # 進度：需要參考文獻的篇數（含快取中已有的），各單位累計
-        self.refs_done = 0                            # 進度：其中已取得的篇數
+        self.searches = 0                             # 這次為了確認快取是否過期送出的 Scopus Search 查詢數
+        self.refs_total = 0                           # 進度：需要下載參考文獻的篇數，各單位累計
+        self.refs_done = 0                            # 進度：其中已下載的篇數
 
-    async def count(self, ids: list[str], citations: dict[str, int | None], *, query: str | None = None,
-                    dois: dict[str, str] | None = None) -> dict[str, int]:
-        """ids 是一個單位的論文（即 SciVal 的 Publication Set）；回傳每篇被組內論文引用的次數。
-
-        query 是找出這些論文的 Scopus 查詢；沒有時只能逐篇查參考文獻。dois 用來對照 OpenAlex。
-        """
+    async def count(self, ids: list[str], citations: dict[str, int | None], *,
+                    query: str | None = None) -> dict[str, int]:
+        """ids 是一個單位的論文（即 SciVal 的 Publication Set）；回傳每篇被組內論文引用的次數。query 不使用。"""
         ids = list(dict.fromkeys(ids))
-        cited = [s for s in ids if (citations.get(s) or 0) > 0]
-        if not cited:   # 組內沒有任何論文被引用過，不可能有組內互引
+        if not any((citations.get(s) or 0) > 0 for s in ids):   # 組內沒有任何論文被引用過，不可能有組內互引
             return {}
-        if query is None or not await self._ref_usable():
-            return await self._by_references(ids, ids)
-        members = set(ids)
-        citers = set().union(*await _all(self._search(ref_query(query, g)) for g in ref_groups(query, cited))) & members
-        if not citers:
-            return {}
-        citers = sorted(citers)
-        self._preload(citers)
-        known = all(self._has_refs(s) for s in citers)   # 都在永久快取中：不花額度，任何做法都直接用
-        if known or not (self.scopus_only or self.abstract_exhausted):
-            try:
-                return await self._by_references(citers, members)
-            except ElsevierError as e:
-                if not quota_exhausted(e):
-                    raise
-                self.abstract_exhausted = True
-        return await self._by_cited(query, cited, members, dois or {})
+        counts = count_refs(await self.refs_of(ids), ids)
+        check_totals(counts, citations)
+        return counts
 
-    # ---- 第 2 步：引用者的參考文獻（Abstract Retrieval，永久快取）----
+    async def refs_of(self, ids: list[str]) -> dict[str, set[str]]:
+        """這些論文各自引用的 Scopus ID（快取中已確認的直接用，其餘確認或下載）。"""
+        mine = self._claim(ids)
+        if mine:
+            await self._verify(mine)
+        # shield：這個單位被取消時，不要連帶取消其他單位也在等的論文
+        refs = await _all(asyncio.shield(self._refs[sid]) for sid in ids)
+        return dict(zip(ids, refs))
 
-    async def _by_references(self, citers: list[str], members: Iterable[str]) -> dict[str, int]:
-        self._preload(citers)
-        futures = [self._refs_of(s) for s in citers]
-        self.refs_total += len(futures)
-        for fut in futures:   # 快取中已有的（已完成）直接計入；callback 要等下一輪 event loop 才會執行
-            if fut.done():
-                self.refs_done += 1
-            else:
-                fut.add_done_callback(self._ref_done)
-        refs = await _all(futures)
-        return count_refs(dict(zip(citers, refs)), members)
+    def _claim(self, ids: list[str]) -> list[str]:
+        """這個單位負責確認的論文：還沒有單位在確認的，以及之前確認失敗的（例如額度用完），之後可以再查。"""
+        loop = asyncio.get_running_loop()
+        mine = []
+        for sid in ids:
+            fut = self._refs.get(sid)
+            if fut is None or (fut.done() and (fut.cancelled() or fut.exception() is not None)):
+                self._refs[sid] = loop.create_future()
+                mine.append(sid)
+        return sorted(mine)
 
-    def _ref_done(self, _fut: asyncio.Future) -> None:
+    async def _verify(self, mine: list[str]) -> None:
+        try:
+            # 每組 80 個 EID，查詢低於 Scopus 網址上限；各組同時進行
+            await _all(self._verify_group(mine[i:i + 80]) for i in range(0, len(mine), 80))
+        except BaseException as e:   # 沒確認到的論文：正在等它的單位一起失敗，之後的單位會重查
+            error = e if isinstance(e, Exception) else ElsevierError(None, True, "參考文獻的確認已中止")
+            for sid in mine:
+                fut = self._refs[sid]
+                if not fut.done():
+                    fut.set_exception(error)
+                    fut.exception()   # 已交給等待的單位處理，不必再記錄「exception was never retrieved」
+            raise
+
+    async def _verify_group(self, group: list[str]) -> None:
+        """快取中沒有的論文直接下載；有的先以 EID 查 Scopus 之後是否重載，只重抓重載的。完成一組就存下進度。"""
+        cache = self.ref_cache
+        started = datetime.now().astimezone()
+        rows = cache.get_many_dated([refs_key(sid) for sid in group]) if cache else {}
+        known = {}
+        dates = []
+        for sid in group:
+            entry = rows.get(refs_key(sid))
+            if entry:
+                fetched, data = entry
+                # 舊格式也會將 404 存成空清單；要以有效的書目回應再確認一次。
+                if data.get("refs") or data.get("complete"):
+                    known[sid] = set(data["refs"])
+                    dates.append(fetched.astimezone().date())
+        checkpoint = cache_key("selfcite/reference-check", {"ids": group})
+        missing = [sid for sid in group if sid not in known]
+        self.refs_total += len(missing)
+
+        async def recheck() -> None:
+            checked = cache.get(checkpoint) if cache else None
+            since = min(dates)
+            if checked:
+                since = max(since, datetime.fromisoformat(checked["started"]).date())
+            # LOAD-DATE 精度是日；重疊邊界日期，涵蓋時區與同日的後續更正。
+            boundary = (since - timedelta(days=2)).strftime("%Y%m%d")
+            terms = " OR ".join(f"EID(2-s2.0-{sid})" for sid in known)
+            self.searches += 1
+            changed = await search_docs(self.client, f"({terms}) AND LOAD-DATE AFT {boundary}",
+                                        use_cache=False, strict=True)
+            reloaded = {doc.scopus_id for doc in changed}
+            if reloaded - known.keys():
+                raise ElsevierError(200, True, "Scopus 更新清單含查詢範圍外的論文")
+            for sid in known.keys() - reloaded:
+                self._refs[sid].set_result(known[sid])
+            self.refs_total += len(reloaded)
+            await _all(self._download(sid) for sid in sorted(reloaded))
+
+        await _all([*(self._download(sid) for sid in missing), *([recheck()] if known else [])])
+        if cache:
+            cache.put(checkpoint, "selfcite/reference-check", {"started": started.isoformat()})
+
+    async def _download(self, sid: str) -> None:
+        """每篇成功就寫入快取。停用分析時不會遺失已下載的書目。"""
+        self._refs[sid].set_result(await self._read_complete_refs(sid))
+
+    async def _read_complete_refs(self, sid: str) -> set[str]:
+        path = ABSTRACT_PATH.format(sid)
+        data = await self.client.get_json(path, {"view": "FULL"}, use_cache=False, store=False)
+        root = data.get("abstracts-retrieval-response") or {}
+        record = (root.get("item") or {}).get("bibrecord") or {}
+        bib = (record.get("tail") or {}).get("bibliography") or {}
+        entries = as_list(bib.get("reference"))
+        core_id = (root.get("coredata") or {}).get("dc:identifier")
+        if core_id and core_id != f"SCOPUS_ID:{sid}":
+            raise ElsevierError(200, True, f"Scopus 回傳的論文與 {sid} 不符")
+        if core_id == f"SCOPUS_ID:{sid}" and "tail" in record and record["tail"] is None:
+            # FULL 的勘誤紀錄可能明確給 tail:null，代表索引中沒有書目。
+            total = 0
+        elif not bib:
+            # 部分零參考文獻紀錄省略 bibliography；使用 REF 的總筆數確認。
+            check = await self.client.get_json(path, {"view": "REF"}, use_cache=False, store=False)
+            total = check.get("abstracts-retrieval-response", {}).get("references", {}).get("@total-references")
+        else:
+            total = bib.get("@refcount")
+        if not str(total).isdigit() or int(total) != len(entries):
+            raise ElsevierError(200, True, f"Scopus 論文 {sid} 的參考文獻不完整")
+        refs = full_view_refs(data)
+        if self.ref_cache:
+            self.ref_cache.put(refs_key(sid), REFS_ENDPOINT, {"refs": refs, "complete": True})
+        self.fetched += 1
         self.refs_done += 1
-
-    def _has_refs(self, sid: str) -> bool:
-        fut = self._refs.get(sid)
-        return fut is not None and fut.done() and not fut.cancelled() and fut.exception() is None
+        return set(refs)
 
     @property
     def ref_cache(self) -> ApiCache | None:
@@ -185,90 +229,3 @@ class InSetSelfCitations:
         if self._ref_cache is None and self.client.cache is not None:
             self._ref_cache = ApiCache(self.client.cache.session_factory, PERMANENT_DAYS)
         return self._ref_cache
-
-    def _preload(self, ids: list[str]) -> None:
-        """一次從快取讀出已知的參考文獻，避免逐篇查資料庫。"""
-        missing = [s for s in ids if s not in self._refs]
-        if self.ref_cache is None or not missing:
-            return
-        cached = self.ref_cache.get_many([refs_key(s) for s in missing])
-        loop = asyncio.get_running_loop()
-        for sid in missing:
-            entry = cached.get(refs_key(sid))
-            if entry is not None:
-                self._refs[sid] = loop.create_future()
-                self._refs[sid].set_result(set(entry["refs"]))
-
-    def _refs_of(self, sid: str) -> asyncio.Future:
-        fut = self._refs.get(sid)
-        # 額度用完等原因失敗的，之後可以再查
-        if fut is None or (fut.done() and (fut.cancelled() or fut.exception() is not None)):
-            fut = self._refs[sid] = asyncio.ensure_future(self._fetch(sid))
-        return fut
-
-    async def _fetch(self, sid: str) -> set[str]:
-        try:
-            data = await self.client.get_json(ABSTRACT_PATH.format(sid), {"view": "FULL"},
-                                              use_cache=False, store=False)
-            refs = full_view_refs(data)
-        except ElsevierError as e:
-            if e.status != 404:   # Scopus 已移除的論文：當作沒有參考文獻
-                raise
-            refs = []
-        self.fetched += 1
-        if self.ref_cache is not None:   # 逐篇存下，額度用完中斷後可以接著做
-            self.ref_cache.put(refs_key(sid), REFS_ENDPOINT, {"refs": refs})
-        return set(refs)
-
-    # ---- 第 3 步：只用 Scopus Search（OpenAlex 決定查詢順序）----
-
-    async def _by_cited(self, query: str, cited: list[str], members: set[str],
-                        dois: dict[str, str]) -> dict[str, int]:
-        hinted_set = await openalex.cited_within({s: dois[s] for s in members if s in dois})
-        hinted = [p for p in cited if p in hinted_set]
-        found = await _all(self._search(ref_query(query, [p])) for p in hinted)
-        counts = {p: len(c & members) for p, c in zip(hinted, found) if c & members}
-        # OpenAlex 沒指出的（包括 OpenAlex 找不到的論文）整組檢查，有結果才拆開查
-        rest = [p for p in cited if p not in hinted_set]
-        groups = ref_groups(query, rest)
-        found = await _all(self._search(ref_query(query, g)) for g in groups)
-        for part in await _all(self._split(query, g, c & members, members) for g, c in zip(groups, found)):
-            counts |= part
-        return counts
-
-    async def _split(self, query: str, group: list[str], citers: set[str], members: set[str]) -> dict[str, int]:
-        """citers：引用了這組任一篇的單位論文。拆半直到單篇，單篇時的引用者數就是答案。"""
-        if not citers:
-            return {}
-        if len(group) == 1:
-            return {group[0]: len(citers)}
-        left, right = group[:len(group) // 2], group[len(group) // 2:]
-        left_citers = await self._search(ref_query(query, left)) & members
-        # 左半沒有任何引用者時，這組的引用者都是引用右半的，不必再查
-        right_citers = citers if not left_citers else await self._search(ref_query(query, right)) & members
-        return {**await self._split(query, left, left_citers, members),
-                **await self._split(query, right, right_citers, members)}
-
-    # ---- Scopus Search ----
-
-    async def _search(self, query: str) -> set[str]:
-        self.searches += 1
-        return {d.scopus_id for d in await search_docs(self.client, query, use_cache=self.use_cache)}
-
-    async def _ref_usable(self) -> bool:
-        if self._ref_ok is None:
-            self._ref_ok = asyncio.ensure_future(self._check_ref())
-        return await self._ref_ok
-
-    async def _check_ref(self) -> bool:
-        """REF(<Scopus ID>) 不在官方文件中：用已知的引用關係確認它仍能找出引用者。"""
-        cited, citing = REF_CHECK
-        try:
-            data = await self.client.get_json(SEARCH_PATH, {"query": f"REF({cited}) AND EID(2-s2.0-{citing})",
-                                                            "count": 1, "field": "dc:identifier"},
-                                              use_cache=False, store=False)
-        except ElsevierError as e:
-            if e.status == 400:   # 查詢語法不被接受
-                return False
-            raise
-        return int(data.get("search-results", {}).get("opensearch:totalResults") or 0) == 1

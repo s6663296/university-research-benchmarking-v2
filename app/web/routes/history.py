@@ -48,6 +48,15 @@ def history(request: Request, session: Session = Depends(get_session)):
     return render(request, "runs.html", runs=run_summaries(session), watch=watch_url(request, session))
 
 
+@router.get("/r/{uid}")
+def run_by_uid(uid: str, session: Session = Depends(get_session)):
+    """固定連結：編號重排後 /runs/{id} 會變，uid 不變。"""
+    run_id = session.scalar(select(Run.id).where(Run.uid == uid))
+    if run_id is None:
+        raise HTTPException(404, "找不到這個分析，可能已被刪除")
+    return RedirectResponse(f"/runs/{run_id}", status_code=303)
+
+
 @router.post("/runs/{run_id}/delete")
 def delete_run(request: Request, run_id: int, session: Session = Depends(get_session)):
     run = get_run(session, run_id)

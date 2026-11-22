@@ -1,4 +1,6 @@
+from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 from sqlalchemy import select
 
@@ -283,14 +285,18 @@ def test_selfcite_stage_shows_references_and_searches_while_running(session):
     run = make_run(session)
     session.get(Run, run.id).status = "running"
     rus = set_units(session, run.id, "done", "selfcite", "scival", eid_count=5)
-    live = InSetSelfCitations(None)
+    elsevier = SimpleNamespace(quota_resume_at={})
+    live = InSetSelfCitations(elsevier)
     live.refs_done, live.refs_total = 1234, 2000
     n = len(rus)
     s = {x.key: x for x in pipeline(session, run.id, True, selfcite=live)}
     assert s["selfcite"].progress == (f"單位 1／{n}", "參考文獻 1,234／2,000 篇")
-    live.scopus_only, live.searches = True, 56
+    live.searches = 56
     s = {x.key: x for x in pipeline(session, run.id, True, selfcite=live)}
     assert s["selfcite"].progress[-1] == "Scopus 查詢 56 次"
+    elsevier.quota_resume_at["abstract"] = datetime(2026, 11, 28, 9, 30).timestamp()
+    s = {x.key: x for x in pipeline(session, run.id, True, selfcite=live)}
+    assert s["selfcite"].progress[-1] == "Abstract Retrieval 11/28 09:30 自動續查"
     s = {x.key: x for x in pipeline(session, run.id, False, selfcite=live)}   # 沒在執行時不顯示
     assert s["selfcite"].progress == (f"單位 1／{n}",)
 

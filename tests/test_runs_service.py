@@ -57,7 +57,7 @@ def test_preview_rows(seeded):
     assert errors == []
     by_school = {(r.school, seeded.get(Unit, r.unit_id).ncu_dept): r for r in rows}
     ntu = by_school[("台大", "資訊管理學系")]
-    assert ntu.query.startswith('(AFFIL("Department of Information Management" W/15 "National Taiwan University")')
+    assert ntu.query.startswith('AFFIL("Department of Information Management" W/15 "National Taiwan University")')
     assert ntu.teacher.value == 16
     assert len(rows) == 5  # 中央 3 系所 + 台大資管 + 政治資管
 
@@ -73,7 +73,7 @@ def test_create_run_snapshots_teacher_counts(seeded):
     run2 = create_run(seeded, cfg(), today=TODAY)
     again = next(ru for ru in run_units(seeded, run2.id) if ru.unit_id == ncu_im.unit_id)
     assert (again.teacher_count, again.teacher_source) == (23, "manual:依 SciVal")
-    assert run.status == "pending" and run.self_citation_strategy == "scival_pubset"
+    assert run.status == "pending" and run.self_citation_strategy == "scival_pubset_ref"
 
 
 def test_unit_shared_by_groups_created_once(seeded):
@@ -123,4 +123,4 @@ def test_teacher_detail_records_override_and_moe_rows(seeded):
 def test_removed_strategy_in_settings_falls_back_to_default(seeded):
     from app.db.settings_store import set_setting
     set_setting(seeded, "self_citation_strategy", "scival_param")   # 舊版存下、已移除的策略
-    assert create_run(seeded, cfg(), today=TODAY).self_citation_strategy == "scival_pubset"
+    assert create_run(seeded, cfg(), today=TODAY).self_citation_strategy == "scival_pubset_ref"

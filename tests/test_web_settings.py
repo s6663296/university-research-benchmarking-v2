@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -7,6 +9,7 @@ from app.main import create_app
 
 SCOPUS = r".*/content/search/scopus.*"
 SCIVAL = r".*/analytics/scival/.*"
+ABSTRACT = r".*/content/abstract/scopus_id/\d+.*"
 
 
 @pytest.fixture
@@ -22,7 +25,7 @@ def form(client, **overrides):
         "rate_per_sec": "3.0", "max_retries": "3", "backoff_base_sec": "1.0", "timeout_sec": "60",
         "cache_days": "1", "anomaly_change_threshold": "0.3",
         "max_concurrency": "4", "rate_limit_retries": "8", "max_backoff_sec": "120",
-        "teacher_column": "total", "self_citation_strategy": "none", "selfcite_method": "references",
+        "teacher_column": "total", "self_citation_strategy": "none",
         "rank_highlight_top": "2",
     }
     data.update(overrides)
@@ -39,12 +42,6 @@ def test_post_settings_updates_values(client):
     r = form(client, timeout_sec="45")
     assert r.status_code == 200
     assert 'value="45"' in client.get("/settings").text
-
-
-def test_selfcite_method_is_saved(client):
-    assert form(client, selfcite_method="scopus").status_code == 200
-    assert '<option value="scopus" selected>' in client.get("/settings").text
-    assert form(client, selfcite_method="other").status_code == 400
 
 
 def test_settings_page_has_no_name_tables(client):
@@ -78,27 +75,49 @@ def test_status_unreachable(keyed_client, respx_mock):
 
 def quota_headers(limit, remaining):
     return {"X-RateLimit-Limit": str(limit), "X-RateLimit-Remaining": str(remaining),
-            "X-RateLimit-Reset": "1793849792"}
+            "X-RateLimit-Reset": str(int((datetime.now() + timedelta(days=7)).timestamp()))}
 
 
 def test_status_check_shows_each_api_quota(keyed_client, respx_mock):
     respx_mock.get(url__regex=SCOPUS).mock(return_value=httpx.Response(200, json={}, headers=quota_headers(20000, 19876)))
     respx_mock.get(url__regex=SCIVAL).mock(return_value=httpx.Response(200, json={}, headers=quota_headers(5000, 3700)))
+    respx_mock.get(url__regex=ABSTRACT).mock(return_value=httpx.Response(200, json={}, headers=quota_headers(10000, 9876)))
     text = keyed_client.get("/status").text
     assert "連線正常" in text
     assert "Scopus Search API" in text and "19,876" in text and "20,000" in text
+    assert "Scopus Abstract Retrieval API" in text and "9,876" in text and "10,000" in text
     assert "SciVal API" in text and "3,700" in text and "5,000" in text
 
 
 def test_quota_panel_uses_saved_values_without_requests(keyed_client, respx_mock):
     route = respx_mock.get(url__regex=SCOPUS)
+    abstract = respx_mock.get(url__regex=ABSTRACT).mock(return_value=httpx.Response(200, json={}, headers=quota_headers(10000, 9876)))
     assert "尚無額度資料" in keyed_client.get("/status/panel").text
     respx_mock.get(url__regex=SCIVAL).mock(return_value=httpx.Response(200, json={}, headers=quota_headers(5000, 3700)))
     route.mock(return_value=httpx.Response(200, json={}, headers=quota_headers(20000, 19876)))
     keyed_client.get("/status")
     text = keyed_client.get("/status/panel").text
-    assert "19,876" in text and "3,700" in text
+    assert "19,876" in text and "3,700" in text and "9,876" in text
+    assert abstract.call_count == 1
     assert route.call_count == 1  # 只有按「檢查連線」那次
+
+
+def test_quota_panel_marks_past_reset_until_checked(keyed_client, respx_mock):
+    from app.elsevier.quota import Quota, QuotaStore
+
+    store = QuotaStore(keyed_client.app.state.session_factory)
+    store.record("abstract", Quota(10000, 99, datetime.now() - timedelta(days=4)))
+    text = keyed_client.get("/status/panel").text
+    assert "本期額度待查" in text and "quota-bar" not in text
+    assert not respx_mock.calls
+
+
+def test_status_updates_other_quotas_when_search_is_denied(keyed_client, respx_mock):
+    respx_mock.get(url__regex=SCOPUS).mock(return_value=httpx.Response(403))
+    respx_mock.get(url__regex=SCIVAL).mock(return_value=httpx.Response(200, json={}, headers=quota_headers(5000, 3700)))
+    respx_mock.get(url__regex=ABSTRACT).mock(return_value=httpx.Response(200, json={}, headers=quota_headers(10000, 9876)))
+    text = keyed_client.get("/status").text
+    assert "9,876" in text and "3,700" in text and "連線正常" not in text
 
 
 def test_home_card_loads_saved_quota_and_checks(client):
@@ -123,7 +142,6 @@ def test_reset_clears_data_key_and_settings(client, tmp_path, web_done_run):
 
     form(client, timeout_sec="45")
     client.post("/settings/api-keys/add", data={"api_key": "newkey9999"})
-    client.post("/settings/insttoken", data={"insttoken": "tok5678"})
     (tmp_path / "exports" / str(web_done_run)).mkdir(parents=True, exist_ok=True)
     (tmp_path / ".env").write_text((tmp_path / ".env").read_text(encoding="utf-8") + "PORT=9000\n", encoding="utf-8")
 
@@ -142,7 +160,7 @@ def test_reset_clears_data_key_and_settings(client, tmp_path, web_done_run):
         assert s.get(AppSetting, "timeout_sec") is None
     assert 'value="60"' in r.text  # 回到預設值
     env = (tmp_path / ".env").read_text(encoding="utf-8")
-    assert "ELSEVIER_API_KEY=\n" in env and "ELSEVIER_INSTTOKEN=\n" in env and "PORT=9000" in env
+    assert "ELSEVIER_API_KEY=\n" in env and "PORT=9000" in env
     assert not (tmp_path / "exports").exists()
     assert client.app.state.settings.elsevier_api_key == ""
     assert "尚未設定 API Key" in r.text
@@ -224,6 +242,14 @@ def test_save_ai_options(client):
     with client.app.state.session_factory() as s:
         assert get_setting(s, "ai_model") == "claude-sonnet-5-5"
         assert get_setting(s, "ai_tone_prompt") == DEFAULT_TONE
+        assert get_setting(s, "ai_effort") == "medium"
+    client.post("/settings/ai", data={"ai_model": "", "ai_effort": "high", "ai_tone_prompt": ""})
+    with client.app.state.session_factory() as s:
+        assert get_setting(s, "ai_effort") == "high"
+    assert '<option value="high" selected>高</option>' in client.get("/settings").text
+    client.post("/settings/ai", data={"ai_model": "", "ai_effort": "bogus", "ai_tone_prompt": ""})
+    with client.app.state.session_factory() as s:
+        assert get_setting(s, "ai_effort") == "medium"
 
 
 def test_ai_model_field_plain_input_without_key(client):
@@ -277,3 +303,16 @@ def test_list_models_maps_sdk_models():
     fake = SimpleNamespace(models=SimpleNamespace(
         list=lambda **kw: [SimpleNamespace(id="claude-opus-5-5", display_name="Claude Opus 5.5")]))
     assert list_models("k", client=fake) == [("claude-opus-5-5", "Claude Opus 5.5")]
+
+
+def test_home_quota_panel_polls_saved_values_only_while_running(client, web_done_run):
+    """分析中額度已從每次 API 回應的標頭存檔，面板定時重讀存檔即可，不多打 API。"""
+    from app.db.models import Run
+
+    quota_div = lambda: client.get("/").text.split('id="api-quota"')[1].split(">")[0]
+    assert 'hx-trigger="load"' in quota_div()
+    with client.app.state.session_factory() as s:
+        s.get(Run, web_done_run).status = "running"
+        s.commit()
+    client.app.state.run_manager.is_running = lambda run_id: True
+    assert 'hx-trigger="load, every 2s"' in quota_div()

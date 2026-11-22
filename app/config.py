@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
     elsevier_api_key: str = ""
-    elsevier_insttoken: str = ""
     anthropic_api_key: str = ""
     data_dir: Path = HOME / "data"
     host: str = "127.0.0.1"

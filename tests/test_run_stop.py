@@ -67,6 +67,8 @@ async def test_pause_cancels_real_executor_fetches(session, session_factory, mon
 
     class Client:
         usage = Counter()
+        api_keys = ["k"]
+        load_balance = True
 
         async def aclose(self):
             pass
@@ -164,6 +166,14 @@ def test_run_page_controls_follow_background(client, web_done_run):
     text = client.get(f"/runs/{web_done_run}").text
     assert f'action="/runs/{web_done_run}/pause?from=run"' in text
     assert f'action="/runs/{web_done_run}/stop?from=run"' in text
+
+
+def test_polling_progress_is_patched_in_place(client, web_done_run):
+    """執行中每秒輪詢：前端依 data-live 只改有變動的列，不整塊替換（整塊替換會讓表格閃一下）。"""
+    client.app.state.run_manager.is_running = lambda run_id: True
+    text = client.get(f"/runs/{web_done_run}/progress").text
+    assert "data-live-patch" in text and 'data-live="head"' in text and 'data-live="ru-' in text
+    assert "/static/live-patch.js" in client.get(f"/runs/{web_done_run}/fetch").text
 
 
 def test_pause_from_run_page_returns_there(client, web_done_run):

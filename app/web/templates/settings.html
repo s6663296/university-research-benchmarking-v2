@@ -36,13 +36,9 @@
     <input type="password" id="api_key" name="api_key" size="40" autocomplete="off" placeholder="貼上新的 API Key" required>
     <button type="submit">新增</button>
   </form>
-
-  <h3>insttoken</h3>
-  <form method="post" action="/settings/insttoken" class="api-key-add">
-    <label for="insttoken" class="sr-only">insttoken</label>
-    <input type="password" id="insttoken" name="insttoken" size="40" autocomplete="off" placeholder="{{ insttoken_status }}">
-    <button type="submit" class="secondary">儲存</button>
-  </form>
+  <form method="post" action="/settings/load-balance" class="load-balance">
+    <label><input type="checkbox" name="load_balance" value="1" {% if load_balance %}checked{% endif %}
+      onchange="this.form.submit()"> 負載平衡</label>  </form>
 </section>
 
 <section class="card">
@@ -73,6 +69,10 @@
   <form method="post" action="/settings/ai">
     <div class="field"><label for="ai_model">模型</label>
       {% with models=None, load_models=ai_masked_key, error=None %}{% include "_ai_model_field.html" %}{% endwith %}</div>
+    <div class="field"><label for="ai_effort">思考程度</label>
+      <select id="ai_effort" name="ai_effort">
+        {% for k, v in effort_choices.items() %}<option value="{{ k }}" {% if k == ai_effort %}selected{% endif %}>{{ v }}</option>{% endfor %}
+      </select></div>
     <div class="field"><label for="ai_tone_prompt">提示詞</label>
       <textarea id="ai_tone_prompt" name="ai_tone_prompt" rows="8" cols="60">{{ ai_tone }}</textarea></div>
     <button type="submit">儲存</button>
@@ -93,10 +93,6 @@
   <div class="field"><label for="self_citation_strategy">排除自我引用方式</label>
     <select id="self_citation_strategy" name="self_citation_strategy">
       {% for k, v in strategy_choices.items() %}<option value="{{ k }}" {% if k == strategy %}selected{% endif %}>{{ v }}</option>{% endfor %}
-    </select></div>
-  <div class="field"><label for="selfcite_method">組內互引查詢方式</label>
-    <select id="selfcite_method" name="selfcite_method">
-      {% for k, v in selfcite_method_choices.items() %}<option value="{{ k }}" {% if k == selfcite_method %}selected{% endif %}>{{ v }}</option>{% endfor %}
     </select></div>
 </section>
 
