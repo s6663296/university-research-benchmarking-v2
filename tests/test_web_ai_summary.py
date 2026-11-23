@@ -306,3 +306,81 @@ def test_college_zip_export_explains_missing_summary(client, run_id):
     generate(client, run_id)
     text = client.get(f"/runs/{run_id}?ind=downloads").text
     assert "/college-summary/" in text and f'data-export="/runs/{run_id}/exports/college"' in text
+
+
+# ---- 圖表分析（圖片，不放進系所簡報） ----
+
+def generate_charts(client, run_id, dept=DEPT):
+    r = client.post(f"/runs/{run_id}/ai/charts/generate/{dept}", follow_redirects=False)
+    assert r.status_code == 303 and sel("dept", dept) in r.headers["location"]
+    return wait_job(client, run_id)
+
+
+def chart_row(client):
+    from app.db.models import AiChartNote
+    with client.app.state.session_factory() as s:
+        return s.scalars(select(AiChartNote).where(AiChartNote.key == DEPT)).one()
+
+
+def test_chart_section_only_for_depts(client, run_id):
+    html = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text
+    section = html.split('id="ai-charts"')[1]
+    assert "圖表分析" in html and "產生圖表分析" in section and "全部系所產生圖表分析" in section
+    assert "<svg" not in section                                # 還沒產生只顯示按鈕
+    college = client.get(f"/runs/{run_id}?ind=ai&{sel('college', '管理學院')}").text
+    assert 'id="ai-charts"' not in college
+
+
+def test_generate_charts_shows_images_with_png_download(client, run_id):
+    state = generate_charts(client, run_id)
+    assert not state.errors
+    section = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text.split('id="ai-charts"')[1]
+    assert section.count('class="ai-chart-svg"') >= 1 and 'data-png="' in section and "下載圖片" in section
+    assert "total紅框重點" in section and "重新產生圖表分析" in section
+    assert 'id="ai-chart-edit"' in section and "過時" not in section
+    # AI 總結沒有因此產生，也不會被標成過時
+    with client.app.state.session_factory() as s:
+        assert s.scalars(select(AiSummary)).first() is None
+
+
+def test_charts_are_not_in_dept_pptx(client, run_id):
+    generate(client, run_id)
+    generate_charts(client, run_id)
+    texts = slide_texts(client.get(f"/runs/{run_id}/pptx/{DEPT}").content)
+    assert not any("圖表說明" in t or "紅框重點" in t for t in texts)
+
+
+def test_edit_charts_saves_notes_and_highlight(client, run_id):
+    generate_charts(client, run_id)
+    row = chart_row(client)
+    r = client.post(f"/runs/{run_id}/ai/charts/{row.id}",
+                    data={"notes_total": "・改過的說明\n\n第二點", "highlight_total": "人工重點"}, follow_redirects=False)
+    assert r.status_code == 303 and sel("dept", DEPT) in r.headers["location"]
+    import json
+    saved = chart_row(client)
+    total = next(c for c in json.loads(saved.notes_json)["charts"] if c["indicator"] == "total")
+    assert saved.edited and total["notes"] == ["改過的說明", "第二點"] and total["highlight"] == "人工重點"
+    others = [c for c in json.loads(saved.notes_json)["charts"] if c["indicator"] != "total"]
+    assert all(c["highlight"] for c in others)                  # 沒送出的欄位維持原樣
+    assert "人工重點" in client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text
+
+
+def test_stale_charts_show_notice(client, run_id):
+    generate_charts(client, run_id)
+    from app.db.models import AiChartNote
+    with client.app.state.session_factory() as s:
+        s.get(AiChartNote, chart_row(client).id).input_hash = "old"
+        s.commit()
+    section = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text.split('id="ai-charts"')[1]
+    assert "圖表說明可能過時" in section and "<svg" in section
+
+
+def test_chart_routes_404(client, run_id):
+    assert client.post(f"/runs/{run_id}/ai/charts/generate/不存在的系").status_code == 404
+    assert client.post(f"/runs/{run_id}/ai/charts/99999", data={}).status_code == 404
+
+
+def test_generate_all_charts(client, run_id):
+    assert client.post(f"/runs/{run_id}/ai/charts/generate", follow_redirects=False).status_code == 303
+    state = wait_job(client, run_id)
+    assert state.total >= 1 and not state.errors

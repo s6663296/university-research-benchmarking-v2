@@ -9,21 +9,22 @@ from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai import service
+from app.ai import charts as ai_charts, service
 from app.ai.prompts import DEFAULT_TONE
 from app.reports.emphasis import emphasis, strip_bullet
 from app.ai.baseline import baseline_choices, baseline_for, basis_differences
-from app.db.models import AiSummary, Run
+from app.db.models import AiChartNote, AiSummary, Run
 from app.db.settings_store import get_setting, set_setting
 from app.funding.service import run_colleges
 from app.reports.college_report import build_college_report, college_report_filename
 from app.reports.exports import export_path, record_export
+from app.web.chart_slides import slides as chart_slides
 from app.web.deps import get_session, render
 from app.web.routes.runs import PPTX_TYPE, _done_run, get_run
 
 router = APIRouter()
 
-KIND_LABELS = {"dept": "系所", "college": "學院"}
+KIND_LABELS = {"dept": "系所", "college": "學院", "charts": "圖表分析"}
 NEED_SUMMARY = "請先產生並確認全院總結"
 
 
@@ -72,9 +73,22 @@ def ai_context(session: Session, run: Run, sel: str = "") -> dict:
         row = current["row"]
         for field in ("summary", "challenges", "comparison", "rival_changes"):
             current[field] = bullets(getattr(row, field) if row else None)
+        if kind == "dept":
+            current["charts"] = charts_context(session, run, key)
     return dict(ai_rows=rows, ai_current=current, ai_stale_text=STALE_TEXT,
                 baseline_options=baseline_choices(session, run),
                 ai_tone=get_setting(session, "ai_tone_prompt"), ai_default_tone=DEFAULT_TONE)
+
+
+def charts_context(session: Session, run: Run, dept: str) -> dict:
+    """圖表分析：已產生時依存下的說明與重點畫出各頁圖片；資料改過就標為過時（仍照舊文字顯示）。"""
+    row = ai_charts.get(session, run.id, dept)
+    if row is None:
+        return dict(row=None, slides=[], stale=False)
+    data = ai_charts.chart_data(session, run, dept)
+    notes = ai_charts.notes_of(row)
+    return dict(row=row, notes=notes, slides=chart_slides(data, notes), stale=not ai_charts.is_fresh(session, row, data),
+                label=ai_charts.label, has_period=data.table is not None)
 
 
 async def _save_tone(request: Request, session: Session) -> None:
@@ -116,6 +130,51 @@ async def generate_one(request: Request, run_id: int, kind: str, key: str, sessi
     await _save_tone(request, session)
     request.app.state.ai_jobs.start(run_id, only=(kind, key))
     return _back(run_id, kind, key)
+
+
+@router.post("/runs/{run_id}/ai/charts/generate")
+async def generate_all_charts(request: Request, run_id: int, session: Session = Depends(get_session)):
+    _done_run(session, run_id)
+    await _save_tone(request, session)
+    request.app.state.ai_jobs.start(run_id, all_charts=True)
+    return _back(run_id)
+
+
+@router.post("/runs/{run_id}/ai/charts/generate/{dept}")
+async def generate_charts(request: Request, run_id: int, dept: str, session: Session = Depends(get_session)):
+    run = _done_run(session, run_id)
+    if ("dept", dept) not in service.targets(session, run):
+        raise HTTPException(404, "找不到這個系所")
+    await _save_tone(request, session)
+    request.app.state.ai_jobs.start(run_id, only=("charts", dept))
+    return _back(run_id, "dept", dept)
+
+
+def _lines(text: str) -> list[str]:
+    return [line for line in (strip_bullet(x) for x in text.splitlines()) if line]
+
+
+@router.post("/runs/{run_id}/ai/charts/{note_id}")
+async def save_charts(request: Request, run_id: int, note_id: int, session: Session = Depends(get_session)):
+    """人工修改圖表說明（每行一點）與重點；表單欄位依存下的指標產生，沒送出的欄位維持原樣。"""
+    _done_run(session, run_id)
+    row = session.get(AiChartNote, note_id)
+    if row is None or row.run_id != run_id:
+        raise HTTPException(404, "找不到這筆圖表分析")
+    form = await request.form()
+    notes = ai_charts.notes_of(row)
+    for chart in notes["charts"]:
+        ind = chart["indicator"]
+        if f"notes_{ind}" in form:
+            chart["notes"] = _lines(str(form[f"notes_{ind}"]))
+        if f"highlight_{ind}" in form:
+            chart["highlight"] = strip_bullet(str(form[f"highlight_{ind}"])) or None
+    if notes["period"] is not None:
+        for field in ("notes", "highlights"):
+            if f"period_{field}" in form:
+                notes["period"][field] = _lines(str(form[f"period_{field}"]))
+    ai_charts.save_edit(session, note_id, notes)
+    return _back(run_id, "dept", row.key)
 
 
 @router.post("/runs/{run_id}/ai/summaries/{summary_id}")

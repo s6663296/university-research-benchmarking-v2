@@ -30,6 +30,30 @@
   document.querySelectorAll("form.ai-generate").forEach(f => f.addEventListener("submit", () => {
     f.elements.tone_prompt.value = document.getElementById("ai-tone").value;
   }));
+  // 圖表分析：把頁面上的 SVG 畫到 2 倍大的 canvas，存成 PNG
+  document.addEventListener("click", e => {
+    const btn = e.target.closest("[data-png]");
+    if (!btn) return;
+    const svg = btn.closest("figure").querySelector("svg");
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = svg.viewBox.baseVal.width * 2;
+      canvas.height = svg.viewBox.baseVal.height * 2;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = btn.dataset.png;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      }, "image/png");
+    };
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+  });
 </script>
 
 {% include "_ai_progress.html" %}
@@ -106,6 +130,61 @@
       <button type="submit">儲存</button>
       <button type="button" class="secondary" onclick="this.form.hidden=true">取消</button>
     </form>
+    {% endif %}
+
+    {% if c.kind == "dept" %}
+    {% set ch = c.charts %}
+    <section class="ai-charts" id="ai-charts">
+      <h3 class="ai-sub">圖表分析</h3>
+      <p class="muted small">仿研發處過往簡報：逐年趨勢圖與兩期比較（需選前期），附 AI 寫的圖表說明與紅框重點。圖片可下載成 PNG，不會放進系所簡報。</p>
+      {% if ch.stale %}<div class="notice">資料已更新，圖表說明可能過時（圖表本身是最新資料）</div>{% endif %}
+      {% for s in ch.slides %}
+      <figure class="ai-chart">
+        {{ s.svg }}
+        <figcaption><span>{{ s.title }}</span>
+          <button type="button" class="secondary" data-png="{{ s.filename }}">下載圖片</button></figcaption>
+      </figure>
+      {% else %}
+      <p class="ai-empty">尚未產生</p>
+      {% endfor %}
+      <div class="ai-actions">
+        {% if ch.row %}
+        <button type="button" class="secondary" aria-controls="ai-chart-edit" aria-expanded="false"
+          onclick="const f=document.getElementById('ai-chart-edit');f.hidden=!f.hidden;this.setAttribute('aria-expanded',!f.hidden);if(!f.hidden)f.querySelector('textarea').focus()">編輯圖表說明</button>
+        {% endif %}
+        <form method="post" action="/runs/{{ run.id }}/ai/charts/generate/{{ c.key | urlencode }}" class="ai-generate">
+          <input type="hidden" name="tone_prompt">
+          <button type="submit" class="{{ 'secondary' if ch.row and not ch.stale }}"{% if ai_polling %} disabled{% endif %}>{{ "重新產生圖表分析" if ch.row else "產生圖表分析" }}</button>
+        </form>
+        <form method="post" action="/runs/{{ run.id }}/ai/charts/generate" class="ai-generate">
+          <input type="hidden" name="tone_prompt">
+          <button type="submit" class="secondary"{% if ai_polling %} disabled{% endif %}>全部系所產生圖表分析</button>
+        </form>
+      </div>
+      {% if ch.row %}
+      <form method="post" action="/runs/{{ run.id }}/ai/charts/{{ ch.row.id }}" id="ai-chart-edit" class="ai-edit" hidden>
+        <p class="muted small">圖表說明每行一點；用 **兩個星號** 包起來的文字在圖上會標成紅字。重點會放在紅框裡。</p>
+        {% for chart in ch.notes.charts %}
+        <fieldset class="ai-chart-fields"><legend>{{ ch.label(chart.indicator) }}</legend>
+          <div class="field"><label for="cn-{{ chart.indicator }}">圖表說明</label>
+            <textarea id="cn-{{ chart.indicator }}" name="notes_{{ chart.indicator }}" rows="3">{{ chart.notes | join("\n") }}</textarea></div>
+          <div class="field"><label for="ch-{{ chart.indicator }}">紅框重點</label>
+            <input id="ch-{{ chart.indicator }}" name="highlight_{{ chart.indicator }}" value="{{ chart.highlight or '' }}"></div>
+        </fieldset>
+        {% endfor %}
+        {% if ch.notes.period %}
+        <fieldset class="ai-chart-fields"><legend>兩期比較</legend>
+          <div class="field"><label for="cp-n">圖表說明（比較表下方）</label>
+            <textarea id="cp-n" name="period_notes" rows="3">{{ ch.notes.period.notes | join("\n") }}</textarea></div>
+          <div class="field"><label for="cp-h">紅框重點（泡泡圖下方，每行一句）</label>
+            <textarea id="cp-h" name="period_highlights" rows="2">{{ ch.notes.period.highlights | join("\n") }}</textarea></div>
+        </fieldset>
+        {% endif %}
+        <button type="submit">儲存</button>
+        <button type="button" class="secondary" onclick="this.form.hidden=true">取消</button>
+      </form>
+      {% endif %}
+    </section>
     {% endif %}
   </section>
 </div>

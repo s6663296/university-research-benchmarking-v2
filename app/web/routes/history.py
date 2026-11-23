@@ -6,7 +6,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from app.db.models import AiSummary, Anomaly, Export, Result, Run, RunPublication, RunUnit
+from app.db.models import AiChartNote, AiSummary, Anomaly, Export, Result, Run, RunPublication, RunUnit
 from app.runs.renumber import renumber_runs
 from app.runs.scope import COMPARISON_LABELS, RunConfig
 from app.web.deps import get_session, render
@@ -64,11 +64,12 @@ def delete_run(request: Request, run_id: int, session: Session = Depends(get_ses
         raise HTTPException(409, "這個分析仍在抓取中，無法刪除")
     if request.app.state.ai_jobs.any_running():
         raise HTTPException(409, "AI 總結仍在產生中，請等它結束後再刪除")
-    for model in (Result, Anomaly, RunPublication, RunUnit, Export, AiSummary):
+    for model in (Result, Anomaly, RunPublication, RunUnit, Export, AiSummary, AiChartNote):
         session.execute(delete(model).where(model.run_id == run_id))
     # 其他分析若以它為前期，清掉指向（不設外鍵，由程式維護）
     session.execute(update(Run).where(Run.ai_baseline_run_id == run_id).values(ai_baseline_run_id=None))
-    session.execute(update(AiSummary).where(AiSummary.baseline_run_id == run_id).values(baseline_run_id=None))
+    for model in (AiSummary, AiChartNote):
+        session.execute(update(model).where(model.baseline_run_id == run_id).values(baseline_run_id=None))
     session.delete(run)
     session.commit()
     data_dir = request.app.state.settings.data_dir

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.ai import service
+from app.ai import charts, service
 from app.ai.service import AiError, SummaryWriter
 from app.db.models import Run
 from app.db.settings_store import get_setting
@@ -40,13 +40,21 @@ class AiJobManager:
     def any_running(self) -> bool:
         return any(not t.done() for t in self.tasks.values())
 
-    def start(self, run_id: int, only: tuple[str, str] | None = None) -> bool:
-        """已在跑回 False。語氣提示讀設定（AI 總結分頁的提示框會先寫回設定）。"""
+    def start(self, run_id: int, only: tuple[str, str] | None = None, all_charts: bool = False) -> bool:
+        """已在跑回 False。語氣提示讀設定（AI 總結分頁的提示框會先寫回設定）。
+
+        項目是 (kind, key)：kind 為 dept／college 是 AI 總結，charts 是該系所的圖表分析；
+        all_charts 產生每個系所的圖表分析。"""
         if self.is_running(run_id):
             return False
         with self.session_factory() as session:
             run = session.get(Run, run_id)
-            todo = [only] if only else service.targets(session, run)
+            if only:
+                todo = [only]
+            elif all_charts:
+                todo = [("charts", key) for kind, key in service.targets(session, run) if kind == "dept"]
+            else:
+                todo = service.targets(session, run)
             tone, model = get_setting(session, "ai_tone_prompt"), get_setting(session, "ai_model")
         state = self.states[run_id] = JobState(total=len(todo))
         self.tasks[run_id] = asyncio.create_task(self._run(run_id, todo, tone, model, state))
@@ -71,4 +79,8 @@ class AiJobManager:
 
     def _one(self, run_id: int, kind: str, key: str, writer: SummaryWriter, tone: str, model: str) -> None:
         with self.session_factory() as session:
-            service.generate(session, session.get(Run, run_id), kind, key, writer, tone, model)
+            run = session.get(Run, run_id)
+            if kind == "charts":
+                charts.generate(session, run, key, writer, tone, model)
+            else:
+                service.generate(session, run, kind, key, writer, tone, model)

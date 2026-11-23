@@ -6,9 +6,9 @@ from pathlib import Path
 from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
-from app.db.models import AiSummary, Anomaly, Export, Result, Run, RunPublication, RunUnit
+from app.db.models import AiChartNote, AiSummary, Anomaly, Export, Result, Run, RunPublication, RunUnit
 
-CHILDREN = (Result, Anomaly, RunPublication, RunUnit, Export, AiSummary)
+CHILDREN = (Result, Anomaly, RunPublication, RunUnit, Export, AiSummary, AiChartNote)
 
 
 def renumber_runs(session: Session, data_dir: Path) -> dict[int, int]:
@@ -25,7 +25,8 @@ def renumber_runs(session: Session, data_dir: Path) -> dict[int, int]:
             session.execute(update(model).where(model.run_id == old).values(run_id=new))
         session.execute(update(Run).where(Run.id == old).values(id=new))
         session.execute(update(Run).where(Run.ai_baseline_run_id == old).values(ai_baseline_run_id=new))
-        session.execute(update(AiSummary).where(AiSummary.baseline_run_id == old).values(baseline_run_id=new))
+        for model in (AiSummary, AiChartNote):
+            session.execute(update(model).where(model.baseline_run_id == old).values(baseline_run_id=new))
         _rename_exports(session, exports, old, new)
     session.commit()
     return moves

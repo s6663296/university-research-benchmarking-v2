@@ -31,6 +31,16 @@ class FakeWriter:
             raise AiError("模型拒絕產生這段文字")
         return SummaryDraft(summary=f"{self.summary}-{key}", comparison="無前期資料可比較")
 
+    def write_charts(self, system, payload):
+        """每個指標一則說明與重點；另附一個資料中沒有的指標（應被丟掉）與前期說明（沒有前期時應被丟掉）。"""
+        self.calls.append((system, payload))
+        if payload["系所"] in self.fail_on:
+            raise AiError("模型拒絕產生這段文字")
+        charts = [{"indicator": e["代號"], "notes": [f"・{e['名稱']}說明**重點**", "第二點"],
+                   "highlight": f"{e['代號']}紅框重點"} for e in payload["逐年趨勢"]]
+        charts.append({"indicator": "unknown", "notes": ["x"], "highlight": None})
+        return {"charts": charts, "period": {"notes": ["兩期說明"], "highlights": ["兩期重點"]}}
+
 
 def rows(session):
     session.expire_all()

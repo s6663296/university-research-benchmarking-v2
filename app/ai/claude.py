@@ -19,6 +19,25 @@ SCHEMA = {
     "required": ["strengths", "challenges", "self_changes", "rival_changes"],
     "additionalProperties": False,
 }
+# 圖表分析（app/ai/charts.py）：每張線圖的說明與重點，有前期時再加兩期比較
+CHART_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "charts": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"indicator": {"type": "string"}, "notes": _BULLETS,
+                           "highlight": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+            "required": ["indicator", "notes", "highlight"],
+            "additionalProperties": False}},
+        "period": {"anyOf": [{
+            "type": "object",
+            "properties": {"notes": _BULLETS, "highlights": _BULLETS},
+            "required": ["notes", "highlights"],
+            "additionalProperties": False}, {"type": "null"}]},
+    },
+    "required": ["charts", "period"],
+    "additionalProperties": False,
+}
 BULLET = "・"
 EFFORT_CHOICES = {"low": "低", "medium": "中", "high": "高", "xhigh": "很高", "max": "最高"}
 
@@ -54,18 +73,17 @@ class ClaudeWriter:
             self._client = anthropic.Anthropic(api_key=self.api_key)
         return self._client
 
-    def write(self, system: str, payload: dict) -> SummaryDraft:
+    def _ask(self, system: str, user: str, schema: dict) -> dict:
+        """送出一次請求，回傳依 schema 解析好的 JSON；各種錯誤都轉成可直接顯示的 AiError。"""
         if not self.api_key:
             raise AiError("尚未設定 Claude API Key，請到「設定」頁填寫")
-        user = ("請依下列 JSON 資料，以條列要點撰寫摘要（summary）與前後期比較（comparison，沒有前期資料時為 null）：\n"
-                + json.dumps(payload, ensure_ascii=False, indent=1))
         try:
             response = self._get_client().beta.messages.create(
                 model=self.model,
                 max_tokens=16000,
                 system=system,
                 messages=[{"role": "user", "content": user}],
-                output_config={"effort": self.effort, "format": {"type": "json_schema", "schema": SCHEMA}},
+                output_config={"effort": self.effort, "format": {"type": "json_schema", "schema": schema}},
                 betas=["server-side-fallback-2026-07-01"],
                 fallbacks="default",
             )
@@ -82,8 +100,25 @@ class ClaudeWriter:
         text = next((b.text for b in response.content if b.type == "text"), "")
         try:
             data = json.loads(text)
+        except ValueError:
+            raise AiError("Claude 回覆的格式無法解讀，請重試") from None
+        if not isinstance(data, dict):
+            raise AiError("Claude 回覆的格式無法解讀，請重試")
+        return data
+
+    def write(self, system: str, payload: dict) -> SummaryDraft:
+        user = ("請依下列 JSON 資料，以條列要點撰寫摘要（summary）與前後期比較（comparison，沒有前期資料時為 null）：\n"
+                + json.dumps(payload, ensure_ascii=False, indent=1))
+        data = self._ask(system, user, SCHEMA)
+        try:
             return SummaryDraft(summary=_join(data["strengths"]), comparison=_join(data.get("self_changes")) or None,
                                 challenges=_join(data.get("challenges")) or None,
                                 rival_changes=_join(data.get("rival_changes")) or None)
-        except (ValueError, KeyError, TypeError):
+        except (KeyError, TypeError):
             raise AiError("Claude 回覆的格式無法解讀，請重試") from None
+
+    def write_charts(self, system: str, payload: dict) -> dict:
+        user = ("請依下列 JSON 資料，為每張逐年趨勢圖撰寫圖表說明與重點（charts），"
+                "有兩期比較表時再寫兩期比較的說明與重點（period，沒有時為 null）：\n"
+                + json.dumps(payload, ensure_ascii=False, indent=1))
+        return self._ask(system, user, CHART_SCHEMA)

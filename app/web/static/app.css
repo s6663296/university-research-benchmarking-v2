@@ -384,6 +384,12 @@ tr.ev-me td { background: var(--primary-soft); font-weight: 600; }
 .ai-actions form { margin: 0; }
 .ai-edit { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1rem; margin-top: .8rem; }
 .ai-edit textarea { width: 100%; font: inherit; line-height: 1.6; }
+.ai-charts { margin-top: 2rem; }
+.ai-chart { margin: 0 0 1.2rem; }
+.ai-chart svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 4px; }
+.ai-chart figcaption { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .4rem; font-size: .9rem; }
+.ai-chart-fields { border: 1px solid var(--line); border-radius: 4px; margin: 0 0 .8rem; padding: .6rem .8rem; }
+.ai-chart-fields input { width: 100%; font: inherit; }
 @media (max-width: 760px) {
   .ai-layout { grid-template-columns: minmax(0, 1fr); }
   .ai-list { position: static; flex-direction: row; overflow-x: auto; padding: 0; }

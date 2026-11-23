@@ -164,6 +164,22 @@ class AiSummary(Base):
     updated_at: Mapped[datetime]
 
 
+class AiChartNote(Base):
+    """AI 圖表分析（網頁 AI 總結分頁的圖片，仿研發處過往簡報）：每個系所一筆，與 AI 總結分開產生、分開判斷是否過時。"""
+    __tablename__ = "ai_chart_notes"
+    __table_args__ = (UniqueConstraint("run_id", "key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("runs.id"), index=True)
+    key: Mapped[str] = mapped_column(String)                      # 系所名
+    baseline_run_id: Mapped[int | None] = mapped_column(Integer)
+    notes_json: Mapped[str] = mapped_column(Text)                 # {"charts": [...], "period": {...} | null}
+    input_hash: Mapped[str] = mapped_column(String)
+    model: Mapped[str] = mapped_column(String)
+    edited: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime]
+    updated_at: Mapped[datetime]
+
+
 class RunUnit(Base):
     __tablename__ = "run_units"
     id: Mapped[int] = mapped_column(primary_key=True)
