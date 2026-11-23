@@ -384,7 +384,14 @@ tr.ev-me td { background: var(--primary-soft); font-weight: 600; }
 .ai-actions form { margin: 0; }
 .ai-edit { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1rem; margin-top: .8rem; }
 .ai-edit textarea { width: 100%; font: inherit; line-height: 1.6; }
-.ai-charts { margin-top: 2rem; }
+.ai-toolbar-main { margin-right: auto; }   /* 比較基準在左，兩個「全部產生」並排靠右 */
+.ai-views { display: flex; gap: .2rem; border-bottom: 2px solid var(--line); margin-bottom: 1rem; }
+.ai-views a { padding: .55rem 1.1rem; font-size: 1.05rem; font-weight: 600; color: var(--muted); text-decoration: none; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+.ai-views a:hover { color: var(--fg); }
+.ai-views a.current { color: var(--primary); border-bottom-color: var(--primary); }
+.ai-view-state { margin-left: .45rem; font-size: 12px; font-weight: 400; color: var(--muted); }
+.ai-chip { margin-left: .35rem; padding: 0 .3rem; border-radius: 3px; font-size: 11px; line-height: 1.5; background: var(--primary-soft); color: var(--primary); }
+.ai-charts > .ai-actions { margin: 0 0 1rem; }
 .ai-chart { margin: 0 0 1.2rem; }
 .ai-chart svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 4px; }
 .ai-chart figcaption { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .4rem; font-size: .9rem; }

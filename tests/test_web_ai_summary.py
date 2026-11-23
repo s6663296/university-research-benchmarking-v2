@@ -312,8 +312,12 @@ def test_college_zip_export_explains_missing_summary(client, run_id):
 
 def generate_charts(client, run_id, dept=DEPT):
     r = client.post(f"/runs/{run_id}/ai/charts/generate/{dept}", follow_redirects=False)
-    assert r.status_code == 303 and sel("dept", dept) in r.headers["location"]
+    assert r.status_code == 303 and r.headers["location"].endswith(f"{sel('dept', dept)}&view=charts")
     return wait_job(client, run_id)
+
+
+def charts_url(run_id, dept=DEPT):
+    return f"/runs/{run_id}?ind=ai&{sel('dept', dept)}&view=charts"
 
 
 def chart_row(client):
@@ -322,19 +326,29 @@ def chart_row(client):
         return s.scalars(select(AiChartNote).where(AiChartNote.key == DEPT)).one()
 
 
-def test_chart_section_only_for_depts(client, run_id):
+def test_chart_view_is_a_tab_for_depts(client, run_id):
     html = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text
-    section = html.split('id="ai-charts"')[1]
-    assert "圖表分析" in html and "產生圖表分析" in section and "全部系所產生圖表分析" in section
-    assert "<svg" not in section                                # 還沒產生只顯示按鈕
-    college = client.get(f"/runs/{run_id}?ind=ai&{sel('college', '管理學院')}").text
-    assert 'id="ai-charts"' not in college
+    tabs = html.split('class="ai-views"')[1].split("</nav>")[0]
+    assert "總結與建議" in tabs and "圖表分析" in tabs and "未產生" in tabs and "&view=charts" in tabs
+    assert 'id="ai-charts"' not in html                         # 預設顯示總結，圖表在另一個分頁
+    assert "全部產生圖表分析" in html.split('class="ai-toolbar"')[1].split("</div>")[0]
+    section = client.get(charts_url(run_id)).text.split('id="ai-charts"')[1]
+    assert "產生圖表分析" in section and "<svg" not in section and 'class="ai-slide"' not in section
+    college = client.get(f"/runs/{run_id}?ind=ai&{sel('college', '管理學院')}&view=charts").text
+    assert 'id="ai-charts"' not in college and 'class="ai-views"' not in college
+
+
+def test_list_marks_depts_with_charts(client, run_id):
+    assert 'class="ai-chip"' not in client.get(f"/runs/{run_id}?ind=ai").text
+    generate_charts(client, run_id)
+    html = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text
+    assert 'class="ai-chip"' in html and "已產生" in html.split('class="ai-views"')[1].split("</nav>")[0]
 
 
 def test_generate_charts_shows_images_with_png_download(client, run_id):
     state = generate_charts(client, run_id)
     assert not state.errors
-    section = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text.split('id="ai-charts"')[1]
+    section = client.get(charts_url(run_id)).text.split('id="ai-charts"')[1]
     assert section.count('class="ai-chart-svg"') >= 1 and 'data-png="' in section and "下載圖片" in section
     assert "total紅框重點" in section and "重新產生圖表分析" in section
     assert 'id="ai-chart-edit"' in section and "過時" not in section
@@ -355,14 +369,14 @@ def test_edit_charts_saves_notes_and_highlight(client, run_id):
     row = chart_row(client)
     r = client.post(f"/runs/{run_id}/ai/charts/{row.id}",
                     data={"notes_total": "・改過的說明\n\n第二點", "highlight_total": "人工重點"}, follow_redirects=False)
-    assert r.status_code == 303 and sel("dept", DEPT) in r.headers["location"]
+    assert r.status_code == 303 and r.headers["location"].endswith("&view=charts")
     import json
     saved = chart_row(client)
     total = next(c for c in json.loads(saved.notes_json)["charts"] if c["indicator"] == "total")
     assert saved.edited and total["notes"] == ["改過的說明", "第二點"] and total["highlight"] == "人工重點"
     others = [c for c in json.loads(saved.notes_json)["charts"] if c["indicator"] != "total"]
     assert all(c["highlight"] for c in others)                  # 沒送出的欄位維持原樣
-    assert "人工重點" in client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text
+    assert "人工重點" in client.get(charts_url(run_id)).text
 
 
 def test_stale_charts_show_notice(client, run_id):
@@ -371,7 +385,7 @@ def test_stale_charts_show_notice(client, run_id):
     with client.app.state.session_factory() as s:
         s.get(AiChartNote, chart_row(client).id).input_hash = "old"
         s.commit()
-    section = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text.split('id="ai-charts"')[1]
+    section = client.get(charts_url(run_id)).text.split('id="ai-charts"')[1]
     assert "圖表說明可能過時" in section and "<svg" in section
 
 

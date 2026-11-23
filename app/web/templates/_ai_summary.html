@@ -1,5 +1,5 @@
 <div class="ai-toolbar">
-  <form method="post" action="/runs/{{ run.id }}/ai/baseline" class="ai-baseline">
+  <form method="post" action="/runs/{{ run.id }}/ai/baseline" class="ai-baseline ai-toolbar-main">
     <label for="ai-baseline">比較基準</label>
     <select id="ai-baseline" name="baseline" onchange="this.form.requestSubmit()"
       title="更換後，既有總結會變成過時，需重新產生">
@@ -12,6 +12,11 @@
     <input type="hidden" name="tone_prompt">
     <button type="submit"{% if ai_polling %} disabled{% endif %}
       onclick="return confirm('會重新產生所有學院與系所的總結，並覆蓋已修改的文字。確定產生？')">全部產生</button>
+  </form>
+  <form method="post" action="/runs/{{ run.id }}/ai/charts/generate" class="ai-generate">
+    <input type="hidden" name="tone_prompt">
+    <button type="submit"{% if ai_polling %} disabled{% endif %}
+      onclick="return confirm('會重新產生所有系所的圖表分析，並覆蓋已修改的圖表說明。確定產生？')">全部產生圖表分析</button>
   </form>
 </div>
 
@@ -65,13 +70,20 @@
     <a href="?ind=ai&sel={{ r.sel }}" class="ai-item{% if r.sel == ai_current.sel %} current{% endif %}"
       {% if r.sel == ai_current.sel %}aria-current="page"{% endif %}{% if r.stale %} title="{{ ai_stale_text }}"{% endif %}>
       <span class="ai-name">{{ r.key }}</span>
-      <span class="ai-state {{ r.css }}"><span class="dot" aria-hidden="true"></span>{{ r.status }}</span>
+      <span class="ai-state {{ r.css }}"><span class="dot" aria-hidden="true"></span>{{ r.status }}{% if r.has_charts %}<span class="ai-chip" title="已產生圖表分析">圖</span>{% endif %}</span>
     </a>
     {% endfor %}
   </nav>
 
   {% set c = ai_current %}
   <section class="ai-detail">
+    {% if c.kind == "dept" %}
+    <nav class="ai-views" aria-label="檢視">
+      <a href="?ind=ai&sel={{ c.sel }}" class="{{ 'current' if c.view != 'charts' }}"{% if c.view != 'charts' %} aria-current="page"{% endif %}>總結與建議</a>
+      <a href="?ind=ai&sel={{ c.sel }}&view=charts" class="{{ 'current' if c.view == 'charts' }}"{% if c.view == 'charts' %} aria-current="page"{% endif %}>圖表分析<span class="ai-view-state">{{ "已產生" if c.has_charts else "未產生" }}</span></a>
+    </nav>
+    {% endif %}
+    {% if c.view != "charts" %}
     {% if c.stale %}<div class="notice">{{ ai_stale_text }}</div>{% endif %}
 
     <div class="ai-slide">
@@ -132,21 +144,11 @@
     </form>
     {% endif %}
 
-    {% if c.kind == "dept" %}
+    {% else %}
     {% set ch = c.charts %}
     <section class="ai-charts" id="ai-charts">
-      <h3 class="ai-sub">圖表分析</h3>
       <p class="muted small">仿研發處過往簡報：逐年趨勢圖與兩期比較（需選前期），附 AI 寫的圖表說明與紅框重點。圖片可下載成 PNG，不會放進系所簡報。</p>
       {% if ch.stale %}<div class="notice">資料已更新，圖表說明可能過時（圖表本身是最新資料）</div>{% endif %}
-      {% for s in ch.slides %}
-      <figure class="ai-chart">
-        {{ s.svg }}
-        <figcaption><span>{{ s.title }}</span>
-          <button type="button" class="secondary" data-png="{{ s.filename }}">下載圖片</button></figcaption>
-      </figure>
-      {% else %}
-      <p class="ai-empty">尚未產生</p>
-      {% endfor %}
       <div class="ai-actions">
         {% if ch.row %}
         <button type="button" class="secondary" aria-controls="ai-chart-edit" aria-expanded="false"
@@ -155,10 +157,6 @@
         <form method="post" action="/runs/{{ run.id }}/ai/charts/generate/{{ c.key | urlencode }}" class="ai-generate">
           <input type="hidden" name="tone_prompt">
           <button type="submit" class="{{ 'secondary' if ch.row and not ch.stale }}"{% if ai_polling %} disabled{% endif %}>{{ "重新產生圖表分析" if ch.row else "產生圖表分析" }}</button>
-        </form>
-        <form method="post" action="/runs/{{ run.id }}/ai/charts/generate" class="ai-generate">
-          <input type="hidden" name="tone_prompt">
-          <button type="submit" class="secondary"{% if ai_polling %} disabled{% endif %}>全部系所產生圖表分析</button>
         </form>
       </div>
       {% if ch.row %}
@@ -184,6 +182,15 @@
         <button type="button" class="secondary" onclick="this.form.hidden=true">取消</button>
       </form>
       {% endif %}
+      {% for s in ch.slides %}
+      <figure class="ai-chart">
+        {{ s.svg }}
+        <figcaption><span>{{ s.title }}</span>
+          <button type="button" class="secondary" data-png="{{ s.filename }}">下載圖片</button></figcaption>
+      </figure>
+      {% else %}
+      <p class="ai-empty">尚未產生。按上方「產生圖表分析」，AI 會依這個系所的逐年數字與兩期比較寫圖表說明。</p>
+      {% endfor %}
     </section>
     {% endif %}
   </section>
