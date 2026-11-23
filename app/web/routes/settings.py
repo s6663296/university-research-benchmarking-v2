@@ -1,8 +1,8 @@
 import shutil
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.ai.claude import EFFORT_CHOICES, list_models
@@ -14,6 +14,8 @@ from app.db.settings_store import DEFAULT_SETTINGS, get_setting, set_setting
 from app.elsevier.selfcite import usable_strategy_id
 from app.elsevier.client import ConnectionStatus, key_id, make_client
 from app.elsevier.quota import quota_grid, quota_rows
+from app.reports.package import (MARKERS, LetterTemplateError, letter_template, markers_in, reset_letter_template,
+                                 save_letter_template)
 from app.web.deps import get_session, render
 
 router = APIRouter()
@@ -70,9 +72,43 @@ def _context(session: Session, request: Request, **extra) -> dict:
         errors=[], saved=False, reset=request.query_params.get("reset") == "1",
         keys_added=_int_param(request, "added"),
         keys_dup=[int(n) for n in request.query_params.get("dup", "").split(",") if n.isdigit()],
+        letter=_letter_info(request), letter_markers=MARKERS,
+        letter_saved=request.query_params.get("letter") == "saved",
+        letter_reset=request.query_params.get("letter") == "reset", letter_error=None,
     )
     ctx.update(extra)
     return ctx
+
+
+def _letter_info(request: Request) -> dict:
+    t = letter_template(request.app.state.settings)
+    try:
+        found = markers_in(t.path)
+    except Exception:   # 範本壞掉時仍要能進設定頁換掉它
+        found = []
+    return dict(filename=t.filename, is_default=t.is_default, found=found)
+
+
+@router.post("/settings/letter-template")
+async def upload_letter_template(request: Request, file: UploadFile, session: Session = Depends(get_session)):
+    try:
+        save_letter_template(request.app.state.settings, file.filename or "", await file.read())
+    except LetterTemplateError as e:
+        return render(request, "settings.html", status_code=400, **_context(session, request, letter_error=str(e)))
+    return RedirectResponse("/settings?letter=saved#letter-template", status_code=303)
+
+
+@router.post("/settings/letter-template/reset")
+def reset_letter(request: Request):
+    reset_letter_template(request.app.state.settings)
+    return RedirectResponse("/settings?letter=reset#letter-template", status_code=303)
+
+
+@router.get("/settings/letter-template.docx")
+def download_letter_template(request: Request):
+    t = letter_template(request.app.state.settings)
+    return FileResponse(t.path, filename=t.filename,
+                        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 
 @router.get("/settings")

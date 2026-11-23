@@ -16,12 +16,14 @@ datas = (
     files("app/web/templates/*.html", "app/web/templates")
     + files("app/web/static/*", "app/web/static")
     + files("templates/*.pptx", "templates")
+    + files("templates/*.docx", "templates")
     + files("alembic/env.py", "alembic")
     + files("alembic/versions/*.py", "alembic/versions")
     # mapping 檢查規則的指紋（RULES_HASH）讀這兩個模組的原始碼
     + files("app/mapping/parser.py", "app/mapping")
     + files("app/textnorm.py", "app")
     + collect_data_files("pptx")
+    + collect_data_files("docx")
 )
 
 a = Analysis(

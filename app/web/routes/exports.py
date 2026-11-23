@@ -13,12 +13,15 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.web.routes.ai_summary import write_college_zip
-from app.web.routes.runs import write_dept_zip
+from app.web.routes.runs import write_all_packages_zip, write_dept_package_zip, write_dept_zip
 
 log = logging.getLogger(__name__)
 router = APIRouter()
 
-KINDS = {"pptx": write_dept_zip, "college": write_college_zip}
+# 整次分析一個檔：work(session, settings, run_id, progress)
+KINDS = {"pptx": write_dept_zip, "college": write_college_zip, "packages": write_all_packages_zip}
+# 每個系所一個檔：work(session, settings, run_id, 系所, progress)
+DEPT_KINDS = {"package": write_dept_package_zip}
 
 
 @dataclass
@@ -37,7 +40,7 @@ class ExportJob:
         return {"done": self.done, "total": self.total, "ready": self.path is not None, "error": self.error}
 
 
-def _jobs(request: Request) -> dict[tuple[int, str], ExportJob]:
+def _jobs(request: Request) -> dict[tuple[int, str, str], ExportJob]:
     if not hasattr(request.app.state, "export_jobs"):
         request.app.state.export_jobs = {}
     return request.app.state.export_jobs
@@ -49,13 +52,19 @@ def _kind(kind: str):
     return KINDS[kind]
 
 
-@router.post("/runs/{run_id}/exports/{kind}")
-async def start_export(request: Request, run_id: int, kind: str):
-    work = _kind(kind)
+def _dept_kind(kind: str):
+    if kind not in DEPT_KINDS:
+        raise HTTPException(404, "沒有這種下載")
+    return DEPT_KINDS[kind]
+
+
+def _start(request: Request, key: tuple[int, str, str], work) -> JSONResponse:
+    """work(session, settings, progress) → 檔案路徑；同一個檔案正在產生時，接著看同一份進度。"""
+    run_id, kind, _ = key
     jobs = _jobs(request)
-    job = jobs.get((run_id, kind))
-    if job is None or not job.running:   # 同一個檔案正在產生時，接著看同一份進度
-        job = jobs[run_id, kind] = ExportJob()
+    job = jobs.get(key)
+    if job is None or not job.running:
+        job = jobs[key] = ExportJob()
         session_factory, settings = request.app.state.session_factory, request.app.state.settings
 
         def progress(done: int, total: int) -> None:
@@ -63,7 +72,7 @@ async def start_export(request: Request, run_id: int, kind: str):
 
         def build() -> Path:
             with session_factory() as session:
-                return work(session, settings, run_id, progress)
+                return work(session, settings, progress)
 
         async def run() -> None:
             try:
@@ -78,19 +87,54 @@ async def start_export(request: Request, run_id: int, kind: str):
     return JSONResponse(job.state(), status_code=202)
 
 
-@router.get("/runs/{run_id}/exports/{kind}")
-def export_progress(request: Request, run_id: int, kind: str):
-    _kind(kind)
-    job = _jobs(request).get((run_id, kind))
+def _progress(request: Request, key: tuple[int, str, str]):
+    job = _jobs(request).get(key)
     if job is None:
         raise HTTPException(404, "沒有進行中的下載")
     return job.state()
 
 
-@router.get("/runs/{run_id}/exports/{kind}/file")
-def export_file(request: Request, run_id: int, kind: str):
-    _kind(kind)
-    job = _jobs(request).get((run_id, kind))
+def _file(request: Request, key: tuple[int, str, str]):
+    job = _jobs(request).get(key)
     if job is None or job.path is None:
         raise HTTPException(404, "檔案還沒準備好")
     return FileResponse(job.path, media_type="application/zip", filename=job.path.name)
+
+
+@router.post("/runs/{run_id}/exports/{kind}")
+async def start_export(request: Request, run_id: int, kind: str):
+    work = _kind(kind)
+    return _start(request, (run_id, kind, ""), lambda session, settings, progress: work(session, settings, run_id,
+                                                                                         progress))
+
+
+@router.get("/runs/{run_id}/exports/{kind}")
+def export_progress(request: Request, run_id: int, kind: str):
+    _kind(kind)
+    return _progress(request, (run_id, kind, ""))
+
+
+@router.get("/runs/{run_id}/exports/{kind}/file")
+def export_file(request: Request, run_id: int, kind: str):
+    _kind(kind)
+    return _file(request, (run_id, kind, ""))
+
+
+# 每個系所一個檔：/runs/1/exports/package/dept/資訊管理學系（…/file 取檔）
+@router.post("/runs/{run_id}/exports/{kind}/dept/{dept}")
+async def start_dept_export(request: Request, run_id: int, kind: str, dept: str):
+    work = _dept_kind(kind)
+    return _start(request, (run_id, kind, dept),
+                  lambda session, settings, progress: work(session, settings, run_id, dept, progress))
+
+
+@router.get("/runs/{run_id}/exports/{kind}/dept/{dept}")
+def dept_export_progress(request: Request, run_id: int, kind: str, dept: str):
+    _dept_kind(kind)
+    return _progress(request, (run_id, kind, dept))
+
+
+@router.get("/runs/{run_id}/exports/{kind}/dept/{dept}/file")
+def dept_export_file(request: Request, run_id: int, kind: str, dept: str):
+    _dept_kind(kind)
+    return _file(request, (run_id, kind, dept))

@@ -99,6 +99,33 @@
 <button type="submit">儲存設定</button>
 </form>
 
+<section class="card" id="letter-template">
+  <h2>信件範本</h2>
+  {% if letter_saved %}<div class="notice ok">已換成新的信件範本</div>{% endif %}
+  {% if letter_reset %}<div class="notice ok">已改回系統暫用範本</div>{% endif %}
+  {% if letter_error %}<div class="notice error">{{ letter_error }}</div>{% endif %}
+  <p>結果頁「下載」分頁的各系所資料包中，Word 信件用這份範本產生。目前：
+    <a href="/settings/letter-template.docx" download>{{ letter.filename }}</a>
+    {% if letter.is_default %}<span class="muted">（系統暫用範本）</span>{% endif %}</p>
+  {% if not letter.is_default and not letter.found %}
+  <div class="notice">這份範本中找不到下列任何標記，信件不會自動填入系所名稱與檔名。</div>
+  {% endif %}
+  <p class="muted small">範本中可用的標記（下載時換成實際內容）：</p>
+  <ul class="muted small">
+    {% for m, desc in letter_markers.items() %}<li><code>{{ m }}</code>：{{ desc }}{% if m in letter.found %} ✓{% endif %}</li>{% endfor %}
+  </ul>
+  <form method="post" action="/settings/letter-template" enctype="multipart/form-data" class="api-key-add">
+    <label for="letter-file" class="sr-only">信件範本（.docx）</label>
+    <input type="file" id="letter-file" name="file" accept=".docx" required>
+    <button type="submit">上傳新範本</button>
+  </form>
+  {% if not letter.is_default %}
+  <form method="post" action="/settings/letter-template/reset">
+    <button type="submit" class="secondary" onclick="return confirm('確定改回系統暫用範本？')">改回系統暫用範本</button>
+  </form>
+  {% endif %}
+</section>
+
 <section class="card danger-zone">
   <h2>參考文獻快取</h2>
   <p>已存 {{ "{:,}".format(refs_count) }} 篇・{{ "%.1f"|format(refs_mb) }} MB</p>

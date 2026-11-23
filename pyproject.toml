@@ -17,6 +17,7 @@ dependencies = [
     "httpx",
     "openpyxl",
     "python-pptx",
+    "python-docx",
     "pydantic-settings",
     "anthropic>=2.8",
 ]

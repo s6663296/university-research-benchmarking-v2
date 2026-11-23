@@ -411,3 +411,7 @@ tr.ev-me td { background: var(--primary-soft); font-weight: 600; }
   border: 2px solid var(--primary-strong); border-top-color: var(--primary);
   animation: page-spin .8s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .refetch-state .spinner { animation-duration: 2s; } }
+
+.package-list { list-style: none; padding: 0; }
+.package-list li { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin: .35rem 0; }
+.package-list li > span:first-child { min-width: 12rem; }
