@@ -65,7 +65,7 @@ class PageText:
 
 
 def _count_formula(definition: str) -> str:
-    return f"A = {definition}的 {{年數}} 年篇數；B = 單年教師數\n單年師均 = A ÷ {{年數}} ÷ B"
+    return f"A = {definition}的 {{年數}} 年篇數；B = 單年教師數\n師均 = A ÷ B"
 
 
 PERIOD = "{期間} "
@@ -88,9 +88,9 @@ PAGES: tuple[PageText, ...] = (
     PageText(
         "pubs", "論文發表篇數", "論文發表師均", "QS / THE 看總篇數、高教深耕看 Q1", PERIOD + "論文發表篇數師均", PERIOD,
         subtitle=f"{importance_note(BY_ID['q1'])}（Q1）　{importance_note(BY_ID['total'])}（論文發表篇數）",
-        formula="A = Q1 期刊論文 {年數} 年總數 ÷ {年數}；B = 論文總數 ÷ {年數}；C = 單年教師數\n"
+        formula="A = Q1 期刊論文 {年數} 年總數；B = 論文 {年數} 年總數；C = 單年教師數\n"
                 "Q1 師均 = A ÷ C；總計師均 = B ÷ C\nQ1：CiteScore 期刊排名前 25%",
-        notes=BASE_NOTES + "\n註3：單位排序以 Q1 單年師均由高到低排序。"),
+        notes=BASE_NOTES + "\n註3：單位排序以 Q1 師均由高到低排序。"),
     PageText(
         "top1", "前 1% 論文", "論文被引次數達全球前 1% 論文篇數師均", "THE 排名、高教深耕指標",
         PERIOD + "被引數達全球前1%篇數（師均）", PERIOD, subtitle=importance_note(BY_ID["top1"]),

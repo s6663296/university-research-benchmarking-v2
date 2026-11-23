@@ -9,6 +9,7 @@ from app.config import Settings
 from app.db.settings_store import get_setting
 from app.db.session import init_db, make_engine, make_session_factory
 from app.elsevier.client import make_client
+from app.runs.executor import recompute_flagged
 from app.runs.manager import RunManager, mark_interrupted
 from app.runs.renumber import renumber_runs
 from app.teachers.moe_fetch import MoeFetcher
@@ -41,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with session_factory() as s:
             mark_interrupted(s)
             renumber_runs(s, settings.data_dir)  # 啟動時沒有任何分析在跑，順便補上先前刪除留下的空號
+            recompute_flagged(s)  # 計算公式改過時，舊分析依新公式重算
 
         def client_factory():
             with session_factory() as s:

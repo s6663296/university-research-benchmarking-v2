@@ -665,16 +665,15 @@ class ReportBuilder(DeckBuilder):
         def render(t: IndicatorTable):
             total = {r.unit_id: r for r in indicator_table(self.session, self.run_id, t.comparison, t.key,
                                                            "total").rows}
-            rows = [["單位", "Q1", "", "總計", "", "單年\n教師數(C)", "單年師均", ""],
-                    ["", f"{n}年\n總數", f"{n}年平均\n(A)", f"{n}年\n總數", f"{n}年平均\n(B)", "", "Q1\n(A/C)",
-                     "總計\n(B/C)"]]
+            rows = [["單位", "Q1", "總計", "單年\n教師數(C)", "師均", ""],
+                    ["", f"{n}年總數\n(A)", f"{n}年總數\n(B)", "", "Q1\n(A/C)", "總計\n(B/C)"]]
             for r in t.rows:
                 tot = total[r.unit_id]
-                rows.append([_label(r, t.comparison), _count(r.raw), fmt(r.five_year_avg), _count(tot.raw),
-                             fmt(tot.five_year_avg), _teachers(r), fmt(r.value), fmt(tot.value)])
+                rows.append([_label(r, t.comparison), _count(r.raw), _count(tot.raw), _teachers(r), fmt(r.value),
+                             fmt(tot.value)])
             return rows
 
-        merges = [((0, 0), (1, 0)), ((0, 1), (0, 2)), ((0, 3), (0, 4)), ((0, 5), (1, 5)), ((0, 6), (0, 7))]
+        merges = [((0, 0), (1, 0)), ((0, 3), (1, 3)), ((0, 4), (0, 5))]
         self._pair(slide, render, "q1", sort_by="q1", header_rows=2, merges=merges)
         self._bottom(slide, "pubs")
 
@@ -683,7 +682,7 @@ class ReportBuilder(DeckBuilder):
         slide = self._page(indicator_id, "detail")
 
         def render(t: IndicatorTable):
-            return [["單位", f"{n}年篇數\n(A)", "單年教師數\n(B)", f"單年師均\n(A/{n}/B)"],
+            return [["單位", f"{n}年篇數\n(A)", "單年教師數\n(B)", "師均\n(A/B)"],
                     *([_label(r, t.comparison), _count(r.raw), _teachers(r), fmt(r.value)] for r in t.rows)]
 
         self._pair(slide, render, indicator_id)

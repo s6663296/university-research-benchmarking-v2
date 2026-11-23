@@ -14,9 +14,9 @@ def ncu_unit(client, run_id):
 
 def test_every_number_cell_has_explanation(client, web_done_run):
     text = client.get(f"/runs/{web_done_run}", params={"ind": "total"}).text
-    # 對標 3 列 + 院內 3 列，每列 5 個數字格
-    assert text.count('<template class="ev-body"') == 30
-    assert "20 ÷ 5 ÷ 24 = 0.17" in text and "✓ 重算值與存檔值一致" in text
+    # 對標 3 列 + 院內 3 列，每列 4 個數字格
+    assert text.count('<template class="ev-body"') == 24
+    assert "20 ÷ 24 = 0.83" in text and "✓ 重算值與存檔值一致" in text
     assert "/static/evidence.js" in text
 
 

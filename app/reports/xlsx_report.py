@@ -67,13 +67,13 @@ def _indicator_sheet(wb, session, run, ind, groups, explainer):
         t = indicator_table(session, run.id, g.comparison, g.key, ind.id, explainer=explainer)
         if ind.aggregate == "count":
             n = run.period_to - run.period_from + 1
-            _append(ws, ["單位", f"{n}年篇數 (A)", f"{n}年平均", "單年教師數 (B)", "單年師均", "名次", "教師數人工修改"], BOLD)
+            _append(ws, ["單位", f"{n}年篇數 (A)", "單年教師數 (B)", "師均 (A/B)", "名次", "教師數人工修改"], BOLD)
             for r in t.rows:
-                _append(ws, [r.label, PENDING if r.raw is None else int(r.raw), _num(r.five_year_avg),
+                _append(ws, [r.label, PENDING if r.raw is None else int(r.raw),
                              PENDING if r.teachers is None else r.teachers, _num(r.value), r.rank,
                              "是" if r.teacher_manual else ""],
-                        RED if r.is_ncu else None, number_cols=(3, 5))
-                for col, key in enumerate(("raw", "avg", "teachers", "value", "rank"), start=2):
+                        RED if r.is_ncu else None, number_cols=(4,))
+                for col, key in enumerate(("raw", "teachers", "value", "rank"), start=2):
                     _comment(ws, col, r.explain.get(key))
         else:
             _append(ws, ["單位", ind.label, "名次"], BOLD)

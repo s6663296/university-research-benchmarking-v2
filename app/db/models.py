@@ -225,7 +225,6 @@ class Result(Base):
     indicator_id: Mapped[str] = mapped_column(String)
     value: Mapped[Decimal | None] = mapped_column(DecimalText)
     raw: Mapped[Decimal | None] = mapped_column(DecimalText)
-    five_year_avg: Mapped[Decimal | None] = mapped_column(DecimalText)
     rank: Mapped[int | None] = mapped_column(Integer)
 
 

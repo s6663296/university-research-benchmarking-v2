@@ -40,7 +40,7 @@ async def test_ncu_row_red_and_values(session, done_run, tmp_path):
     p = build(session, done_run, tmp_path)
     t = tables_on(p.slides[4])[0]                   # Top1% 對標表
     rows = [[c.text for c in r.cells] for r in t.rows]
-    assert rows[0] == ["單位", "5年篇數\n(A)", "單年教師數\n(B)", "單年師均\n(A/5/B)"]
+    assert rows[0] == ["單位", "5年篇數\n(A)", "單年教師數\n(B)", "師均\n(A/B)"]
     ncu = next(r for r in t.rows if r.cells[0].text == "資訊管理學系\n中央")
     colors = {run.font.color.rgb for c in ncu.cells for para in c.text_frame.paragraphs for run in para.runs}
     assert colors == {RED}
@@ -55,7 +55,8 @@ async def test_ncu_row_red_and_values(session, done_run, tmp_path):
 async def test_pubs_page_has_both_tables(session, done_run, tmp_path):
     p = build(session, done_run, tmp_path)
     left, right = tables_on(p.slides[3])
-    assert len(left.columns) == 8 and left.cell(1, 6).text == "Q1\n(A/C)"
+    assert len(left.columns) == 6 and left.cell(1, 4).text == "Q1\n(A/C)"
+    assert "平均" not in " ".join(left.cell(r, c).text for r in range(2) for c in range(6))  # 不再列年平均
     assert "管理學院內系所比較" in texts_on(p.slides[3])
     assert len(right.rows) == 2 + 3
 
@@ -159,7 +160,7 @@ async def test_renaming_toc_updates_toc_title_and_kicker(session, done_run, tmp_
 async def test_notes_default_edit_and_clear(session, done_run, tmp_path):
     p = build(session, done_run, tmp_path)
     assert "※教育部高教深耕指標" in texts_on(p.slides[3]) and "計算方式" in texts_on(p.slides[6])
-    assert "註3：單位排序以 Q1 單年師均由高到低排序。" in texts_on(p.slides[3])
+    assert "註3：單位排序以 Q1 師均由高到低排序。" in texts_on(p.slides[3])
     save_text(session, {"pubs": {"subtitle": "※自訂標示", "notes": "註：{系所}{期間}自訂"},
                         "fwci": {"formula": "", "notes": ""}})
     p = build(session, done_run, tmp_path)

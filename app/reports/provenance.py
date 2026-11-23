@@ -25,7 +25,7 @@ from app.runs.executor import PUB_FIELDS
 from app.runs.scope import COMPARISON_LABELS, RunConfig, build_groups
 from app.teachers.moe import TEACHER_COLUMNS
 
-Column = Literal["raw", "avg", "teachers", "value", "rank"]
+Column = Literal["raw", "teachers", "value", "rank"]
 TEACHER_SOURCE = {"moe": "教育部", "missing": "缺資料"}
 
 
@@ -177,10 +177,10 @@ class _UnitData:
 
 def columns_of(ind: Indicator) -> tuple[str, ...]:
     """指標表上有數字的欄位。"""
-    return ("raw", "avg", "teachers", "value", "rank") if ind.aggregate == "count" else ("value", "rank")
+    return ("raw", "teachers", "value", "rank") if ind.aggregate == "count" else ("value", "rank")
 
 
-COLUMN_LABELS = {"raw": "篇數 (A)", "avg": "年平均", "teachers": "單年教師數 (B)", "rank": "名次"}
+COLUMN_LABELS = {"raw": "篇數 (A)", "teachers": "單年教師數 (B)", "rank": "名次"}
 
 
 class Explainer:
@@ -190,7 +190,6 @@ class Explainer:
         self.session = session
         self.run = session.get(Run, run_id)
         cfg = RunConfig.from_json(self.run.scope_json)
-        self.years = cfg.years
         self.notes = json.loads(self.run.notes_json or "{}")
         self.run_units = {ru.unit_id: ru for ru in session.scalars(select(RunUnit).where(RunUnit.run_id == run_id))}
         self.results = {(r.unit_id, r.comparison, r.indicator_id): r
@@ -206,7 +205,7 @@ class Explainer:
             if ru is not None and ru.status == "done":
                 try:
                     pubs = [p.metrics for p in evidence_papers(self.session, self.run.id, unit_id)]
-                    values = compute_unit(pubs, ru.teacher_count, self.years)
+                    values = compute_unit(pubs, ru.teacher_count)
                 except (ValueError, TypeError, KeyError, ArithmeticError):
                     pubs, broken = None, True
             self._units[unit_id] = _UnitData(unit, ru, pubs, values, broken)
@@ -246,7 +245,7 @@ class Explainer:
         ind = BY_ID[indicator_id]
         d = self._data(unit_id)
         res = self.results.get((unit_id, comparison, indicator_id))
-        value_label = "單年師均" if ind.aggregate == "count" else ind.label
+        value_label = "師均" if ind.aggregate == "count" else ind.label
         e = Explanation(title=f"{COLUMN_LABELS.get(column, value_label)}（{ind.label}）　{self.label(unit_id)}",
                         where=(unit_id, comparison, indicator_id, column))
         missing = self._missing(d, ind)
@@ -281,7 +280,7 @@ class Explainer:
         e.missing_reason = missing
         e.drill = papers
         if d.values is None:
-            e.stored = getattr(res, {"raw": "raw", "avg": "five_year_avg"}.get(column, "value"), None)
+            e.stored = getattr(res, "raw" if column == "raw" else "value", None)
             return e
         n = len(d.pubs)
         rule = Source("判定", f"{ind.label}：{ind.source}")
@@ -294,16 +293,10 @@ class Explainer:
                 e.substituted = a_text
                 e.stored, e.recomputed = res.raw if res else None, d.values.raw[ind.id]
                 e.sources = [rule, *self._common_sources(d)]
-            elif column == "avg":
-                e.formula = "A ÷ 年數"
-                avg = d.values.five_year_avg[ind.id]
-                e.substituted = None if avg is None else f"{a} ÷ {self.years} = {_num(avg)}"
-                e.stored, e.recomputed = res.five_year_avg if res else None, avg
-                e.sources = [a_source, rule, *self._common_sources(d)]
             else:
-                e.formula = "A ÷ 年數 ÷ B"
+                e.formula = "A ÷ B"
                 v = d.values.value[ind.id]
-                e.substituted = (f"{a} ÷ {self.years} ÷ {d.ru.teacher_count} = {_num(v)}"
+                e.substituted = (f"{a} ÷ {d.ru.teacher_count} = {_num(v)}"
                                  if v is not None else None)
                 e.stored, e.recomputed = res.value if res else None, v
                 e.sources = [a_source, Source("B", teacher_text(d.ru)), rule, *self._common_sources(d)]

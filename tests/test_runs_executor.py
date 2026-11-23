@@ -5,7 +5,8 @@ from sqlalchemy import func, select
 
 from app.db.models import Anomaly, Result, Run, RunPublication, RunUnit, Unit
 from app.runs.anomaly import resolve_anomaly
-from app.runs.executor import execute_run, recompute
+from app.db.settings_store import get_setting, set_setting
+from app.runs.executor import execute_run, recompute, recompute_flagged
 from app.runs.manager import mark_interrupted
 from tests.run_helpers import PAPERS, FakeElsevier, fake_client, make_run
 
@@ -40,7 +41,7 @@ async def test_full_run_writes_results(session, session_factory, respx_mock):
     session.expire_all()
     assert session.get(Run, run.id).status == "done"
     r = result(session, run.id, "中央", "資訊管理學系", "benchmark", "total")
-    assert r.raw == 20 and r.value == Decimal("0.17")  # 20/5/24
+    assert r.raw == 20 and r.value == Decimal("0.83")  # 20/24，不除以年數
     assert r.rank is not None
     # 每組每指標都有結果：benchmark 3 單位 + college 3 單位，7 個指標
     assert session.scalar(select(func.count()).select_from(Result).where(Result.run_id == run.id)) == 6 * 7
@@ -170,7 +171,7 @@ async def test_refetch_unit_recomputes(session, session_factory, respx_mock):
     session.expire_all()
     assert session.get(RunUnit, ntu.id).status == "done"
     assert anomalies(session, run.id, "fetch_failed") == []
-    assert result(session, run.id, "台大", "資訊管理學系", "benchmark", "total").value == Decimal("0.25")
+    assert result(session, run.id, "台大", "資訊管理學系", "benchmark", "total").value == Decimal("1.25")
 
 
 async def test_confirmed_anomaly_kept_on_recompute(session, session_factory, respx_mock):
@@ -281,3 +282,22 @@ def test_mark_interrupted_resets_both_fetch_steps(session):
     mark_interrupted(session)
     session.expire_all()
     assert session.get(RunUnit, rus[0].id).status == session.get(RunUnit, rus[1].id).status == "pending"
+
+
+async def test_old_results_recomputed_once_when_flagged(session, session_factory, respx_mock):
+    """公式改成不除以年數後，舊分析（存的是 ÷ 年數的值）在啟動時依原始資料重算一次。"""
+    run = make_run(session)
+    FakeElsevier().install(respx_mock)
+    await execute_run(run.id, session_factory, fake_client())
+    r = result(session, run.id, "中央", "資訊管理學系", "benchmark", "total")
+    r.value = Decimal("0.17")  # 舊公式 20 ÷ 5 ÷ 24
+    session.commit()
+    set_setting(session, "recompute_results", False)
+    assert recompute_flagged(session) == 0  # 沒有標記時不動
+    assert result(session, run.id, "中央", "資訊管理學系", "benchmark", "total").value == Decimal("0.17")
+
+    set_setting(session, "recompute_results", True)
+    assert recompute_flagged(session) == 1
+    session.expire_all()
+    assert result(session, run.id, "中央", "資訊管理學系", "benchmark", "total").value == Decimal("0.83")
+    assert get_setting(session, "recompute_results") is False

@@ -17,11 +17,10 @@ def test_unit_label_uses_names_from_mapping():
 
 async def test_indicator_table_sorted(session, done_run):
     t = indicator_table(session, done_run.id, "benchmark", "資訊管理學系", "total")
-    # 台大 20/5/16=0.25、中央 20/5/24=0.17、政大 10/5/17=0.12
+    # 台大 20/16=1.25、中央 20/24=0.83、政大 10/17=0.59（師均不除以年數）
     assert [r.label for r in t.rows] == ["資訊管理學系-台大", "資訊管理學系-中央", "資訊管理學系-政治"]
     ncu = t.rows[1]
-    assert ncu.is_ncu and ncu.raw == 20 and ncu.teachers == 24 and ncu.value == Decimal("0.17") and ncu.rank == 2
-    assert ncu.five_year_avg == Decimal("4.00")
+    assert ncu.is_ncu and ncu.raw == 20 and ncu.teachers == 24 and ncu.value == Decimal("0.83") and ncu.rank == 2
 
 
 async def test_none_sorted_last(session, done_run):

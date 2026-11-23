@@ -23,7 +23,6 @@ class Row:
     label: str
     is_ncu: bool
     raw: Decimal | None
-    five_year_avg: Decimal | None
     teachers: int | None
     teacher_manual: bool
     value: Decimal | None
@@ -86,7 +85,7 @@ def indicator_table(session: Session, run_id: int, comparison: str, key: str, in
         unit, res, ru = session.get(Unit, uid), own.get(uid), run_units.get(uid)
         rows.append(Row(
             unit_id=uid, label=unit_label(unit, comparison), is_ncu=is_ncu(unit.school),
-            raw=res.raw if res else None, five_year_avg=res.five_year_avg if res else None,
+            raw=res.raw if res else None,
             teachers=ru.teacher_count if ru else None,
             teacher_manual=bool(ru and ru.teacher_source.startswith("manual")),
             value=res.value if res else None, rank=res.rank if res else None,

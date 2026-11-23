@@ -10,7 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import Anomaly, Result, Run, RunPublication, RunUnit, Unit
-from app.db.settings_store import get_setting
+from app.db.settings_store import get_setting, set_setting
 from app.elsevier.client import ElsevierClient, ElsevierError
 from app.elsevier.inset_selfcite import InSetSelfCitations
 from app.elsevier.ref_selfcite import RefSelfCitations
@@ -60,7 +60,7 @@ def recompute(session: Session, run_id: int) -> None:
     values = {}
     for unit_id, ru in run_units.items():
         pubs = unit_pubs(session, run_id, unit_id) if ru.status == "done" else []
-        values[unit_id] = compute_unit(pubs, ru.teacher_count, cfg.years) if ru.status == "done" else None
+        values[unit_id] = compute_unit(pubs, ru.teacher_count) if ru.status == "done" else None
 
     session.execute(delete(Result).where(Result.run_id == run_id))
     for group in build_groups(units_of(session, run.mapping_version_id), cfg):
@@ -71,8 +71,7 @@ def recompute(session: Session, run_id: int) -> None:
             for u in members:
                 v = values[u]
                 session.add(Result(run_id=run_id, unit_id=u, comparison=group.comparison, indicator_id=ind.id,
-                                   value=vals[u], raw=v.raw[ind.id] if v else None,
-                                   five_year_avg=v.five_year_avg[ind.id] if v else None, rank=ranks[u]))
+                                   value=vals[u], raw=v.raw[ind.id] if v else None, rank=ranks[u]))
 
     confirmed = {(a.unit_id, a.kind) for a in session.scalars(
         select(Anomaly).where(Anomaly.run_id == run_id, Anomaly.status == "confirmed"))}
@@ -80,6 +79,20 @@ def recompute(session: Session, run_id: int) -> None:
     threshold = float(get_setting(session, "anomaly_change_threshold"))
     session.add_all(a for a in detect(session, run_id, threshold) if (a.unit_id, a.kind) not in confirmed)
     session.commit()
+
+
+def recompute_flagged(session: Session) -> int:
+    """計算公式改變後（migration 留下 recompute_results 標記），依原始資料重算所有已有結果的分析。
+
+    啟動時、沒有分析在跑時呼叫；回傳重算的分析數。
+    """
+    if not get_setting(session, "recompute_results"):
+        return 0
+    run_ids = list(session.scalars(select(Result.run_id).distinct().order_by(Result.run_id)))
+    for run_id in run_ids:
+        recompute(session, run_id)
+    set_setting(session, "recompute_results", False)
+    return len(run_ids)
 
 
 def _write_notes(session: Session, run: Run, data_source: dict) -> None:

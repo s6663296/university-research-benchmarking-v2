@@ -14,24 +14,21 @@ def unit_id(session, run, school, dept="資訊管理學系"):
 
 async def test_count_value_substitutes_numbers(session, done_run):
     e = Explainer(session, done_run.id).cell(unit_id(session, done_run, "中央"), "benchmark", "total", "value")
-    assert e.formula == "A ÷ 年數 ÷ B"
-    assert e.substituted == "20 ÷ 5 ÷ 24 = 0.17"
-    assert e.stored == e.recomputed == Decimal("0.17") and not e.mismatch
+    assert e.formula == "A ÷ B"
+    assert e.substituted == "20 ÷ 24 = 0.83"
+    assert e.stored == e.recomputed == Decimal("0.83") and not e.mismatch
     assert e.drill.kind == "papers"
     assert any("教育部 114 學年" in s.text for s in e.sources)
     assert any(s.label == "Scopus 查詢" and "AFFIL" in s.text for s in e.sources)
 
 
-async def test_count_raw_and_avg(session, done_run):
+async def test_count_raw(session, done_run):
     uid = unit_id(session, done_run, "中央")
     q1 = sum(1 for p in unit_pubs(session, done_run.id, uid) if p.q1)
     ex = Explainer(session, done_run.id)
     raw = ex.cell(uid, "benchmark", "q1", "raw")
     assert raw.substituted == f"{q1} 篇（共 20 篇）" and raw.recomputed == q1 and not raw.mismatch
     assert raw.drill.filter == "q1"
-    avg = ex.cell(uid, "benchmark", "q1", "avg")
-    assert avg.formula == "A ÷ 年數" and avg.substituted.startswith(f"{q1} ÷ 5 = ")
-    assert not avg.mismatch
 
 
 async def test_mean_and_ratio(session, done_run):
@@ -76,7 +73,7 @@ async def test_mismatch_detected(session, done_run):
     r.value = Decimal("9.99")
     session.commit()
     e = Explainer(session, done_run.id).cell(uid, "benchmark", "total", "value")
-    assert e.mismatch and e.stored == Decimal("9.99") and e.recomputed == Decimal("0.17")
+    assert e.mismatch and e.stored == Decimal("9.99") and e.recomputed == Decimal("0.83")
 
 
 async def test_missing_reasons(session, done_run):
@@ -108,7 +105,7 @@ async def test_evidence_papers_match_count(session, done_run):
 async def test_plain_text_lines(session, done_run):
     e = Explainer(session, done_run.id).cell(unit_id(session, done_run, "中央"), "benchmark", "total", "value")
     text = e.plain_text()
-    assert "A ÷ 年數 ÷ B = 20 ÷ 5 ÷ 24 = 0.17" in text and "B：" in text
+    assert "A ÷ B = 20 ÷ 24 = 0.83" in text and "B：" in text
 
 
 async def test_mismatches_lists_changed_cells(session, done_run):

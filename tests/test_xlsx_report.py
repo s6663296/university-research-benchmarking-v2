@@ -30,8 +30,8 @@ async def test_values_and_pending(session, done_run, tmp_path):
     rows = list(ws.iter_rows(values_only=True))
     ncu = next(r for r in rows if r[0] == "資訊管理學系-中央")
     ntu = next(r for r in rows if r[0] == "資訊管理學系-台大")
-    assert ncu[4] == 0.17 and ntu[4] == "待確認"
-    cell = next(c for c in ws["E"] if c.value == 0.17)
+    assert ncu[3] == 0.83 and ntu[3] == "待確認"
+    cell = next(c for c in ws["D"] if c.value == 0.83)
     assert cell.number_format == "0.00" and cell.font.color.rgb.endswith("FF0000")
 
 
@@ -57,8 +57,8 @@ async def test_publication_sheet_filters_back_to_counts(session, done_run, tmp_p
 async def test_cells_have_provenance_comments(session, done_run, tmp_path):
     wb = load_workbook(build(session, done_run, tmp_path))
     ws = wb["論文總篇數"]
-    cell = next(c for c in ws["E"] if c.value == 0.17)
-    assert "A ÷ 年數 ÷ B = 20 ÷ 5 ÷ 24 = 0.17" in cell.comment.text and "B：教育部 114 學年" in cell.comment.text
+    cell = next(c for c in ws["D"] if c.value == 0.83)
+    assert "A ÷ B = 20 ÷ 24 = 0.83" in cell.comment.text and "B：教育部 114 學年" in cell.comment.text
     assert ws.cell(cell.row, 1).comment is None  # 單位名稱不加
     rank_cell = next(c for c in wb["排名總表"]["C"] if isinstance(c.value, str) and c.value.startswith("#"))
     assert "同組" in rank_cell.comment.text

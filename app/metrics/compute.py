@@ -16,31 +16,27 @@ def round2(x: Decimal) -> Decimal:
 @dataclass(frozen=True)
 class UnitValues:
     raw: dict[str, Decimal | None]
-    five_year_avg: dict[str, Decimal | None]
     value: dict[str, Decimal | None]
 
 
-def compute_unit(pubs: list[PubMetrics], teachers: int | None, years: int) -> UnitValues:
-    """篇數類：raw = A、five_year_avg = A/年數、value = A/年數/教師數；查無論文時 value 全為 None。"""
-    raw, avg, value = {}, {}, {}
+def compute_unit(pubs: list[PubMetrics], teachers: int | None) -> UnitValues:
+    """篇數類：raw = A（期間總篇數）、value = A ÷ 單年教師數（不除以年數）；查無論文時 value 全為 None。"""
+    raw, value = {}, {}
     n = len(pubs)
     for ind in INDICATORS:
         if ind.aggregate == "count":
             a = n if ind.field is None else sum(1 for p in pubs if getattr(p, ind.field))
             raw[ind.id] = Decimal(a)
-            avg[ind.id] = round2(Decimal(a) / years) if n else None
-            value[ind.id] = round2(Decimal(a) / years / teachers) if n and teachers else None
+            value[ind.id] = round2(Decimal(a) / teachers) if n and teachers else None
         elif ind.aggregate == "mean":
             vals = [getattr(p, ind.field) for p in pubs if getattr(p, ind.field) is not None]
             raw[ind.id] = sum(vals, Decimal(0)) / len(vals) if vals else None
-            avg[ind.id] = None
             value[ind.id] = round2(raw[ind.id]) if vals else None
         else:  # ratio：有值各篇的被引數加總 ÷ 總篇數
             vals = [getattr(p, ind.field) for p in pubs if getattr(p, ind.field) is not None]
             raw[ind.id] = Decimal(sum(vals)) if vals else None
-            avg[ind.id] = None
             value[ind.id] = round2(raw[ind.id] / n) if vals and n else None
-    return UnitValues(raw, avg, value)
+    return UnitValues(raw, value)
 
 
 def rank(values: dict[int, Decimal | None]) -> dict[int, int | None]:

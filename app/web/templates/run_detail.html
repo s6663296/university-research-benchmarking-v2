@@ -49,12 +49,11 @@
     <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
     <table>
       {% if indicator.aggregate == "count" %}
-      <tr><th>單位</th><th class="num">{{ n }}年篇數 (A)</th><th class="num">{{ n }}年平均</th><th class="num">單年教師數 (B)</th><th class="num">單年師均</th><th class="num">名次</th></tr>
+      <tr><th>單位</th><th class="num">{{ n }}年篇數 (A)</th><th class="num">單年教師數 (B)</th><th class="num">師均 (A/B)</th><th class="num">名次</th></tr>
       {% for r in t.rows %}
       <tr id="u{{ r.unit_id }}-{{ t.comparison }}"{% if r.is_ncu or hl == r.unit_id %} class="{{ 'ncu' if r.is_ncu }}{{ ' hl' if hl == r.unit_id }}"{% endif %}>
         <td>{{ r.label }}</td>
         <td class="num">{{ r.raw | int if r.raw is not none else "待確認" }}{{ ev(r.explain.raw, run.id) }}</td>
-        <td class="num">{{ fmt(r.five_year_avg) }}{{ ev(r.explain.avg, run.id) }}</td>
         <td class="num">{{ r.teachers if r.teachers is not none else "待確認" }}{% if r.teacher_manual %}<span title="人工修改">*</span>{% endif %}{{ ev(r.explain.teachers, run.id) }}</td>
         <td class="num">{{ fmt(r.value) }}{{ ev(r.explain.value, run.id) }}</td>
         <td class="num">{{ r.rank or "" }}{{ ev(r.explain.rank, run.id) }}</td>
