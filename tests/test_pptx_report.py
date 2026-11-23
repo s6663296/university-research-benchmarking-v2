@@ -307,6 +307,7 @@ async def test_two_column_ai_pages(session, done_run, tmp_path):
     assert "本系所變化" in prev and "競爭學校變化" in prev and "+9.09%" in prev
     for slide in (p.slides[-2], p.slides[-1]):
         assert "※本頁由 AI 依系統數據統整" in texts_on(slide)
+        assert "不一定準確" not in texts_on(slide)
     body = next(s for s in p.slides[-2].shapes if s.has_text_frame and "排名第一" in s.text_frame.text)
     runs = [r for para in body.text_frame.paragraphs for r in para.runs]
     assert next(r for r in runs if r.text == "排名第一").font.color.rgb == RED
