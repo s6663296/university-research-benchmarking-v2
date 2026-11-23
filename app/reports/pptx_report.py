@@ -1,4 +1,5 @@
-"""每個系所一份簡報，依範例報告的結構產出（設計 §9.2）。只有表格與文字，本系所列標紅。
+"""每個系所一份簡報，依範例報告的結構產出（設計 §9.2）。表格與文字為主，本系所列標紅；
+設定開啟時另加「逐年趨勢」章（PowerPoint 原生線圖，本系所紅色加粗）。
 
 所有頁面套用同一套版面（16:9）：
   頂部　章節標籤（例如「III. 資訊管理學系各指標比較」）＋ 頁面標題 ＋ 細線 ＋ 灰色副標（指標重要性）
@@ -13,6 +14,7 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import date
+from functools import cached_property
 from decimal import Decimal
 from itertools import groupby
 from pathlib import Path
@@ -20,6 +22,8 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 from pptx import Presentation
+from pptx.chart.data import CategoryChartData
+from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_MARKER_STYLE
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
@@ -33,9 +37,12 @@ from app.db.settings_store import get_setting
 from app.funding.service import count_text, funding_table, funding_warnings, money
 from app.mapping.parser import NCU_SHEET, is_ncu
 from app.mapping.service import units_of
+from app.metrics.indicators import BY_ID, importance_note
 from app.reports.emphasis import emphasis, plain, strip_bullet
 from app.reports.report_text import INDICATOR_KEYS, ReportText, report_values
+from app.reports.provenance import Explainer
 from app.reports.tables import IndicatorTable, Row, fmt, indicator_table, summary_table
+from app.reports.trends import CITATION_BASED, RECENT_NOTE, TREND_INDICATORS, TrendChart, trend_chart, trend_label
 
 if TYPE_CHECKING:
     from app.ai.service import SummaryDraft
@@ -385,6 +392,63 @@ def _paginate(sections: list[tuple[str, str]], size: float, avail: int) -> list[
     return pages
 
 
+TREND_CHAPTER = "逐年趨勢"
+# 線圖配色：本系所紅色加粗，其他單位用不含紅色的色盤
+OTHER_COLORS = ("2E75B6", "70AD47", "7F7F7F", "7030A0", "00B0F0", "BF9000", "1F3864", "A5A5A5", "548235", "C55A11")
+
+
+def _ea_font(font) -> None:
+    """圖表文字的中文字型：Font 物件只設定 latin，另外補 a:ea。"""
+    font.name = FONT
+    rpr = font._rPr
+    if rpr.find(qn("a:ea")) is None:
+        ea = etree.SubElement(rpr, qn("a:ea"))
+        ea.set("typeface", FONT)
+        latin = rpr.find(qn("a:latin"))
+        if latin is not None:
+            latin.addnext(ea)
+
+
+def _line_chart(slide, chart: "TrendChart", left, top, width, height):
+    """一個單位一條線；本系所紅色加粗。整條沒有資料的單位不畫（由頁底註明）。"""
+    ind = chart.indicator
+    series = [s for s in chart.series if any(v is not None for v in s.values.values())]
+    data = CategoryChartData(number_format="0.00" if ind.aggregate == "mean" else "0")
+    data.categories = [str(y) for y in chart.years]
+    for s in series:
+        data.add_series(s.label, [None if s.values[y] is None else float(s.values[y]) for y in chart.years])
+    frame = slide.shapes.add_chart(XL_CHART_TYPE.LINE_MARKERS, Emu(left), Emu(top), Emu(width), Emu(height), data)
+    c = frame.chart
+    c.font.size = Pt(11)
+    c.font.color.rgb = GRAY
+    _ea_font(c.font)
+    c.has_legend = True
+    c.legend.position = XL_LEGEND_POSITION.BOTTOM
+    c.legend.include_in_layout = False
+    c.legend.font.size = Pt(11)
+    value_axis = c.value_axis
+    value_axis.has_major_gridlines = True
+    value_axis.major_gridlines.format.line.color.rgb = RGBColor(0xD9, 0xD9, 0xD9)
+    value_axis.format.line.fill.background()
+    value_axis.minimum_scale = 0
+    value_axis.tick_labels.number_format = "0.00" if ind.aggregate == "mean" else "0"
+    value_axis.tick_labels.number_format_is_linked = False
+    others = iter(OTHER_COLORS * 3)
+    for s, plot_series in zip(series, c.plots[0].series):
+        color = RED if s.is_ncu else RGBColor.from_string(next(others))
+        plot_series.smooth = False
+        line = plot_series.format.line
+        line.color.rgb = color
+        line.width = Pt(3.5 if s.is_ncu else 1.75)
+        marker = plot_series.marker
+        marker.style = XL_MARKER_STYLE.CIRCLE
+        marker.size = 8 if s.is_ncu else 6
+        marker.format.fill.solid()
+        marker.format.fill.fore_color.rgb = color
+        marker.format.line.color.rgb = color
+    return c
+
+
 class DeckBuilder:
     """各份簡報共用的版面基底：內容頁、封面、頁尾與長文分頁，不含任何系所專屬內容。"""
 
@@ -525,11 +589,12 @@ class ReportBuilder(DeckBuilder):
         self.unit_id, self.college = unit.id, unit.ncu_college or ""
         self.period = f"{self.run.period_from}-{self.run.period_to}"
         self.years = self.run.period_to - self.run.period_from + 1
-        # 有經分表資料時，第 I 部分是計畫經費，論文指標順延為 II、III（範例報告的編號）
         self.funding = funding_table(session, self.run, self.college)
-        nums = ("II", "III") if self.funding.has_data else ("I", "II")
-        self.numbers = {"funding": "I", "summary": nums[0], "detail": nums[1],
-                        "ai": "IV" if self.funding.has_data else "III"}
+        self.trends = bool(get_setting(session, "report_trends"))
+        # 有經分表資料時，第 I 部分是計畫經費；有逐年趨勢時插在各指標之後、AI 總結之前
+        chapters = [*(["funding"] if self.funding.has_data else []), "summary", "detail",
+                    *(["trend"] if self.trends else []), "ai"]
+        self.numbers = dict(zip(chapters, ("I", "II", "III", "IV", "V")))
         self.text = ReportText(get_setting(session, "report_text"),
                                report_values(session, self.run, ncu_dept, self.college, self.funding))
 
@@ -586,6 +651,8 @@ class ReportBuilder(DeckBuilder):
         if self.funding.has_data:
             chapters.insert(0, "funding")
         sections = [f"{self.numbers[c]}. {self.text.field(c, 'name')}" for c in chapters]
+        if self.trends:
+            sections.append(f"{self.numbers['trend']}. {TREND_CHAPTER}")
         if self.ai_text:
             sections.append(f"{self.numbers['ai']}. 總結與建議")
         box = slide.shapes.add_textbox(Emu(MARGIN + 200000), Emu(SUB_Y + 100000), Emu(CONTENT_W - 400000),
@@ -599,7 +666,7 @@ class ReportBuilder(DeckBuilder):
             para.space_before = Pt(14 if i else 0)
             _font(para.add_run(), Pt(20), True, NAVY)
             para.runs[0].text = section
-            if i == len(chapters) - 1:   # 本系所各指標那一節列出各指標（AI 章在其後）
+            if i == len(chapters) - 1:   # 本系所各指標那一節列出各指標（趨勢、AI 章在其後）
                 for key in INDICATOR_KEYS:
                     sub = frame.add_paragraph()
                     sub.level = 1
@@ -697,6 +764,40 @@ class ReportBuilder(DeckBuilder):
         self._pair(slide, render, indicator_id)
         self._bottom(slide, indicator_id)
 
+    def trend_page(self, indicator_id: str):
+        """逐年趨勢：左邊對標學校、右邊院內系所，各一張 PowerPoint 原生線圖（可在 PowerPoint 裡改色、加標註）。"""
+        ind = BY_ID[indicator_id]
+        kicker = f"{self.numbers['trend']}. {self.ncu_dept}{TREND_CHAPTER}"
+        slide = self._slide(f"{ind.label}{TREND_CHAPTER}", kicker,
+                            f"{self.period}　{trend_label(ind)}　{importance_note(ind)}")
+        empty = []
+        for x, comparison, key, label in (
+                (LEFT_X, "benchmark", self.ncu_dept, "對標學校比較"),
+                (RIGHT_X, "college", self.college, f"{self.college}內系所比較")):
+            chart = trend_chart(self.session, self.run_id, comparison, key, indicator_id, self.explainer,
+                                own_unit_id=self.unit_id)
+            if not chart.series:
+                continue
+            self._label(slide, x, label)
+            empty += [s.label for s in chart.series if all(v is None for v in s.values.values())]
+            _line_chart(slide, chart, x, TABLE_Y, HALF_W, BOTTOM - TABLE_Y)
+        formula = ("計算方式\n" + ("依出版年分組，該年有 FWCI 論文的平均" if ind.aggregate == "mean"
+                                    else f"依出版年分組，每年{ind.label}的篇數（未除以教師數）"))
+        _text(slide, formula, LEFT_X, NOTE_Y, HALF_W, NOTE_H, _fit_size(formula, HALF_W, NOTE_H, 10.5, 8), GRAY)
+        for run in slide.shapes[-1].text_frame.paragraphs[0].runs:
+            _font(run, bold=True, color=NAVY)
+        notes = [f"註：{RECENT_NOTE}"] if indicator_id in CITATION_BASED else []
+        if empty:
+            notes.append(f"無資料（未列入圖中）：{'、'.join(dict.fromkeys(empty))}")
+        notes.append(f"資料來源 Scopus、SciVal，資料取得日期 {self.notes.get('data_date', '')}；以論文出版年分年。")
+        note = "\n".join(notes)
+        _text(slide, note, RIGHT_X, NOTE_Y, HALF_W, NOTE_H, _fit_size(note, HALF_W, NOTE_H, 9.5, 8), GRAY)
+
+    @cached_property
+    def explainer(self) -> Explainer:
+        """各趨勢頁共用，逐篇資料只載入一次。"""
+        return Explainer(self.session, self.run_id)
+
     def ai_page(self):
         """最後一章：Claude 產生的總結（兩欄）與前期比較（無前期資料時明說）。"""
         kicker = f"{self.numbers['ai']}. 總結與建議"
@@ -714,6 +815,9 @@ class ReportBuilder(DeckBuilder):
         self.value_page("fwci", "FWCI")
         self.value_page("avg_citations", "平均論文被引次數(排除自我引用)")
         self.count_page("intl_collab")
+        if self.trends:
+            for indicator_id in TREND_INDICATORS:
+                self.trend_page(indicator_id)
         if self.ai_text:
             self.ai_page()
         self._footer(f"{NCU_SHEET} {self.college} {self.ncu_dept}｜{self.period} 論文表現分析")

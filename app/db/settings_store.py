@@ -28,6 +28,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "ai_tone_prompt": DEFAULT_TONE,       # AI 摘要的語氣提示
     "report_text": {},                    # 簡報目錄名稱與備註的修改（只存與預設不同的欄位）
     "recompute_results": False,           # 計算公式改變後由 migration 設為 True，啟動時重算所有舊分析
+    "report_trends": False,               # 系所簡報加入「逐年趨勢」章（主管偏好表格，預設不加）
 }
 
 
