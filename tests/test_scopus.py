@@ -9,8 +9,8 @@ def client():
     return ElsevierClient("k", backoff_base=0, rate_per_sec=1000)
 
 
-SCHOOLS = ["National Taiwan University", "National Taiwan University of Science and Technology",
-           "National Central University"]
+NTU, NTUST = "National Taiwan University", "National Taiwan University of Science and Technology"
+SCHOOLS = [NTU, NTUST, "National Central University"]
 TAIL = " AND AFFILCOUNTRY(Taiwan) AND PUBYEAR > 2020 AND PUBYEAR < 2026"
 
 
@@ -100,3 +100,42 @@ async def test_search_dedupes(respx_mock):
                               "cursor": {"@next": "AoE3"}}}
     respx_mock.get(url__regex=SCOPUS_URL).mock(return_value=httpx.Response(200, json=dup))
     assert len(await search_docs(client(), "q", use_cache=False)) == 17
+
+
+def test_build_query_ors_multiple_names_into_one_query():
+    # 分號分隔的多個名稱合成一個查詢：同一篇論文只會出現一次
+    q = build_query("Department of Finance, National Central University; "
+                    "Department of Finance and Banking, National Central University", 2021, 2025, SCHOOLS)
+    assert q == ('(AFFIL("Department of Finance" W/15 "National Central University") OR '
+                 'AFFIL(("Department of Finance and Banking" OR "Department of Finance Banking") '
+                 'W/15 "National Central University"))' + TAIL)
+
+
+def test_build_query_multiple_names_same_school_keeps_af_id_exclusion_at_end():
+    ids = {NTU: "60005429", NTUST: "60027709"}
+    q = build_query("Department of Information Management, National Taiwan University; "
+                    "Graduate Institute of Information Management, National Taiwan University", 2021, 2025, SCHOOLS, ids)
+    assert q.startswith('(AFFIL("Department of Information Management" W/15 "National Taiwan University") OR '
+                        'AFFIL("Graduate Institute of Information Management" W/15 "National Taiwan University"))')
+    assert q.endswith(TAIL + " AND NOT (AF-ID(60027709) AND NOT AF-ID(60005429))")
+    assert q.count("AND NOT (AF-ID") == 1
+
+
+def test_build_query_multiple_names_different_schools_scopes_exclusion_per_name():
+    # 名稱分屬不同學校時，只有台大的名稱要排除台科大的論文
+    ids = {NTU: "60005429", NTUST: "60027709"}
+    q = build_query("Department of Physics, National Taiwan University; "
+                    "Department of Physics, National Central University", 2021, 2025, SCHOOLS, ids)
+    assert q == ('((AFFIL("Department of Physics" W/15 "National Taiwan University") '
+                 'AND NOT (AF-ID(60027709) AND NOT AF-ID(60005429))) OR '
+                 'AFFIL("Department of Physics" W/15 "National Central University"))' + TAIL)
+
+
+def test_build_query_multiple_names_still_marks_missing_af_id():
+    q = build_query("Dept A, National Taiwan University; Dept B, National Taiwan University", 2021, 2025, SCHOOLS)
+    assert MISSING_AF_ID in q
+
+
+def test_school_names_reads_every_name():
+    assert school_names(["Dept A, National Sun Yat-sen University; Dept B, National Chung Hsing University"]) == \
+        ["National Sun Yat-sen University", "National Chung Hsing University"]

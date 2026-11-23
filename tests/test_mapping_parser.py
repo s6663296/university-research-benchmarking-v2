@@ -115,3 +115,35 @@ def test_unknown_ncu_dept_warning():
                           "台大": [("管理學院", "不存在學系", "管理學院", "某系", "Dept X, NTU", None)]})
     r = parse_mapping(data)
     assert any(i.level == "warning" and i.sheet == "台大" and "不存在學系" in i.message for i in r.issues)
+
+
+def test_multiple_english_names_split_by_semicolon():
+    # 多個英文名稱以分號分隔（全形也可）；前後空白去除，統一存成「A; B」
+    data = build_mapping({
+        "中央": [("管理學院", "財務金融學系", "管理學院", "財務金融學系",
+                  " Department of Finance, NCU ;Department of Finance and Banking, NCU；Dept of Finance, NCU ", None)],
+    })
+    u = by_key(parse_mapping(data))[("中央", "財務金融學系")]
+    assert u.dept_en == ("Department of Finance, NCU; Department of Finance and Banking, NCU; "
+                         "Dept of Finance, NCU")
+
+
+def test_empty_name_between_semicolons_is_an_error():
+    data = build_mapping({
+        "中央": [("管理學院", "財務金融學系", "管理學院", "財務金融學系", "Department of Finance, NCU;", None),
+                 ("管理學院", "資訊管理學系", "管理學院", "資訊管理學系", "IM NCU;; IM2 NCU", None)],
+    })
+    r = parse_mapping(data)
+    assert r.units == []
+    errors = [i.message for i in r.issues if i.level == "error"]
+    assert any("財務金融學系" in m and "空的名稱" in m for m in errors)
+    assert any("資訊管理學系" in m and "空的名稱" in m for m in errors)
+
+
+def test_shared_name_among_multiple_names_warns():
+    data = build_mapping({
+        "台大": [("管理學院", "資訊管理學系", "管理學院", "資訊管理學系", "IM NTU; Shared NTU", None),
+                 ("管理學院", "財務金融學系", "管理學院", "財務金融學系", "Shared NTU", None)],
+    })
+    msgs = [i.message for i in parse_mapping(data).issues if i.level == "warning"]
+    assert any("Shared NTU" in m and "相同的英文名稱" in m for m in msgs)

@@ -15,6 +15,7 @@ from app.elsevier.cache import ApiCache
 from app.elsevier.client import ElsevierClient
 from app.elsevier.inset_selfcite import ABSTRACT_PATH, PERMANENT_DAYS, as_list
 from app.elsevier.scopus import NEAR, ScopusDoc, _clean, _dept_terms, _split, search_docs
+from app.textnorm import split_names
 
 AFFIL_TEXTS_ENDPOINT = "/content/abstract/affiliations"   # 快取中只存機構原文，不存整份回應
 
@@ -27,7 +28,7 @@ def _words(text: str) -> str:
 @dataclass(frozen=True)
 class Overlap:
     dept: str
-    school: str
+    school: str | None        # 只有 MultiOverlap 中、沒寫校名的名稱才是 None
     others: tuple[str, ...]   # 名稱包含本校校名的他校
 
     def ambiguous_query(self, query: str) -> str:
@@ -43,19 +44,39 @@ class Overlap:
             t = _words(text)
             for o in others:
                 t = t.replace(o, " | ")
-            if school in t and dept in t:
+            if (self.school is None or school in t) and dept in t:
                 return True
         return False
 
 
-def overlap_of(dept_en: str, schools: Iterable[str]) -> Overlap | None:
-    cleaned = [_clean(s) for s in schools]
-    dept, school = _split(_clean(dept_en), cleaned)
+@dataclass(frozen=True)
+class MultiOverlap:
+    """mapping 寫了多個英文名稱（分號分隔）且其中有校名互相包含的學校：任一名稱比對得到就保留。"""
+    parts: tuple[Overlap, ...]   # 每個名稱一個；沒有名稱相近他校的名稱 others 為空
+
+    def ambiguous_query(self, query: str) -> str:
+        clauses = [f'AFFIL({_dept_terms(p.dept)} W/{NEAR} "{o}")' for p in self.parts for o in p.others]
+        return f"({query}) AND (" + " OR ".join(clauses) + ")"
+
+    def matches(self, affiliations: Iterable[str]) -> bool:
+        affiliations = list(affiliations)
+        return any(p.matches(affiliations) for p in self.parts)
+
+
+def _part(name: str, cleaned: list[str]) -> Overlap:
+    dept, school = _split(_clean(name), cleaned)
     if school is None:
-        return None
+        return Overlap(dept, None, ())
     own = name_key(school)
-    others = tuple(o for o in cleaned if name_key(o) != own and own in name_key(o))
-    return Overlap(dept, school, others) if others else None
+    return Overlap(dept, school, tuple(o for o in cleaned if name_key(o) != own and own in name_key(o)))
+
+
+def overlap_of(dept_en: str, schools: Iterable[str]) -> Overlap | MultiOverlap | None:
+    cleaned = [_clean(s) for s in schools]
+    parts = [_part(name, cleaned) for name in split_names(dept_en) if name]
+    if not any(p.others for p in parts):
+        return None
+    return parts[0] if len(parts) == 1 else MultiOverlap(tuple(parts))
 
 
 def affiliation_texts(data: dict) -> list[str]:
@@ -88,7 +109,8 @@ async def _texts(client: ElsevierClient, ids: list[str]) -> dict[str, list[str]]
     return out
 
 
-async def drop_other_schools(client: ElsevierClient, query: str, docs: list[ScopusDoc], overlap: Overlap | None, *,
+async def drop_other_schools(client: ElsevierClient, query: str, docs: list[ScopusDoc],
+                             overlap: Overlap | MultiOverlap | None, *,
                              use_cache: bool, strict: bool = False) -> list[ScopusDoc]:
     """剔除機構全文中其實沒有本系所與本校的論文；只檢查查詢分不出來的那些。"""
     if overlap is None or not docs:
@@ -99,7 +121,7 @@ async def drop_other_schools(client: ElsevierClient, query: str, docs: list[Scop
     return [d for d in docs if d.scopus_id not in drop]
 
 
-async def unit_docs(client: ElsevierClient, query: str, overlap: Overlap | None, *, use_cache: bool,
+async def unit_docs(client: ElsevierClient, query: str, overlap: Overlap | MultiOverlap | None, *, use_cache: bool,
                     strict: bool = False) -> list[ScopusDoc]:
     """單位的論文：Scopus 查詢結果再經 drop_other_schools。"""
     docs = await search_docs(client, query, use_cache=use_cache, strict=strict)
