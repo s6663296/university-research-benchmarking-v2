@@ -362,6 +362,7 @@ tr.ev-me td { background: var(--primary-soft); font-weight: 600; }
 .ai-slide { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1.6rem 2rem 1.8rem; min-height: 18rem; }
 .ai-title { color: var(--slide-title); font-size: 1.45rem; margin: 0; padding-bottom: .55rem; border-bottom: 3px solid var(--slide-accent); }
 .ai-meta { color: var(--muted); font-size: 13px; margin: .5rem 0 0; }
+.ai-note { color: var(--muted); font-size: 12px; margin: 1.2rem 0 0; }
 .ai-points { margin: 1.1rem 0 0; padding-left: 1.3rem; color: var(--slide-text); font-size: 1.05rem; line-height: 1.75; max-width: 46rem; }
 .ai-points li + li { margin-top: .35rem; }
 .ai-points li::marker { color: var(--slide-accent); }

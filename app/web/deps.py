@@ -8,11 +8,13 @@ from sqlalchemy.orm import Session, object_session
 
 from app.db.models import Run
 from app.mapping.parser import NCU_SHEET, is_ncu
+from app.reports.pptx_report import AI_NOTE
 
 WEB_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=WEB_DIR / "templates")
 templates.env.globals["is_ncu"] = is_ncu
 templates.env.globals["NCU_SHEET"] = NCU_SHEET
+templates.env.globals["AI_NOTE"] = AI_NOTE  # 網頁預覽與簡報用同一句註記
 
 
 def split_figure(line: str) -> tuple[str, str]:

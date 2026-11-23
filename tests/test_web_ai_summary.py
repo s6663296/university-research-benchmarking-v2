@@ -179,6 +179,7 @@ def test_ai_tab_is_list_and_preview(client, run_id):
     html = client.get(f"/runs/{run_id}?ind=ai&{sel('dept', DEPT)}").text
     assert f"{DEPT}總結與建議" in html and 'class="ai-slide"' in html
     assert '<li>' in html.split('class="ai-slide"')[1]          # 條列顯示，不是文字框
+    assert '<p class="ai-note">※本頁由 AI 依系統數據統整</p>' in html      # 與簡報相同的註記
     assert 'id="ai-edit"' in html and "hidden" in html.split('id="ai-edit"')[1][:40]   # 編輯框預設收起
 
 
