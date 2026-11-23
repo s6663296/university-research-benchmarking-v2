@@ -212,6 +212,10 @@ class Explainer:
             self._units[unit_id] = _UnitData(unit, ru, pubs, values, broken)
         return self._units[unit_id]
 
+    def pubs(self, unit_id: int) -> list[PubMetrics] | None:
+        """該單位的逐篇指標；沒抓完或原始資料損毀為 None。"""
+        return self._data(unit_id).pubs
+
     def label(self, unit_id: int) -> str:
         u = self._data(unit_id).unit
         return f"{u.school}－{u.dept_zh or u.ncu_dept}"

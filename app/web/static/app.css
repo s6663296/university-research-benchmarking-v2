@@ -109,6 +109,12 @@ button.danger { border-color: var(--danger); background: var(--danger); }
 .tabs a.has-pending { color: var(--warn); font-weight: 600; }
 .pair { display: flex; gap: 2rem; flex-wrap: wrap; }
 .pair > div { flex: 1 1 30rem; min-width: 0; max-width: 100%; }
+.trend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(32rem, 1fr)); gap: 1.5rem 2rem; }
+.trend-item { min-width: 0; }
+.trend-chart { width: 100%; max-width: 560px; height: auto; display: block; }
+.trend-chart text { font-size: 11px; fill: #595959; }
+.trend-chart .grid { stroke: #d9d9d9; stroke-width: 1; }
+.swatch { display: inline-block; width: .8em; height: .8em; border-radius: 50%; margin-right: .4em; vertical-align: -.05em; }
 .notice { padding: .6rem .8rem; border-left: 4px solid var(--warn-line); background: var(--warn-soft); margin: .6rem 0; }
 .notice.ok { border-color: var(--ok); background: var(--ok-soft); }
 .notice.error { border-color: var(--danger); background: var(--danger-soft); }

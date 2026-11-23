@@ -17,6 +17,7 @@
 <div class="tabs">
   <a href="?ind=summary" class="{{ 'active' if ind == 'summary' }}">排名總表</a>
   {% for i in indicators %}<a href="?ind={{ i.id }}" class="{{ 'active' if ind == i.id }}">{{ i.label }}</a>{% endfor %}
+  <a href="?ind=trend" class="{{ 'active' if ind == 'trend' }}">逐年趨勢</a>
   <a href="?ind=funding" class="{{ 'active' if ind == 'funding' }}">計畫經費</a>
   <a href="?ind=ai" class="{{ 'active' if ind == 'ai' }}">AI 總結</a>
   <a href="?ind=anomalies" class="{{ 'active' if ind == 'anomalies' }}{{ ' has-pending' if open_anomalies }}">待確認（{{ open_anomalies }}）</a>
@@ -68,6 +69,35 @@
       {% endif %}
     </table>
     </div>
+  </div>
+  {% endfor %}
+  </div>
+
+{% elif ind == "trend" %}
+  <form method="post" action="/runs/{{ run.id }}/report-trends?grp={{ trend_grp }}" class="inline">
+    <input type="hidden" name="report_trends" value="{{ '0' if report_trends else '1' }}">
+    {% if report_trends %}<span class="ok">系所簡報已加入「逐年趨勢」章</span> <button type="submit" class="secondary">不放入簡報</button>
+    {% else %}<span class="muted">系所簡報目前不含逐年趨勢</span> <button type="submit" class="secondary">放入系所簡報</button>{% endif %}
+  </form>
+  <p class="muted">依論文出版年分年，用已抓到的逐篇資料計算（不另外使用 API 額度）。篇數類為逐年篇數，未除以教師數；FWCI 為該年論文的平均。</p>
+  {% if trend_groups | length > 1 %}
+  <div class="tabs trend-groups">{% for title in trend_groups %}<a href="?ind=trend&amp;grp={{ loop.index0 }}" class="{{ 'active' if loop.index0 == trend_grp }}">{{ title }}</a>{% endfor %}</div>
+  {% endif %}
+  {% if trend_groups %}<h2>{{ trend_groups[trend_grp] }}</h2>{% endif %}
+  <div class="trend-grid">
+  {% for c in trend_charts %}
+  <div class="trend-item">
+    <h3>{{ c.title }}</h3>
+    {{ c.svg }}
+    <div class="table-scroll" role="region" aria-label="表格" tabindex="0">
+    <table>
+      <tr><th>單位</th>{% for y in c.chart.years %}<th class="num">{{ y }}</th>{% endfor %}</tr>
+      {% for s in c.chart.series %}
+      <tr{% if s.is_ncu %} class="ncu"{% endif %}><td><span class="swatch" style="background: {{ c.colors[loop.index0] }}"></span>{{ s.label }}</td>{% for y in c.chart.years %}<td class="num">{{ fmt_trend(s.values[y], c.chart.indicator) }}</td>{% endfor %}</tr>
+      {% endfor %}
+    </table>
+    </div>
+    {% if c.recent %}<p class="muted">註：{{ recent_note }}</p>{% endif %}
   </div>
   {% endfor %}
   </div>

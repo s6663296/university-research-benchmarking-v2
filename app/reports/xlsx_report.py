@@ -20,6 +20,7 @@ from app.funding.service import funding_notes, funding_table, run_colleges
 from app.metrics.indicators import INDICATORS
 from app.reports.provenance import Explainer, Explanation
 from app.reports.tables import SUMMARY_INDICATORS, indicator_table, run_groups, summary_table
+from app.reports.trends import RECENT_NOTE, TREND_INDICATORS, trend_chart, trend_label
 from app.runs.anomaly import KIND_LABELS
 from app.runs.scope import COMPARISON_LABELS
 from app.teachers.moe import TEACHER_COLUMNS
@@ -84,6 +85,28 @@ def _indicator_sheet(wb, session, run, ind, groups, explainer):
         ws.append([])
 
 
+def _trend_sheet(wb, session: Session, run: Run, groups, explainer) -> None:
+    """逐年趨勢：各比較群組、各指標一塊表（單位 × 年），與網頁、簡報的線圖同一份數字。"""
+    ws = wb.create_sheet("逐年趨勢")
+    ws.append(["依論文出版年分年，用逐篇指標計算；篇數類為逐年篇數（未除以教師數），FWCI 為該年有值論文的平均。"
+               "可用「逐篇指標」工作表篩選 year 欄核對。"])
+    ws.append([f"註：{RECENT_NOTE}"])
+    ws.append([])
+    for g in groups:
+        title = {"benchmark": f"對標學校比較：{g.key}", "college": f"{g.key}內系所比較",
+                 "custom": "自訂比較"}[g.comparison]
+        for ind_id in TREND_INDICATORS:
+            chart = trend_chart(session, run.id, g.comparison, g.key, ind_id, explainer)
+            _append(ws, [f"{title}｜{trend_label(chart.indicator)}"], BOLD)
+            _append(ws, ["單位", *chart.years], BOLD)
+            for s in chart.series:
+                values = [PENDING if v is None else (float(v) if chart.indicator.aggregate == "mean" else int(v))
+                          for v in s.values.values()]
+                _append(ws, [s.label, *values], RED if s.is_ncu else None,
+                        number_cols=range(2, 2 + len(chart.years)))
+            ws.append([])
+
+
 def _funding_sheets(wb, session: Session, run: Run) -> None:
     """計畫經費（經分表）：各系所年平均，以及計入的每一筆計畫（附經分表列號，方便與人工計算核對）。"""
     tables = [t for t in (funding_table(session, run, c) for c in run_colleges(session, run)) if t.has_data]
@@ -142,6 +165,7 @@ def build_run_workbook(session: Session, run_id: int, out_path: Path) -> Path:
 
     for ind in INDICATORS:
         _indicator_sheet(wb, session, run, ind, groups, explainer)
+    _trend_sheet(wb, session, run, groups, explainer)
 
     run_units = list(session.scalars(select(RunUnit).where(RunUnit.run_id == run_id).order_by(RunUnit.id)))
     units = {ru.unit_id: session.get(Unit, ru.unit_id) for ru in run_units}

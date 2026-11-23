@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.service import SummaryDraft, fresh_text
 from app.db.models import Anomaly, Run, RunUnit, Unit
-from app.db.settings_store import get_setting
+from app.db.settings_store import get_setting, set_setting
 from app.elsevier import affiliation
 from app.elsevier.client import ElsevierError, make_client
 from app.funding.service import count_text, funding_notes, funding_table, money, run_colleges
@@ -23,6 +23,7 @@ from app.reports.pptx_report import build_dept_report, report_filename
 from app.reports.xlsx_report import build_run_workbook
 from app.reports.provenance import Explainer, columns_of, evidence_papers
 from app.reports.tables import SUMMARY_INDICATORS, fmt, indicator_table, summary_table
+from app.reports.trends import CITATION_BASED, RECENT_NOTE, TREND_INDICATORS, fmt_trend, trend_chart, trend_label
 from app.runs.anomaly import KIND_LABELS, resolve_anomaly
 from app.runs.executor import FETCHING
 from app.runs.scope import COMPARISON_LABELS, RunConfig, default_period
@@ -30,6 +31,7 @@ from app.runs.service import create_run, preview_run, schools_needing_af_id
 from app.teachers.moe import import_years, latest_import
 from app.web.deps import get_session, render
 from app.web.live import watch_url
+from app.web.trend_svg import series_colors, trend_svg
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -231,7 +233,26 @@ def fetch_status(request: Request, run_id: int, session: Session = Depends(get_s
                   **progress_context(request, session, run))
 
 
-def result_context(session: Session, run: Run, ind: str, sel: str = "") -> dict:
+GROUP_TITLES = {"benchmark": "對標學校比較：{}", "college": "{}內系所比較", "custom": "自訂比較"}
+
+
+def trend_context(session: Session, run: Run, explainer: Explainer, grp: int) -> dict:
+    """逐年趨勢分頁：一次只顯示一個比較群組（全院分析時群組很多），群組內每個指標一張圖＋逐年數字表。"""
+    groups = explainer.groups
+    grp = grp if 0 <= grp < len(groups) else 0
+    charts = []
+    if groups:
+        g = groups[grp]
+        for ind_id in TREND_INDICATORS:
+            chart = trend_chart(session, run.id, g.comparison, g.key, ind_id, explainer)
+            charts.append(dict(chart=chart, svg=trend_svg(chart), colors=series_colors(chart),
+                               title=trend_label(chart.indicator), recent=ind_id in CITATION_BASED))
+    return dict(trend_groups=[GROUP_TITLES[g.comparison].format(g.key) for g in groups], trend_grp=grp,
+                trend_charts=charts, fmt_trend=fmt_trend, recent_note=RECENT_NOTE,
+                report_trends=get_setting(session, "report_trends"))
+
+
+def result_context(session: Session, run: Run, ind: str, sel: str = "", grp: int = 0) -> dict:
     from app.web.routes.ai_summary import ai_context  # ai_summary 也用到本檔的 get_run，延後匯入避免循環
 
     explainer = Explainer(session, run.id)
@@ -270,22 +291,32 @@ def result_context(session: Session, run: Run, ind: str, sel: str = "") -> dict:
         college_ready={c for c in run_colleges(session, run) if _ai_text(session, run, "college", c) is not None}
         if ind == "downloads" else set(),
         **(ai_context(session, run, sel) if ind == "ai" else {}),
+        **(trend_context(session, run, explainer, grp) if ind == "trend" else {}),
     )
 
 
 @router.get("/runs/{run_id}")
 def run_detail(request: Request, run_id: int, ind: str = "summary", busy: int = 0, hl: int = 0, sel: str = "",
-               session: Session = Depends(get_session)):
+               grp: int = 0, session: Session = Depends(get_session)):
     run = get_run(session, run_id)
     ctx = progress_context(request, session, run)
     ctx["busy"], ctx["hl"], ctx["watch"] = bool(busy), hl, watch_url(request, session, run.id)
     if run.status == "done":
-        ctx.update(result_context(session, run, ind, sel))
+        ctx.update(result_context(session, run, ind, sel, grp))
         if ind == "ai":
             from app.web.routes.ai_summary import ai_progress_context
 
             ctx.update(ai_progress_context(request, run))
     return render(request, "run_detail.html", **ctx)
+
+
+@router.post("/runs/{run_id}/report-trends")
+async def save_report_trends(request: Request, run_id: int, grp: int = 0, session: Session = Depends(get_session)):
+    """系所簡報是否加入逐年趨勢章；是全系統的設定，之後下載的每份系所簡報都適用。"""
+    get_run(session, run_id)
+    form = await request.form()
+    set_setting(session, "report_trends", form.get("report_trends") == "1")
+    return RedirectResponse(f"/runs/{run_id}?ind=trend&grp={grp}", status_code=303)
 
 
 @router.get("/runs/{run_id}/evidence")
