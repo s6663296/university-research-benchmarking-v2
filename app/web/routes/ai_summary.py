@@ -37,9 +37,9 @@ def _sel(kind: str, key: str) -> str:
     return f"{kind}:{quote(key)}"
 
 
-def _back(run_id: int, kind: str | None = None, key: str | None = None) -> RedirectResponse:
-    """回到 AI 總結分頁；有指定對象時停在同一份。"""
-    url = f"/runs/{run_id}?ind=ai" + (f"&sel={_sel(kind, key)}" if kind else "")
+def _back(run_id: int, kind: str | None = None, key: str | None = None, view: str = "") -> RedirectResponse:
+    """回到 AI 總結分頁；有指定對象時停在同一份（圖表分析的操作停在圖表分頁）。"""
+    url = f"/runs/{run_id}?ind=ai" + (f"&sel={_sel(kind, key)}" if kind else "") + (f"&view={view}" if view else "")
     return RedirectResponse(url, status_code=303)
 
 
@@ -48,8 +48,10 @@ def bullets(text: str | None) -> list[list[tuple[str, bool]]]:
     return [emphasis(strip_bullet(line)) for line in (text or "").splitlines() if line.strip()]
 
 
-def ai_context(session: Session, run: Run, sel: str = "") -> dict:
+def ai_context(session: Session, run: Run, sel: str = "", view: str = "") -> dict:
+    """view="charts" 時右邊顯示該系所的圖表分析，否則顯示總結與建議。"""
     saved = {(r.kind, r.key): r for r in session.scalars(select(AiSummary).where(AiSummary.run_id == run.id))}
+    charted = set(session.scalars(select(AiChartNote.key).where(AiChartNote.run_id == run.id)))
     targets = service.targets(session, run)
     targets = [t for t in targets if t[0] == "college"] + [t for t in targets if t[0] != "college"]  # 學院在前
     rows = []
@@ -63,7 +65,8 @@ def ai_context(session: Session, run: Run, sel: str = "") -> dict:
             state = "edited" if row.edited else "fresh"
         label, css = STATUS[state]
         rows.append(dict(kind=kind, key=key, kind_label=KIND_LABELS[kind], row=row, state=state,
-                         status=label, css=css, stale=state == "stale", sel=_sel(kind, key)))
+                         status=label, css=css, stale=state == "stale", sel=_sel(kind, key),
+                         has_charts=kind == "dept" and key in charted))
     current = next((r for r in rows if r["sel"] == quote(sel, safe=":")), rows[0] if rows else None)
     if current is not None:  # 只為顯示中的那份查前期，清單不必每列都查
         kind, key = current["kind"], current["key"]
@@ -73,7 +76,8 @@ def ai_context(session: Session, run: Run, sel: str = "") -> dict:
         row = current["row"]
         for field in ("summary", "challenges", "comparison", "rival_changes"):
             current[field] = bullets(getattr(row, field) if row else None)
-        if kind == "dept":
+        current["view"] = "charts" if view == "charts" and kind == "dept" else "summary"
+        if current["view"] == "charts":  # 圖表要載入逐篇資料，只在圖表分頁才畫
             current["charts"] = charts_context(session, run, key)
     return dict(ai_rows=rows, ai_current=current, ai_stale_text=STALE_TEXT,
                 baseline_options=baseline_choices(session, run),
@@ -147,7 +151,7 @@ async def generate_charts(request: Request, run_id: int, dept: str, session: Ses
         raise HTTPException(404, "找不到這個系所")
     await _save_tone(request, session)
     request.app.state.ai_jobs.start(run_id, only=("charts", dept))
-    return _back(run_id, "dept", dept)
+    return _back(run_id, "dept", dept, "charts")
 
 
 def _lines(text: str) -> list[str]:
@@ -174,7 +178,7 @@ async def save_charts(request: Request, run_id: int, note_id: int, session: Sess
             if f"period_{field}" in form:
                 notes["period"][field] = _lines(str(form[f"period_{field}"]))
     ai_charts.save_edit(session, note_id, notes)
-    return _back(run_id, "dept", row.key)
+    return _back(run_id, "dept", row.key, "charts")
 
 
 @router.post("/runs/{run_id}/ai/summaries/{summary_id}")

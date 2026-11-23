@@ -254,7 +254,7 @@ def trend_context(session: Session, run: Run, explainer: Explainer, grp: int) ->
                 report_trends=get_setting(session, "report_trends"))
 
 
-def result_context(session: Session, run: Run, ind: str, sel: str = "", grp: int = 0) -> dict:
+def result_context(session: Session, run: Run, ind: str, sel: str = "", grp: int = 0, view: str = "") -> dict:
     from app.web.routes.ai_summary import ai_context  # ai_summary 也用到本檔的 get_run，延後匯入避免循環
 
     explainer = Explainer(session, run.id)
@@ -292,19 +292,19 @@ def result_context(session: Session, run: Run, ind: str, sel: str = "", grp: int
         # 已產生且仍是最新的全院總結才能下載；其餘學院只列名稱
         college_ready={c for c in run_colleges(session, run) if _ai_text(session, run, "college", c) is not None}
         if ind == "downloads" else set(),
-        **(ai_context(session, run, sel) if ind == "ai" else {}),
+        **(ai_context(session, run, sel, view) if ind == "ai" else {}),
         **(trend_context(session, run, explainer, grp) if ind == "trend" else {}),
     )
 
 
 @router.get("/runs/{run_id}")
 def run_detail(request: Request, run_id: int, ind: str = "summary", busy: int = 0, hl: int = 0, sel: str = "",
-               grp: int = 0, session: Session = Depends(get_session)):
+               grp: int = 0, view: str = "", session: Session = Depends(get_session)):
     run = get_run(session, run_id)
     ctx = progress_context(request, session, run)
     ctx["busy"], ctx["hl"], ctx["watch"] = bool(busy), hl, watch_url(request, session, run.id)
     if run.status == "done":
-        ctx.update(result_context(session, run, ind, sel, grp))
+        ctx.update(result_context(session, run, ind, sel, grp, view))
         if ind == "downloads":
             ctx["letter"] = letter_template(request.app.state.settings)
         if ind == "ai":
