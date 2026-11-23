@@ -72,7 +72,9 @@ def test_markers_in_reports_legacy_markers_as_new_ones(tmp_path):
 def test_default_letter_template_has_every_marker(settings):
     t = letter_template(settings)
     assert t.is_default and t.filename == DEFAULT_LETTER_NAME and t.path.exists()
-    assert len(markers_in(t.path)) == 5
+    assert markers_in(t.path) == ["{{對標學校確認表}}", "{{教師人數確認表}}"]
+    text = all_text(t.path)
+    assert text.startswith("各位主任、所長，您好：") and "感謝各位主任、所長協助。" in text
 
 
 async def test_benchmark_workbook_lists_mapping_schools(session, done_run, tmp_path):
@@ -165,14 +167,14 @@ def test_downloads_tab_lists_packages_and_default_template_notice(client, web_do
     text = client.get(f"/runs/{web_done_run}?ind=downloads").text
     assert f'data-export="/runs/{web_done_run}/exports/packages"' in text
     assert f"/exports/package/dept/%E8%B3%87" in text        # 系所名稱經過 URL 編碼
-    assert "暫用信件範本" in text
+    assert "內建信件範本" in text
 
 
 def test_settings_upload_and_reset_letter_template(client, web_done_run):
     data = docx_bytes(lambda d: d.add_paragraph("各位主任：請填 OOO 與 XXX"))
     r = client.post("/settings/letter-template", files={"file": ("給各位主任所長_確認版.docx", data)})
     assert r.status_code == 200 and "已換成新的信件範本" in r.text and "給各位主任所長_確認版.docx" in r.text
-    assert "暫用信件範本" not in client.get(f"/runs/{web_done_run}?ind=downloads").text
+    assert "內建信件範本" not in client.get(f"/runs/{web_done_run}?ind=downloads").text
     assert client.get("/settings/letter-template.docx").content == data
 
     url = f"/runs/{web_done_run}/exports/package/dept/{DEPT}"
@@ -183,8 +185,8 @@ def test_settings_upload_and_reset_letter_template(client, web_done_run):
     assert letter.paragraphs[0].text == f"各位主任：請填 {BENCH} 與 {TEACH}"
 
     r = client.post("/settings/letter-template/reset")
-    assert "已改回系統暫用範本" in r.text
-    assert "暫用信件範本" in client.get(f"/runs/{web_done_run}?ind=downloads").text
+    assert "已改回系統內建範本" in r.text
+    assert "內建信件範本" in client.get(f"/runs/{web_done_run}?ind=downloads").text
 
 
 def test_settings_rejects_non_docx(client):
@@ -192,4 +194,4 @@ def test_settings_rejects_non_docx(client):
     assert r.status_code == 400 and ".docx" in r.text
     r = client.post("/settings/letter-template", files={"file": ("letter.docx", b"not a zip")})
     assert r.status_code == 400 and "無法讀取" in r.text
-    assert "系統暫用範本" in client.get("/settings").text
+    assert "系統內建範本" in client.get("/settings").text

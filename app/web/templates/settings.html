@@ -102,11 +102,11 @@
 <section class="card" id="letter-template">
   <h2>信件範本</h2>
   {% if letter_saved %}<div class="notice ok">已換成新的信件範本</div>{% endif %}
-  {% if letter_reset %}<div class="notice ok">已改回系統暫用範本</div>{% endif %}
+  {% if letter_reset %}<div class="notice ok">已改回系統內建範本</div>{% endif %}
   {% if letter_error %}<div class="notice error">{{ letter_error }}</div>{% endif %}
   <p>結果頁「下載」分頁的各系所資料包中，Word 信件用這份範本產生。目前：
     <a href="/settings/letter-template.docx" download>{{ letter.filename }}</a>
-    {% if letter.is_default %}<span class="muted">（系統暫用範本）</span>{% endif %}</p>
+    {% if letter.is_default %}<span class="muted">（系統內建範本）</span>{% endif %}</p>
   {% if not letter.is_default and not letter.found %}
   <div class="notice">這份範本中找不到下列任何標記，信件不會自動填入系所名稱與檔名。</div>
   {% endif %}
@@ -121,7 +121,7 @@
   </form>
   {% if not letter.is_default %}
   <form method="post" action="/settings/letter-template/reset">
-    <button type="submit" class="secondary" onclick="return confirm('確定改回系統暫用範本？')">改回系統暫用範本</button>
+    <button type="submit" class="secondary" onclick="return confirm('確定改回系統內建範本？')">改回系統內建範本</button>
   </form>
   {% endif %}
 </section>

@@ -186,7 +186,7 @@
   <h3>寄給各系所的資料</h3>
   <p class="muted">每個系所一包：信件（{{ letter.filename }}）、{{ "{系所}" }}_對標學校確認表.xlsx、{{ "{系所}" }}_教師人數確認表.xlsx、系所簡報。信中會自動填入兩份確認表的檔名。</p>
   {% if letter.is_default %}
-  <p class="notice">目前使用系統的暫用信件範本。請到 <a href="/settings#letter-template">設定 → 信件範本</a> 上傳研發處確認版。</p>
+  <p class="muted">目前使用系統內建信件範本（研發處「給各位主任所長」信件）。如需修改，請到 <a href="/settings#letter-template">設定 → 信件範本</a> 上傳新版本。</p>
   {% endif %}
   <ul class="package-list">
     {% for dept in report_depts %}<li class="export-zip"><span>{{ dept }}</span> <a class="button secondary" href="/runs/{{ run.id }}/exports/package/dept/{{ dept | urlencode }}/file" data-export="/runs/{{ run.id }}/exports/package/dept/{{ dept | urlencode }}" download>下載 zip</a></li>{% endfor %}
