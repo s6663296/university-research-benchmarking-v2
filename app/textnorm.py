@@ -24,3 +24,11 @@ def norm_name(value: str) -> str:
     """用於比對名稱：臺→台、移除所有空白。"""
     text = clean(value) or ""
     return re.sub(r"[\s　\xa0]+", "", text.replace("臺", "台"))
+
+
+NAME_SEPARATOR = "; "
+
+
+def split_names(value: str) -> list[str]:
+    """mapping 的「系所英文名稱」可用分號（; 或全形；）分隔多個名稱；去掉前後空白，空名稱保留為空字串。"""
+    return [(clean(part) or "") for part in re.split(r"[;；]", value)]

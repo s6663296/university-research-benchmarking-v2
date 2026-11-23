@@ -11,7 +11,7 @@ from typing import Literal
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
-from app.textnorm import clean, is_example_row, norm_name
+from app.textnorm import NAME_SEPARATOR, clean, is_example_row, norm_name, split_names
 
 NCU_SHEET = "國立中央大學"
 NCU_SHEETS = (NCU_SHEET, "中央")  # 舊版 mapping 的分頁用簡稱
@@ -98,15 +98,23 @@ def _parse_sheet(ws, result: ParseResult) -> list[ParsedUnit]:
                 result.issues.append(Issue(sheet, r_idx, "warning",
                                            f"「{ncu_dept}」對應「{dept_zh}」有中文名稱但缺英文名稱，不列入對標"))
             continue
+        names = split_names(dept_en)
+        if "" in names:
+            result.issues.append(Issue(sheet, r_idx, "error",
+                                       f"「{ncu_dept}」的英文名稱有空的名稱（多個名稱以分號分隔，分號前後都要有名稱）：{dept_en}"))
+            continue
+        dept_en = NAME_SEPARATOR.join(names)   # 統一成「名稱A; 名稱B」
         units.append(ParsedUnit(sheet, ncu_college, ncu_dept, college, dept_zh, dept_en, cell(row, col_remark), r_idx))
 
     seen: dict[str, ParsedUnit] = {}
     for u in units:
-        key = norm_name(u.dept_en).lower()
-        if key in seen and seen[key].ncu_dept != u.ncu_dept:
-            result.issues.append(Issue(sheet, u.row, "warning",
-                                       f"「{seen[key].ncu_dept}」與「{u.ncu_dept}」使用相同的英文名稱 {u.dept_en}，兩者會得到相同的數字"))
-        seen.setdefault(key, u)
+        for name in split_names(u.dept_en):
+            key = norm_name(name).lower()
+            if key in seen and seen[key].ncu_dept != u.ncu_dept:
+                result.issues.append(Issue(sheet, u.row, "warning",
+                                           f"「{seen[key].ncu_dept}」與「{u.ncu_dept}」使用相同的英文名稱 {name}，"
+                                           "兩者會查到相同的論文"))
+            seen.setdefault(key, u)
     return units
 
 

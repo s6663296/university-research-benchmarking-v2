@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from app.elsevier.affiliation import name_key
 from app.elsevier.client import ElsevierClient, ElsevierError
+from app.textnorm import split_names
 
 SEARCH_PATH = "/content/search/scopus"
 PAGE_SIZE = 200  # 只取 id 時一頁最多 200 筆；不指定 field 的完整欄位一頁只能 25 筆
@@ -38,7 +39,7 @@ def _school_part(name: str) -> str | None:
 def school_names(dept_ens: Iterable[str]) -> list[str]:
     """mapping 中出現過、含 University 的英文校名，不分大小寫去重、保留第一次出現的寫法。"""
     seen: dict[str, str] = {}
-    for en in dept_ens:
+    for en in (n for value in dept_ens for n in split_names(value) if n):
         name = _school_part(_clean(en))
         if name and "universit" in name.lower():
             seen.setdefault(name.lower(), name)
@@ -90,23 +91,32 @@ def build_query(dept_en: str, year_from: int, year_to: int, schools: Iterable[st
     代碼下」的論文。不能直接用 AF-ID 限定本校：Scopus 有些論文掛在學院層級或合校前的舊代碼（台大工學院、
     交大），2026-11-22 實測全部 201 個單位會漏掉 37 篇；也不能用校名字串排除他校同名系所，那會把兩校合著
     的論文整篇刪掉。af_ids 是 {校名: AF-ID}；缺代碼時查詢式含「AF-ID(待查)」，建立分析前必須先補齊。
+
+    mapping 的英文名稱可用分號分隔多個（系所改名、同一系所的不同寫法）：各名稱的 AFFIL 以 OR 合成一個查詢，
+    兩個名稱都比對到的論文只算一次。只有一個名稱時，查詢式與以前完全相同（快取與舊分析不受影響）。
     """
     cleaned = [_clean(s) for s in schools]
-    dept, school = _split(_clean(dept_en), cleaned)
+    ids = {name_key(k): v for k, v in (af_ids or {}).items()}
+    parts = [_name_clause(name, cleaned, ids) for name in split_names(dept_en) if name]
+    period = f"AFFILCOUNTRY(Taiwan) AND PUBYEAR > {year_from - 1} AND PUBYEAR < {year_to + 1}"
+    if len({excl for _, excl in parts}) == 1:
+        # 各名稱排除的他校相同（通常是同一校）：AND NOT 的優先順序最低，放在最後並加括號
+        affil = parts[0][0] if len(parts) == 1 else "(" + " OR ".join(a for a, _ in parts) + ")"
+        return f"{affil} AND {period}" + "".join(f" AND NOT ({e})" for e in parts[0][1])
+    # 各名稱屬於不同學校、要排除的他校不同：排除條件留在各自名稱的括號內
+    groups = [f"({a}" + "".join(f" AND NOT ({e})" for e in excl) + ")" if excl else a for a, excl in parts]
+    return f"({' OR '.join(groups)}) AND {period}"
+
+
+def _name_clause(name: str, schools: list[str], ids: dict[str, str]) -> tuple[str, tuple[str, ...]]:
+    """單一英文名稱的 AFFIL 片語，以及要排除的「只在他校 AF-ID 下」條件。"""
+    dept, school = _split(_clean(name), schools)
     if school is None:
-        affil = f'AFFIL("{dept}")'
-    else:
-        affil = f'AFFIL({_dept_terms(dept)} W/{NEAR} "{school}")'
-    query = f"{affil} AND AFFILCOUNTRY(Taiwan) AND PUBYEAR > {year_from - 1} AND PUBYEAR < {year_to + 1}"
-    if school is not None:
-        ids = {name_key(k): v for k, v in (af_ids or {}).items()}
-        own = name_key(school)
-        for other in cleaned:
-            if name_key(other) != own and own in name_key(other):
-                # AND NOT 的優先順序最低，放在最後並加括號
-                query += (f" AND NOT (AF-ID({ids.get(name_key(other), MISSING_AF_ID)}) "
-                          f"AND NOT AF-ID({ids.get(own, MISSING_AF_ID)}))")
-    return query
+        return f'AFFIL("{dept}")', ()
+    own = name_key(school)
+    excl = tuple(f"AF-ID({ids.get(name_key(other), MISSING_AF_ID)}) AND NOT AF-ID({ids.get(own, MISSING_AF_ID)})"
+                 for other in schools if name_key(other) != own and own in name_key(other))
+    return f'AFFIL({_dept_terms(dept)} W/{NEAR} "{school}")', excl
 
 
 @dataclass(frozen=True)

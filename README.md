@@ -71,6 +71,7 @@
 
 - 第 1～2 欄是中大的學院與系所，系統用這兩欄對應各校分頁
 - 「系所英文名稱」就是 Scopus 的查詢條件，需要和 Scopus 上的單位名稱一致
+- 同一系所在 Scopus 上有多個名稱（系所改名、不同寫法）時，用**分號（;）**分隔，例如 `Department of Finance, National Central University; Department of Finance and Banking, National Central University`。系統把各名稱以 OR 合成一個查詢，兩個名稱都比對到的論文只算一次；分號前後的空白會自動去除，分號之間沒有名稱時匯入會報錯
 - 填 `x` 或留空表示該校沒有對應的系所，不列入對標
 - 建立新系所時，建議先在 Scopus 網頁上用同樣的英文名稱查詢，確認篇數一致後再使用
 

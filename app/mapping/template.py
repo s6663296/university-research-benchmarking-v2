@@ -25,7 +25,8 @@ NOTES = (
     "該校學院：該校對應系所所屬的學院（例如 商學院）。中大分頁填中大自己的學院。",
     "系所中文名稱：該校對應系所的中文名稱，用來對應教育部教師數。填 x 或留空表示該校沒有對應系所。",
     "系所英文名稱：Scopus 的查詢條件，需和 Scopus 上的單位名稱一致，"
-    "例如 Department of Information Management, National Taiwan University。填 x 或留空表示不列入對標。",
+    "例如 Department of Information Management, National Taiwan University。"
+    "同一系所有多個名稱（改名、不同寫法）時以分號（;）分隔，論文合併計算、不重複。填 x 或留空表示不列入對標。",
     "備註：自由填寫，系統不讀取。",
 )
 

@@ -16,7 +16,7 @@ from app.elsevier.inset_selfcite import InSetSelfCitations
 from app.elsevier.ref_selfcite import RefSelfCitations
 from app.elsevier.quota import API_LABELS
 from app.elsevier.scival import MetricsFetcher, PubMetrics, scival_year_ranges
-from app.elsevier.overlap import Overlap, drop_other_schools, overlap_of
+from app.elsevier.overlap import MultiOverlap, Overlap, drop_other_schools, overlap_of
 from app.elsevier.scopus import school_names, search_docs
 from app.elsevier.selfcite import get_strategy
 from app.mapping.service import units_of
@@ -118,7 +118,7 @@ async def execute_run(run_id: int, session_factory: sessionmaker[Session], clien
         scopus_done: set[int] = set()  # 接續時 Scopus 已完成的單位，進度直接從 SciVal 算起
         # 校名互相包含的學校（台大 ⊂ 台科大）：查詢分不出來的論文要逐篇讀機構全文
         schools = school_names(u.dept_en for u in units_of(s, run.mapping_version_id))
-        overlaps: dict[str, Overlap | None] = {}
+        overlaps: dict[str, Overlap | MultiOverlap | None] = {}
         for ru in s.scalars(q.order_by(RunUnit.id)):
             by_query[ru.query].append(ru.id)
             overlaps.setdefault(ru.query, overlap_of(s.get(Unit, ru.unit_id).dept_en, schools))
