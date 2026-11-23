@@ -3,6 +3,7 @@ import logging
 import zipfile
 from collections.abc import Callable
 from datetime import date
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
@@ -19,6 +20,7 @@ from app.mapping.parser import is_ncu
 from app.mapping.service import latest_version, units_of
 from app.metrics.indicators import BY_ID, INDICATORS
 from app.reports.exports import export_path, record_export
+from app.reports.package import letter_template, write_all_packages, write_dept_package
 from app.reports.pptx_report import build_dept_report, report_filename
 from app.reports.xlsx_report import build_run_workbook
 from app.reports.provenance import Explainer, columns_of, evidence_papers
@@ -281,6 +283,8 @@ def run_detail(request: Request, run_id: int, ind: str = "summary", busy: int = 
     ctx["busy"], ctx["hl"], ctx["watch"] = bool(busy), hl, watch_url(request, session, run.id)
     if run.status == "done":
         ctx.update(result_context(session, run, ind, sel))
+        if ind == "downloads":
+            ctx["letter"] = letter_template(request.app.state.settings)
         if ind == "ai":
             from app.web.routes.ai_summary import ai_progress_context
 
@@ -423,6 +427,29 @@ def write_dept_zip(session: Session, settings, run_id: int, progress: Callable[[
             progress(i, len(depts))
     record_export(session, run_id, "pptx_zip", zip_path)
     return zip_path
+
+
+def _package_report(session: Session, run: Run, dept: str, folder: Path) -> Path:
+    """資料包中的系所簡報：與單獨下載的簡報相同（含已確認的 AI 總結）。"""
+    return build_dept_report(session, run.id, dept, folder / report_filename(session, run.id, dept),
+                             ai_text=_ai_text(session, run, "dept", dept))
+
+
+def write_dept_package_zip(session: Session, settings, run_id: int, dept: str,
+                           progress: Callable[[int, int], None] = lambda d, t: None) -> Path:
+    run = _done_run(session, run_id)
+    if dept not in RunConfig.from_json(run.scope_json).ncu_depts:
+        raise HTTPException(404, "這次分析沒有這個系所")
+    path = write_dept_package(session, settings, run, dept, _package_report, progress)
+    record_export(session, run_id, "package", path)
+    return path
+
+
+def write_all_packages_zip(session: Session, settings, run_id: int,
+                           progress: Callable[[int, int], None] = lambda d, t: None) -> Path:
+    path = write_all_packages(session, settings, _done_run(session, run_id), _package_report, progress)
+    record_export(session, run_id, "package_zip", path)
+    return path
 
 
 @router.get("/runs/{run_id}/pptx.zip")
